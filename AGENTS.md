@@ -4,7 +4,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 - Never create summary documents.
 - No comments restating code or its history, unless asked.
-- Commit subjects: imperative, sentence case, no period or `feat:` prefix.
+- Commit subjects: imperative.
 
 ## Paseo plugin SDK
 
@@ -25,7 +25,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 ## Commands
 
-- Check: `npm run check` runs the typecheck, lint, format check, tests and Knip, stopping at the first failure. A pre-commit hook runs it against the staged changes, along with nixfmt, actionlint, zizmor, and the gitleaks and detect-private-keys secret scanners (`git-hooks` in `devenv.nix`, installed when the devenv shell starts); don't bypass it with `--no-verify`. If a scanner flags a secret, take it out of the commit instead of allowlisting it, and ask if you think it's a false positive. CI (`.github/workflows/check.yml`) runs it on pushes to `main` and on PRs.
+- Check: `npm run check` runs the typecheck, lint, format check, tests and Knip, stopping at the first failure. A pre-commit hook runs it against the staged changes, along with nixfmt, actionlint, zizmor, and the gitleaks and detect-private-keys secret scanners, and a commit-msg hook runs gitlint (config in `.gitlint`). Both are `git-hooks` in `devenv.nix`, installed when the devenv shell starts; don't bypass them with `--no-verify`. If a scanner flags a secret, take it out of the commit instead of allowlisting it, and ask if you think it's a false positive. CI (`.github/workflows/check.yml`) runs the check on pushes to `main` and on PRs.
 - Typecheck: `npm run typecheck` (`tsc -b` over `tsconfig.json`, which references one project per runtime: `tsconfig.{client,server,shared}.json`, plus `tsconfig.test.json` for tests and `tsconfig.node.json` for everything else; shared options in `tsconfig.base.json`).
 - Lint: `npm run lint` (Oxlint, type-aware; config in `.oxlintrc.json`). It also enforces the client/server/shared import boundaries and runs the vendored anti-slop rules in `tools/oxlint/anti-slop/` (provenance in its `UPSTREAM.md`). Fix findings in the code; don't suppress rules, lower their severity, or add casts to get past them.
 - Format: `npm run format` (Oxfmt, which also sorts imports; config in `.oxfmtrc.json`). `npm run format:check` only checks.

@@ -1,0 +1,3 @@
+[title-match-regex]
+# Sentence case, without a "feat:"-style prefix
+regex=^(?!\S*:)[A-Z]

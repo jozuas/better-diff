@@ -29,6 +29,7 @@
     zizmor.enable = true;
     gitleaks.enable = true;
     detect-private-keys.enable = true;
+    gitlint.enable = true;
     check = {
       enable = true;
       name = "npm run check";
