@@ -1,3 +1,4 @@
+// Stryker disable all: this module imports react-native, which Vitest can't load.
 import { Linking, Platform } from "react-native";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.

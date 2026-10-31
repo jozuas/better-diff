@@ -5,3 +5,5 @@ devenv.local.nix
 .claude/settings.local.json
 .claude/worktrees/
 .pre-commit-config.yaml
+.stryker-tmp/
+reports/

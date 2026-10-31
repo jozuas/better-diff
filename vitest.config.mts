@@ -5,5 +5,6 @@ export default defineConfig({
     include: ["{client,server,shared,tools}/**/*.test.{ts,tsx}"],
     expect: { requireAssertions: true },
     sequence: { shuffle: { tests: true } },
+    setupFiles: ["vitest.setup.ts"],
   },
 });
