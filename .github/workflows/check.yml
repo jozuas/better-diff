@@ -30,6 +30,10 @@ jobs:
           key: nix-${{ runner.os }}-${{ hashFiles('devenv.lock') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
+          path: .devenv/nix-eval-cache.db
+          key: devenv-${{ runner.os }}-${{ hashFiles('devenv.nix', 'devenv.yaml', 'devenv.lock') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: nix profile add "github:nixos/nixpkgs/$(jq -r .nodes.nixpkgs.locked.rev devenv.lock)#devenv"
