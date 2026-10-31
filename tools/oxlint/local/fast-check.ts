@@ -1,6 +1,8 @@
 import { defineRule } from "@oxlint/plugins";
 import type { Context, ESTree } from "@oxlint/plugins";
 
+import { resolve } from "./scope.ts";
+
 // Whether `node` calls one of `methods` on an import of fast-check.
 function callsFastCheck(
   context: Context,
@@ -12,20 +14,13 @@ function callsFastCheck(
   if (
     callee.type !== "MemberExpression" ||
     callee.computed ||
-    callee.object.type !== "Identifier" ||
     !methods.includes(callee.property.name)
   ) {
     return false;
   }
 
-  const { object } = callee;
-
-  const variable = context.sourceCode
-    .getScope(object)
-    .references.find(({ identifier }) => identifier === object)?.resolved;
-
   return (
-    variable?.defs.some(
+    resolve(context, callee.object)?.defs.some(
       ({ parent }) => parent?.type === "ImportDeclaration" && parent.source.value === "fast-check",
     ) ?? false
   );
@@ -40,15 +35,19 @@ function propertyName(property: ESTree.ObjectPropertyKind): string | undefined {
     return property.key.name;
   }
 
+  // Stryker disable next-line ConditionalExpression: a key that isn't computed is an identifier or a literal.
   return property.key.type === "Literal" ? String(property.key.value) : undefined;
 }
 
 // A property's only function argument is its predicate.
-function isPredicate(context: Context, node: ESTree.Node): boolean {
+function isPredicate(
+  context: Context,
+  node: ESTree.ArrowFunctionExpression | ESTree.Function,
+): boolean {
   const { parent } = node;
 
   return (
-    parent?.type === "CallExpression" &&
+    parent.type === "CallExpression" &&
     callsFastCheck(context, parent, ["property", "asyncProperty"])
   );
 }
@@ -61,10 +60,13 @@ function isExpectation(node: ESTree.Expression): boolean {
     current = current.type === "CallExpression" ? current.callee : current.object;
   }
 
+  // Stryker disable next-line ConditionalExpression: of the nodes a chain of calls and members starts from, only an identifier has a name.
   return current.type === "Identifier" && current.name === "expect";
 }
 
-function enclosingFunction(node: ESTree.Node): ESTree.Node | undefined {
+function enclosingFunction(
+  node: ESTree.Node,
+): ESTree.ArrowFunctionExpression | ESTree.Function | undefined {
   for (let current = node.parent; current !== null; current = current.parent) {
     if (
       current.type === "ArrowFunctionExpression" ||
@@ -80,8 +82,6 @@ function enclosingFunction(node: ESTree.Node): ESTree.Node | undefined {
 
 export const fastCheckNamespaceImportRule = defineRule({
   meta: {
-    type: "suggestion",
-    docs: { description: 'Require `import * as fc from "fast-check"`.' },
     messages: {
       namespaceImport:
         'Import fast-check as `import * as fc from "fast-check"`, the form the `local/fast-check-*` rules recognise.',
@@ -105,8 +105,6 @@ export const fastCheckNamespaceImportRule = defineRule({
 
 export const fastCheckStringUnitRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Require a `unit` for `fc.string()`." },
     messages: {
       unit: '`fc.string()` without a `unit` generates only printable ASCII: no newlines, `\\r`, tabs or other Unicode, which is where diffs break. Pass a `unit`, such as `"binary"`.',
     },
@@ -137,8 +135,6 @@ export const fastCheckStringUnitRule = defineRule({
 
 export const fastCheckNoPredicateReturnRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Disallow returning a value from a fast-check property's predicate." },
     messages: {
       predicateReturn:
         "Assert with `expect` instead of returning a value from a property: Vitest doesn't count a returned boolean as an assertion.",
@@ -168,8 +164,6 @@ export const fastCheckNoPredicateReturnRule = defineRule({
 
 export const fastCheckNoReplayRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Disallow replaying a recorded failure in `fc.assert`." },
     messages: {
       replay:
         "`{{name}}` replays a recorded failure instead of generating new cases. Once it's fixed, keep its counterexample in `examples` instead.",

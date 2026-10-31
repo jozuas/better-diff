@@ -1,6 +1,8 @@
 import { defineRule } from "@oxlint/plugins";
 import type { Context, ESTree } from "@oxlint/plugins";
 
+import { resolve } from "./scope.ts";
+
 // The `vi` methods that put a stand-in where real code was, other than module mocking, which
 // `anti-slop/no-module-mocking` reports. Oxlint's `vitest/no-restricted-vi-methods` misses a call
 // that another call is chained onto, as in `vi.spyOn(object, "method").mockReturnValue(value)`.
@@ -17,16 +19,8 @@ function isVi(context: Context, node: ESTree.Expression): boolean {
     return node.callee.type === "MemberExpression" && isVi(context, node.callee.object);
   }
 
-  if (node.type !== "Identifier") {
-    return false;
-  }
-
-  const variable = context.sourceCode
-    .getScope(node)
-    .references.find(({ identifier }) => identifier === node)?.resolved;
-
   return (
-    variable?.defs.some(
+    resolve(context, node)?.defs.some(
       ({ node: definition, parent }) =>
         parent?.type === "ImportDeclaration" &&
         parent.source.value === "vitest" &&
@@ -38,8 +32,6 @@ function isVi(context: Context, node: ESTree.Expression): boolean {
 
 export const noViStubsRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Disallow `vi` methods that replace real code with a stand-in." },
     messages: {
       stub: "`vi.{{name}}` replaces real code with a stand-in, so the test checks the stand-in. Test the real code, and pass in as a parameter anything a test has to control.",
     },

@@ -37,10 +37,14 @@ test("reports a stand-in wherever `vi` from Vitest is used, under any name", () 
           "vi.fn().mockReturnValue(0);",
           "type Spy = typeof vi.spyOn;",
           'function stub(vi: { stubEnv(name: string): void }): void { vi.stubEnv("HOME"); }',
+          'clock().spyOn(Date, "now");',
+          'helpers.vi.spyOn(Math, "random");',
         ].map((code) => viImport + code),
         'import { vi } from "vitest-like";\nvi.spyOn(Math, "random");',
         'import { spyOn as vi } from "vitest";\nvi.spyOn(Math, "random");',
+        'import * as vi from "vitest";\nvi.spyOn(Math, "random");',
         "const vi = { spyOn(): void {} };\nvi.spyOn();",
+        { code: 'vi.spyOn(Math, "random");', languageOptions: { globals: { vi: "readonly" } } },
       ],
       invalid: [
         {

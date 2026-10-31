@@ -240,6 +240,10 @@ test("reports each directive at its comment", () => {
             { message, line: 2, column: 0, endLine: 3, endColumn: 16 },
           ],
         },
+        ...["//eslint-disable-next-line no-console", "// oxlint-disable"].map((code) => ({
+          code,
+          errors: 1,
+        })),
       ],
     }),
   ).not.toThrow();

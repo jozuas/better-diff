@@ -8,8 +8,6 @@ const topLevel = new Set(["Program", "ExportNamedDeclaration", "ExportDefaultDec
 
 export const noTsxHelpersRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Disallow top-level functions other than components and hooks." },
     messages: {
       helper:
         "`{{name}}` is neither a component nor a hook, and tests and Stryker can't reach a `.tsx` file. Move it to a `.ts` module that doesn't import `react-native`.",

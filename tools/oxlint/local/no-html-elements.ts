@@ -16,8 +16,6 @@ function isHtmlElementName(name: ESTree.JSXElementName): boolean {
 
 export const noHtmlElementsRule = defineRule({
   meta: {
-    type: "problem",
-    docs: { description: "Disallow HTML elements, which React Native can't render." },
     messages: {
       htmlElement:
         "`<{{name}}>` is an HTML element, which React Native can't render. Use a React Native component such as `View` or `Text` instead.",

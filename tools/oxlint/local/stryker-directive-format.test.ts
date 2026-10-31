@@ -143,6 +143,9 @@ test("reports every directive that Stryker doesn't read as allowed", async () =>
         ["// Stryker disable next-line StringLiteral", [], 1],
         ["//  Stryker disable next-line StringLiteral: why", [], 1],
         ["/* Stryker disable next-line StringLiteral:\n   why */", [], 1],
+        ["// Stryker disable next-line StringLiteral:  ", [], 1],
+        ["// Stryker disable next-line String Literal: why", [], 1],
+        ["// Stryker disable al,l: why", [reactNativeImport], 0],
       ],
     },
   );
@@ -153,13 +156,18 @@ test("allows naming mutators for the next line, or all of them before a module t
     fc.property(
       fc.array(named, { minLength: 1, maxLength: 3 }),
       givenReason,
-      (mutators, reason) => {
+      fc.constantFrom(" ", "", "\t"),
+      (mutators, reason, lead) => {
         expect(
           lint("stryker-directive-format", strykerDirectiveFormatRule, {
             valid: [
-              [`// Stryker disable all: ${reason}`, reactNativeImport, ...code].join("\n"),
+              [`//${lead}Stryker disable all: ${reason}`, reactNativeImport, ...code].join("\n"),
               code
-                .toSpliced(1, 0, `// Stryker disable next-line ${mutators.join(", ")}: ${reason}`)
+                .toSpliced(
+                  1,
+                  0,
+                  `//${lead}Stryker disable next-line ${mutators.join(", ")}: ${reason}`,
+                )
                 .join("\n"),
             ],
             invalid: [],
@@ -177,6 +185,7 @@ test("ignores comments that only mention Stryker", () => {
         "// Stryker rewrites the tsconfig it finds.",
         "// Under Stryker, fast-check runs with a fixed seed.",
         "/* Stryker disabled nothing here. */",
+        "// Explain why after Stryker disable next-line.",
       ],
       invalid: [],
     }),
@@ -237,6 +246,27 @@ test("allows skipping a whole module only if it loads react-native", () => {
           },
         ],
       })),
+    }),
+  ).not.toThrow();
+});
+
+test("allows skipping a whole module only from before its first statement", () => {
+  const moduleDirective = "/* Stryker disable all: Vitest can't load react-native. */";
+  const header = "// Opens links in the browser or the operating system.";
+
+  expect(
+    lint("stryker-directive-format", strykerDirectiveFormatRule, {
+      valid: [
+        [header, moduleDirective, reactNativeImport, ...code].join("\n"),
+        [moduleDirective + reactNativeImport, ...code].join("\n"),
+      ],
+      invalid: [
+        {
+          code: [header, reactNativeImport, moduleDirective, ...code].join("\n"),
+          errors: [{ messageId: "format", line: 3 }],
+        },
+        { code: moduleDirective, errors: [{ messageId: "module", line: 1 }] },
+      ],
     }),
   ).not.toThrow();
 });

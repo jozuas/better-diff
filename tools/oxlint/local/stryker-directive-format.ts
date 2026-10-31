@@ -4,31 +4,10 @@ import type { Comment, ESTree } from "@oxlint/plugins";
 // Comments meant as Stryker directives, including ones Stryker can't read.
 const intendedPattern = /^\s*stryker\s+(?:disable|restore)\b/iu;
 
-// How Stryker reads a directive, from its instrumenter's directive-bookkeeper.js.
+// How Stryker reads a directive that gives a reason, from its instrumenter's
+// directive-bookkeeper.js.
 const strykerPattern =
-  /^\s?Stryker (?<action>disable|restore)(?: (?<scope>next-line))? (?<mutators>[a-zA-Z, ]+)(?::(?<reason>.+)?)?/u;
-
-// Whether Stryker reads `comment` as disabling the named mutators on the next line, or every
-// mutator in the module from before its code, and gives a reason.
-function allowedScope(comment: Comment, codeStart: number): "line" | "module" | undefined {
-  const groups = strykerPattern.exec(comment.value)?.groups;
-
-  if (groups?.["action"] !== "disable" || (groups["reason"] ?? "").trim() === "") {
-    return undefined;
-  }
-
-  const mutators = (groups["mutators"] ?? "").split(",").map((mutator) => mutator.trim());
-
-  if (groups["scope"] === "next-line") {
-    return mutators.every(
-      (mutator) => /^[a-zA-Z]+$/u.test(mutator) && mutator.toLowerCase() !== "all",
-    )
-      ? "line"
-      : undefined;
-  }
-
-  return mutators.join(",") === "all" && comment.end <= codeStart ? "module" : undefined;
-}
+  /^\s?Stryker (?<action>disable|restore)(?: (?<scope>next-line))? (?<mutators>[a-zA-Z, ]+):(?<reason>.+)/u;
 
 // Whether `program` loads react-native, which Vitest can't.
 function importsReactNative(program: ESTree.Program): boolean {
@@ -40,13 +19,43 @@ function importsReactNative(program: ESTree.Program): boolean {
   );
 }
 
+// What's wrong with `comment` as a Stryker directive, unless Stryker reads it as disabling, with a
+// reason, the named mutators on the next line, or every mutator in a module that imports
+// react-native from before its code.
+function problem(comment: Comment, program: ESTree.Program): "format" | "module" | undefined {
+  const groups = strykerPattern.exec(comment.value)?.groups;
+
+  if (groups?.["action"] !== "disable") {
+    return "format";
+  }
+
+  // Stryker disable next-line StringLiteral: the pattern always captures mutators and a reason, so the fallbacks only satisfy the types.
+  const { scope, mutators = "", reason = "" } = groups;
+
+  if (reason.trim() === "") {
+    return "format";
+  }
+
+  const names = mutators.split(",").map((name) => name.trim());
+
+  if (scope === "next-line") {
+    return names.every((name) => /^[a-zA-Z]+$/u.test(name) && name.toLowerCase() !== "all")
+      ? undefined
+      : "format";
+  }
+
+  if (
+    names.join(",") !== "all" ||
+    comment.end > (program.body[0]?.start ?? Number.POSITIVE_INFINITY)
+  ) {
+    return "format";
+  }
+
+  return importsReactNative(program) ? undefined : "module";
+}
+
 export const strykerDirectiveFormatRule = defineRule({
   meta: {
-    type: "problem",
-    docs: {
-      description:
-        "Require Stryker directives to disable named mutators on one line, or a whole module that imports react-native, and say why.",
-    },
     messages: {
       format:
         "Write a Stryker directive as `// Stryker disable next-line <mutator>: <why>`, or as `// Stryker disable all: <why>` before any code to skip a whole module that imports react-native.",
@@ -57,19 +66,15 @@ export const strykerDirectiveFormatRule = defineRule({
   create(context) {
     return {
       Program(program) {
-        const codeStart = program.body[0]?.start ?? Number.POSITIVE_INFINITY;
-
         for (const comment of context.sourceCode.getAllComments()) {
           if (!intendedPattern.test(comment.value)) {
             continue;
           }
 
-          const scope = allowedScope(comment, codeStart);
+          const messageId = problem(comment, program);
 
-          if (scope === undefined) {
-            context.report({ node: comment, messageId: "format" });
-          } else if (scope === "module" && !importsReactNative(program)) {
-            context.report({ node: comment, messageId: "module" });
+          if (messageId !== undefined) {
+            context.report({ node: comment, messageId });
           }
         }
       },

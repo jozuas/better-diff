@@ -63,6 +63,7 @@ test("requires a unit for every fc.string() that it can see the constraints of",
         "fc.string({ ...constraints });",
         'fc.string({ [key]: "binary" });',
         "fc.base64String();",
+        "fc[string]();",
         "function lines(fc: { string(): string }): string { return fc.string(); }",
       ].map((code) => fcImport + code),
       invalid: [
@@ -70,6 +71,8 @@ test("requires a unit for every fc.string() that it can see the constraints of",
           "fc.string();",
           "fc.string({ maxLength: 3 });",
           'fc.array(fc.string({ unit: "binary" }), fc.string());',
+          'test("lines", () => { fc.string(); });',
+          "@generate(fc.string()) class Lines {}",
         ].map((code) => ({ code: fcImport + code, errors: 1 })),
         ...['import * as check from "fast-check";', 'import check from "fast-check";'].map(
           (declaration) => ({ code: `${declaration}\ncheck.string();`, errors: 1 }),
@@ -79,10 +82,17 @@ test("requires a unit for every fc.string() that it can see the constraints of",
   ).not.toThrow();
 });
 
-test("ignores string() on modules other than fast-check", () => {
+test("ignores string() on anything but an import of fast-check", () => {
   expect(
     lint("fast-check-string-unit", fastCheckStringUnitRule, {
-      valid: ['import * as fc from "./fc";\nfc.string();', "fc.string();"],
+      valid: [
+        'import * as fc from "./fc";\nfc.string();',
+        "fc.string();",
+        { code: "fc.string();", languageOptions: { globals: { fc: "readonly" } } },
+        `${fcImport}fc.constant("");\nlines.string();`,
+        `${fcImport}string();`,
+        `${fcImport}this.string();`,
+      ],
       invalid: [],
     }),
   ).not.toThrow();
@@ -122,8 +132,10 @@ test("allows predicates that assert with expect and return nothing", () => {
         "fc.property(fc.nat(), (n) => { if (n > 1) { return; } expect(n).toBeLessThan(2); });",
         "fc.property(fc.nat(), (n) => { expect([n].map((m) => m + 1)).toStrictEqual([n + 1]); });",
         "fc.property(fc.nat(), (n) => { const twice = (): number => { return n * 2; }; expect(twice()).toBe(n + n); });",
+        "fc.property(fc.nat(), (n) => { function twice(): number { return n * 2; } expect(twice()).toBe(n + n); });",
         "fc.property(fc.nat(), check);",
         "[1].every((n) => n > 0);",
+        "return 1;",
       ].map((code) => fcImport + code),
       invalid: [
         "fc.property(fc.nat(), (n) => n >= 0);",
