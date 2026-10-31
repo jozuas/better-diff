@@ -21,6 +21,9 @@ const commandOptions = {
   // The patch as it is, where apply.whitespace would fix or reject lines with trailing whitespace,
   // such as each line of a CRLF file.
   apply: ["--whitespace=nowarn"],
+  add: [],
+  reset: [],
+  restore: [],
 };
 
 // Runs a git command and returns what it prints, as bytes: files, and so diffs, needn't be UTF-8.

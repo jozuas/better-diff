@@ -113,6 +113,34 @@ export function parseDiff(diff: Buffer): FileDiff {
   return { header: headerOf(lines), hunks };
 }
 
+type Kind = "text" | "unchanged" | "binary" | "mode" | "unmerged";
+
+function hasLine(lines: readonly string[], start: string): boolean {
+  return lines.some((line) => line.startsWith(start));
+}
+
+// What a file's diff is, from the lines git prints instead of hunks. For a file with merge
+// conflicts, git prints a diff against each side of the merge, or only names the file.
+export function kindOf(diff: Buffer): Kind {
+  const lines = diff.toString("latin1").split("\n");
+
+  if (diff.length === 0) {
+    return "unchanged";
+  }
+
+  if (hasLine(lines, "diff --cc ") || hasLine(lines, "* Unmerged path ")) {
+    return "unmerged";
+  }
+
+  if (hasLine(lines, "Binary files ")) {
+    return "binary";
+  }
+
+  return hasLine(lines, "old mode ") && !lines.some((line) => hunkStart.test(line))
+    ? "mode"
+    : "text";
+}
+
 // The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.
 export function reverse({ header, hunks }: FileDiff): FileDiff {
   return {

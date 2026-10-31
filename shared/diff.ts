@@ -15,6 +15,9 @@ export const diffRpc = defineRpc({
     // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
     // date.
     version: z.string(),
+    // Text, which has hunks unless the file is new or deleted and empty, or a change git shows no
+    // lines for: none, a binary file's, a mode change on its own, or a file with merge conflicts.
+    kind: z.enum(["text", "unchanged", "binary", "mode", "unmerged"]),
     hunks: z.array(
       z.object({
         oldStart: index,
@@ -32,17 +35,31 @@ export const diffRpc = defineRpc({
   }),
 });
 
-export const applyRpc = defineRpc({
-  name: "diff.apply",
+const action = {
+  directory: z.string(),
+  path: z.string(),
+  // Stage and discard act on the unstaged diff, unstage on the staged one.
+  operation: z.enum(["stage", "unstage", "discard"]),
+  version: z.string(),
+};
+
+// Stale, and nothing changed, if the diff has changed since it was read.
+const status = z.object({ status: z.enum(["applied", "stale"]) });
+
+export const applyLinesRpc = defineRpc({
+  name: "diff.apply-lines",
   input: z.object({
-    directory: z.string(),
-    path: z.string(),
-    // Stage and discard act on the unstaged diff, unstage on the staged one.
-    operation: z.enum(["stage", "unstage", "discard"]),
-    version: z.string(),
-    // Each line by its hunk's index in the diff and its own index in the hunk. Unchanged lines
-    // don't count.
+    ...action,
+    // Each line by its hunk's index in the diff and its own index in the hunk, unchanged lines
+    // included. Selecting an unchanged line changes nothing.
     lines: z.array(z.object({ hunk: index, line: index })),
   }),
-  output: z.object({}),
+  output: status,
+});
+
+// All of the file's changes, of any kind.
+export const applyFileRpc = defineRpc({
+  name: "diff.apply-file",
+  input: z.object(action),
+  output: status,
 });

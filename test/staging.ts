@@ -1,19 +1,19 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
-import type { applyRpc, diffRpc } from "../shared/diff";
+import type { applyLinesRpc, diffRpc } from "../shared/diff";
 import { fileVersions } from "./file-contents";
 import type { FileVersions } from "./file-contents";
 import { filePath } from "./file-names";
 import { deleteFile, indexFile, runGit, worktreeFile, writeFile } from "./repository";
 
-export type Operation = RpcInput<typeof applyRpc>["operation"];
+export type Operation = RpcInput<typeof applyLinesRpc>["operation"];
 
 export type Side = RpcInput<typeof diffRpc>["side"];
 
 export type Diff = RpcOutput<typeof diffRpc>;
 
-export type Selection = RpcInput<typeof applyRpc>["lines"];
+export type Selection = RpcInput<typeof applyLinesRpc>["lines"];
 
 export interface File {
   path: string;

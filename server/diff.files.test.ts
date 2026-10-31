@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 
+import { diffRpc } from "../shared/diff";
 import {
   deleteFile,
   inRepository,
@@ -104,6 +105,82 @@ test.each(deletions)(
       await applyAll(repository, operation);
 
       expect(diffOf(repository, sides[operation])).toBe("");
+    });
+  },
+);
+
+function bytes(text: string | undefined): Buffer | undefined {
+  return text === undefined ? undefined : Buffer.from(text);
+}
+
+test.each([
+  ["unchanged", "a file that didn't change", "a\n", "a\n"],
+  ["text", "a file whose lines changed", "a\n", "b\n"],
+  ["text", "a new empty file", undefined, ""],
+  ["binary", "a binary file", "a\0", "b\0"],
+] as const)("reads as %s the diff of %s", async (kind, _, head, index) => {
+  await inRepository(async (repository) => {
+    setUp(
+      repository,
+      [{ path: "a", versions: { head: bytes(head), index: bytes(index), worktree: bytes(index) } }],
+      "myers",
+    );
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "staged" });
+
+    expect(diff.kind).toBe(kind);
+    expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
+  });
+});
+
+test.each([
+  ["mode", "on its own", "a\n"],
+  ["text", "with changed lines", "b\n"],
+])("reads as %s the diff of a mode change %s", async (kind, _, index) => {
+  await inRepository(async (repository) => {
+    setUp(
+      repository,
+      [
+        {
+          path: "a",
+          versions: { head: bytes("a\n"), index: bytes(index), worktree: bytes(index) },
+        },
+      ],
+      "myers",
+    );
+    runGit(repository, ["update-index", "--chmod=+x", "--", "a"]);
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "staged" });
+
+    expect(diff.kind).toBe(kind);
+    expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
+  });
+});
+
+function commit(repository: string, content: string): void {
+  writeFile(repository, "a", content);
+  runGit(repository, ["add", "--all"]);
+  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+}
+
+// git compares the unstaged side of a file with conflicts with each side of the merge, and only
+// names the file on the staged side.
+test.each<Side>(["unstaged", "staged"])(
+  "reads as unmerged the %s diff of a file with merge conflicts",
+  async (side) => {
+    await inRepository(async (repository) => {
+      commit(repository, "a\n");
+      runGit(repository, ["checkout", "--quiet", "-b", "other"]);
+      commit(repository, "b\n");
+      runGit(repository, ["checkout", "--quiet", "-"]);
+      commit(repository, "c\n");
+
+      expect(() => runGit(repository, ["merge", "--quiet", "other"])).toThrow("Command failed");
+
+      const diff = await readDiff({ directory: repository, path: "a", side });
+
+      expect(diff.kind).toBe("unmerged");
+      expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
     });
   },
 );

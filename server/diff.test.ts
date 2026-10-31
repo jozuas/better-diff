@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { applyRpc, diffRpc } from "../shared/diff";
+import { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import { fileVersions } from "../test/file-contents";
 import { inRepository, runGit, runGitBytes, timeout, writeFile } from "../test/repository";
 import {
@@ -16,7 +16,7 @@ import {
   writeVersion,
 } from "../test/staging";
 import type { Diff } from "../test/staging";
-import { applyLines, readDiff } from "./diff";
+import { applyFile, applyLines, readDiff } from "./diff";
 
 test.each(operations)(
   "%s nothing when the diff has changed since it was read",
@@ -38,15 +38,12 @@ test.each(operations)(
 
           const before = fileState(repository, path);
 
+          const action = { directory: repository, path, operation, version: diff.version };
+
           await expect(
-            applyLines({
-              directory: repository,
-              path,
-              operation,
-              version: diff.version,
-              lines: linesOf(diff, () => true),
-            }),
-          ).rejects.toThrow("changed since it was read");
+            applyLines({ ...action, lines: linesOf(diff, () => true) }),
+          ).resolves.toStrictEqual({ status: "stale" });
+          await expect(applyFile(action)).resolves.toStrictEqual({ status: "stale" });
 
           expect(fileState(repository, path)).toStrictEqual(before);
         });
@@ -109,7 +106,7 @@ test("reads each hunk's lines as text, with where the hunk starts in each versio
 test.each([
   ["past the end of its hunk", { hunk: 0, line: 2 }],
   ["in a hunk the diff doesn't have", { hunk: 1, line: 0 }],
-])("rejects a line %s, and changes nothing", async (_, selected) => {
+])("rejects a line %s, changes nothing, and applies the next", async (_, selected) => {
   await inRepository(async (repository) => {
     writeFile(repository, "a", "a\n");
     runGit(repository, ["add", "--all"]);
@@ -129,6 +126,16 @@ test.each([
     ).rejects.toThrow(`The diff has no line ${selected.line} in hunk ${selected.hunk}.`);
 
     expect(fileState(repository, "a")).toStrictEqual(before);
+
+    await expect(
+      applyLines({
+        directory: repository,
+        path: "a",
+        operation: "stage",
+        version,
+        lines: [{ hunk: 0, line: 0 }],
+      }),
+    ).resolves.toStrictEqual({ status: "applied" });
   });
 });
 
@@ -158,7 +165,7 @@ test.each(operations)(
       expect(diffRpc.output.parse(await readDiff(diffRpc.input.parse(input)))).toStrictEqual(diff);
 
       const applied = await applyLines(
-        applyRpc.input.parse({
+        applyLinesRpc.input.parse({
           directory: repository,
           path: "a",
           operation,
@@ -167,7 +174,19 @@ test.each(operations)(
         }),
       );
 
-      expect(applyRpc.output.parse(applied)).toStrictEqual({});
+      expect(applyLinesRpc.output.parse(applied)).toStrictEqual({ status: "applied" });
+
+      // The diff has changed since it was read.
+      const stale = await applyFile(
+        applyFileRpc.input.parse({
+          directory: repository,
+          path: "a",
+          operation,
+          version: diff.version,
+        }),
+      );
+
+      expect(applyFileRpc.output.parse(stale)).toStrictEqual({ status: "stale" });
     });
   },
 );
@@ -227,13 +246,12 @@ test.each(insertions)(
 );
 
 test.each(insertions)(
-  "%s refuses a second apply of a diff that starts before the first ends, and runs the next",
+  "%s refuses a second apply of a diff, by its lines or as a file, that starts before the first ends",
   async (operation, versions) => {
     await inRepository(async (repository) => {
       setUpFile(repository, versions);
 
-      const side = sides[operation];
-      const diff = await readDiff({ directory: repository, path: "a", side });
+      const diff = await readDiff({ directory: repository, path: "a", side: sides[operation] });
 
       const input = {
         directory: repository,
@@ -243,15 +261,11 @@ test.each(insertions)(
         lines: linesOf(diff, () => true),
       };
 
-      await expect(Promise.all([applyLines(input), applyLines(input)])).rejects.toThrow(
-        "changed since it was read",
-      );
+      await expect(
+        Promise.all([applyLines(input), applyLines(input), applyFile(input)]),
+      ).resolves.toStrictEqual([{ status: "applied" }, { status: "stale" }, { status: "stale" }]);
 
       expect(fileState(repository, "a")[targets[operation]]?.toString()).toBe(withInserted);
-
-      const { version } = await readDiff({ directory: repository, path: "a", side });
-
-      await expect(applyLines({ ...input, version, lines: [] })).resolves.toStrictEqual({});
     });
   },
 );
