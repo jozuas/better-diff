@@ -39,10 +39,19 @@
     "unicorn/no-array-callback-reference": "off",
 
     "typescript/no-confusing-void-expression": ["error", { "ignoreArrowShorthand": true }],
+    "vitest/consistent-test-it": ["error", { "fn": "test", "withinDescribe": "test" }],
 
     "no-empty": "error",
     "no-var": "error",
+    "prefer-const": "error",
+    "prefer-template": "error",
+    "object-shorthand": "error",
+    "curly": "error",
+    "no-nested-ternary": "error",
+    "no-param-reassign": "error",
     "import/no-cycle": "error",
+    "import/no-duplicates": "error",
+    "react/self-closing-comp": "error",
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/no-non-null-asserted-nullish-coalescing": "error",
@@ -59,8 +68,14 @@
     "typescript/prefer-reduce-type-parameter": "error",
     "typescript/no-unnecessary-condition": "error",
     "typescript/prefer-optional-chain": "error",
+    "typescript/consistent-type-definitions": "error",
+    "typescript/array-type": "error",
+    "typescript/prefer-for-of": "error",
     "unicorn/no-abusive-eslint-disable": "error",
     "unicorn/prefer-node-protocol": "error",
+    "unicorn/throw-new-error": "error",
+    "vitest/prefer-strict-equal": "error",
+    "vitest/no-identical-title": "error",
 
     "anti-slop/no-array-filter-map": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
@@ -88,6 +103,12 @@
         "no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "@getpaseo/plugin/client/host",
+                "message": "This entry point is for Paseo's app itself, and Paseo rejects plugins that import it."
+              }
+            ],
             "patterns": [
               {
                 "group": ["**/server", "**/server/**", "**/index.server"],
@@ -108,16 +129,14 @@
         "no-restricted-imports": [
           "error",
           {
-            "paths": [
-              {
-                "name": "react-native",
-                "message": "Server code runs in the daemon, which has no React Native."
-              }
-            ],
             "patterns": [
               {
                 "group": ["**/client", "**/client/**", "**/index.client"],
                 "message": "Server code runs in the daemon and can't import app code."
+              },
+              {
+                "regex": "^(react(-dom|-native)?|use-sync-external-store|@tanstack/react-query)(/|$)",
+                "message": "Server code runs in the daemon, which has no React."
               }
             ]
           }
@@ -130,12 +149,6 @@
         "no-restricted-imports": [
           "error",
           {
-            "paths": [
-              {
-                "name": "react-native",
-                "message": "Shared code also runs in the daemon, which has no React Native."
-              }
-            ],
             "patterns": [
               {
                 "group": [
@@ -151,6 +164,10 @@
               {
                 "group": ["node:*"],
                 "message": "Shared code also runs in the app, which has no Node built-ins."
+              },
+              {
+                "regex": "^(react(-dom|-native)?|use-sync-external-store|@tanstack/react-query)(/|$)",
+                "message": "Shared code also runs in the daemon, which has no React."
               }
             ]
           }
