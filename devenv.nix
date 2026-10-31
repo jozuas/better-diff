@@ -27,6 +27,8 @@
     nixfmt.enable = true;
     actionlint.enable = true;
     zizmor.enable = true;
+    gitleaks.enable = true;
+    detect-private-keys.enable = true;
     check = {
       enable = true;
       name = "npm run check";
