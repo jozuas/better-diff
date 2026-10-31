@@ -34,6 +34,8 @@ const code = ["a", "b", "c"].map(
   (name) => `export const ${name} = (n: number): string => (n > 0 ? "${name}" : [true].join());`,
 );
 
+const reactNativeImport = 'import { Platform } from "react-native";';
+
 const named = fc.constantFrom("StringLiteral", "EqualityOperator", "ConditionalExpression");
 
 const lineTerminators = /\r\n|[\n\r\p{Zl}\p{Zp}]/u;
@@ -76,8 +78,14 @@ const givenReason = fc
   .filter((text) => text.trim() !== "" && !lineTerminators.test(text));
 
 // Whether Stryker ignores, with a reason, only mutants on the line after the directive from
-// mutators other than BooleanLiteral, or every mutant when the directive comes before any code.
-function isReadAsAllowed(mutants: readonly Mutant[], position: number, nextLine: number): boolean {
+// mutators other than BooleanLiteral, or every mutant when the directive comes before any code in
+// a module that imports react-native.
+function isReadAsAllowed(
+  mutants: readonly Mutant[],
+  reactNative: boolean,
+  position: number,
+  nextLine: number,
+): boolean {
   const ignored = mutants.filter(({ status }) => status === "Ignored");
 
   return (
@@ -86,7 +94,7 @@ function isReadAsAllowed(mutants: readonly Mutant[], position: number, nextLine:
       ({ statusReason = "" }) =>
         statusReason.trim() !== "" && statusReason !== "Ignored using a comment",
     ) &&
-    ((position === 0 && ignored.length === mutants.length) ||
+    ((reactNative && position === 0 && ignored.length === mutants.length) ||
       ignored.every(
         ({ location, mutatorName }) =>
           location.start.line === nextLine && mutatorName !== "BooleanLiteral",
@@ -98,9 +106,11 @@ test("reports every directive that Stryker doesn't read as allowed", async () =>
   await fc.assert(
     fc.asyncProperty(
       directive,
+      fc.subarray([reactNativeImport]),
       fc.integer({ min: 0, max: code.length - 1 }),
-      async (comment, position) => {
-        const content = code.toSpliced(position, 0, comment).join("\n");
+      async (comment, imports, position) => {
+        // Imports are hoisted, so one at the end still loads before the code.
+        const content = [...code, ...imports].toSpliced(position, 0, comment).join("\n");
 
         const { mutants } = await instrumenter.instrument(
           [{ name: "module.ts", content, mutate: true }],
@@ -108,7 +118,12 @@ test("reports every directive that Stryker doesn't read as allowed", async () =>
         );
 
         fc.pre(
-          !isReadAsAllowed(mutants, position, position + comment.split(lineTerminators).length),
+          !isReadAsAllowed(
+            mutants,
+            imports.includes(reactNativeImport),
+            position,
+            position + comment.split(lineTerminators).length,
+          ),
         );
 
         expect(
@@ -121,18 +136,19 @@ test("reports every directive that Stryker doesn't read as allowed", async () =>
     ),
     {
       examples: [
-        ["// Stryker restore next-line StringLiteral: why", 1],
-        ["// Stryker disable all: why", 1],
-        ["// Stryker disable StringLiteral: why", 0],
-        ["// Stryker disable next-line StringLiteral", 1],
-        ["//  Stryker disable next-line StringLiteral: why", 1],
-        ["/* Stryker disable next-line StringLiteral:\n   why */", 1],
+        ["// Stryker restore next-line StringLiteral: why", [], 1],
+        ["// Stryker disable all: why", [], 0],
+        ["// Stryker disable all: why", [reactNativeImport], 1],
+        ["// Stryker disable StringLiteral: why", [reactNativeImport], 0],
+        ["// Stryker disable next-line StringLiteral", [], 1],
+        ["//  Stryker disable next-line StringLiteral: why", [], 1],
+        ["/* Stryker disable next-line StringLiteral:\n   why */", [], 1],
       ],
     },
   );
 });
 
-test("allows naming mutators for the next line, or all of them before any code, with a reason", () => {
+test("allows naming mutators for the next line, or all of them before a module that imports react-native, with a reason", () => {
   fc.assert(
     fc.property(
       fc.array(named, { minLength: 1, maxLength: 3 }),
@@ -141,7 +157,7 @@ test("allows naming mutators for the next line, or all of them before any code, 
         expect(
           lint("stryker-directive-format", strykerDirectiveFormatRule, {
             valid: [
-              [`// Stryker disable all: ${reason}`, ...code].join("\n"),
+              [`// Stryker disable all: ${reason}`, reactNativeImport, ...code].join("\n"),
               code
                 .toSpliced(1, 0, `// Stryker disable next-line ${mutators.join(", ")}: ${reason}`)
                 .join("\n"),
@@ -177,7 +193,7 @@ test("reports the format message at the directive", () => {
           errors: [
             {
               message:
-                "Write a Stryker directive as `// Stryker disable next-line <mutator>: <why>`, or as `// Stryker disable all: <why>` before any code to skip a whole module.",
+                "Write a Stryker directive as `// Stryker disable next-line <mutator>: <why>`, or as `// Stryker disable all: <why>` before any code to skip a whole module that imports react-native.",
               line: 2,
               column: 0,
               endLine: 3,
@@ -186,6 +202,41 @@ test("reports the format message at the directive", () => {
           ],
         },
       ],
+    }),
+  ).not.toThrow();
+});
+
+test("allows skipping a whole module only if it loads react-native", () => {
+  const moduleDirective = "// Stryker disable all: Vitest can't load react-native.";
+
+  expect(
+    lint("stryker-directive-format", strykerDirectiveFormatRule, {
+      valid: [
+        'import { Platform } from "react-native";',
+        'import "react-native";',
+        'import type { ViewStyle } from "react-native";\nimport { Platform } from "react-native";',
+        'import { StyleSheet } from "react-native/Libraries/StyleSheet/StyleSheet";',
+        'import { Text } from "@getpaseo/plugin/client/ui";\nimport { Platform } from "react-native";',
+      ].map((imports) => [moduleDirective, imports, ...code].join("\n")),
+      invalid: [
+        "",
+        'import type { ViewStyle } from "react-native";',
+        'import { Platform } from "react-native-web";',
+        'import { Platform } from "./react-native";',
+        'export async function load(): Promise<unknown> { return import("react-native"); }',
+      ].map((imports) => ({
+        code: [moduleDirective, imports, ...code].join("\n"),
+        errors: [
+          {
+            message:
+              "Only a module that imports react-native, which Vitest can't load, can skip mutation testing. Kill the mutants with tests instead.",
+            line: 1,
+            column: 0,
+            endLine: 1,
+            endColumn: 55,
+          },
+        ],
+      })),
     }),
   ).not.toThrow();
 });

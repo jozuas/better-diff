@@ -51,6 +51,7 @@
       { "assertionStyle": "as", "objectLiteralTypeAssertions": "never" }
     ],
     "vitest/consistent-test-filename": ["error", { "pattern": ".*\\.test\\.tsx?$" }],
+    "typescript/ban-ts-comment": ["error", { "ts-expect-error": true }],
 
     "no-empty": "error",
     "no-var": "error",
@@ -64,6 +65,7 @@
     "default-param-last": "error",
     "logical-assignment-operators": "error",
     "no-alert": "error",
+    "no-console": "error",
     "no-implicit-coercion": "error",
     "no-multi-assign": "error",
     "no-return-assign": "error",
@@ -195,6 +197,7 @@
     "local/fast-check-string-unit": "error",
     "local/no-html-elements": "error",
     "local/no-lint-directives": "error",
+    "local/no-vi-stubs": "error",
     "local/stryker-directive-format": "error"
   },
   "overrides": [
