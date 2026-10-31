@@ -1,7 +1,7 @@
 import { Linking, Platform } from "react-native";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
-declare const window: { open(url: string, target: string, features: string): void };
+declare const window: { open: (url: string, target: string, features: string) => void };
 
 export async function openExternal(url: string): Promise<void> {
   if (Platform.OS === "web") {
