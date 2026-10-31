@@ -21,8 +21,18 @@
     pkgs.git
     pkgs.jq
   ]
-  # Only agents use it, through .mcp.json, and its Python dependencies often fail to build upstream.
-  ++ lib.optionals (!config.devenv.isTesting) [ pkgs.mcp-nixos ];
+  ++ lib.optionals (!config.devenv.isTesting) [
+    # Only agents use it, through .mcp.json, and its Python dependencies often fail to build upstream.
+    pkgs.mcp-nixos
+    # Nothing under `devenv test` drives a browser yet.
+    (pkgs.callPackage ./nix/playwright-cli { nodejs = config.languages.javascript.package; })
+  ];
+
+  env = lib.optionalAttrs (pkgs.stdenv.hostPlatform.isLinux && !config.devenv.isTesting) {
+    # nixpkgs' Chromium, so a bare `playwright-cli open` works. Darwin has no nixpkgs chromium
+    # and keeps playwright-cli's managed one (`playwright-cli install-browser`).
+    PLAYWRIGHT_MCP_EXECUTABLE_PATH = "${pkgs.chromium}/bin/chromium";
+  };
 
   git-hooks.hooks = {
     nixfmt.enable = true;

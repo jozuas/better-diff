@@ -7,3 +7,4 @@ devenv.local.nix
 .pre-commit-config.yaml
 .stryker-tmp/
 reports/
+.playwright-cli
