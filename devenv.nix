@@ -25,6 +25,8 @@
 
   git-hooks.hooks = {
     nixfmt.enable = true;
+    actionlint.enable = true;
+    zizmor.enable = true;
     check = {
       enable = true;
       name = "npm run check";
