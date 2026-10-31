@@ -7,7 +7,7 @@
 
 ## Local deviations
 
-- The Effect plugin (`effect/index.ts`) is copied but not registered: the project doesn't depend on Effect.
+- The Effect plugin (upstream `src/effect/`) is not vendored: the project doesn't depend on Effect.
 - `oxc/no-accumulating-spread` is enabled through Oxlint's `perf` category rather than listed by name.
 - The upstream RuleTester tests are not vendored.
 - Typechecked by `tools/oxlint/tsconfig.json` (Bundler resolution) instead of upstream's root `tsconfig.json` (NodeNext); `tools/oxlint/package.json` marks the code as ES modules for Node.
