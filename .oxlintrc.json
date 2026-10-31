@@ -216,9 +216,20 @@
   },
   "overrides": [
     {
-      // Paseo, Vitest and Oxlint load these files' default exports.
-      "files": ["index.{client,server}.{ts,tsx}", "*.config.*", "tools/oxlint/local/index.ts"],
+      // Paseo, Vitest, Playwright and Oxlint load these files' default exports.
+      "files": [
+        "index.{client,server}.{ts,tsx}",
+        "*.config.*",
+        "e2e/global-setup.ts",
+        "tools/oxlint/local/index.ts"
+      ],
       "rules": { "import/no-default-export": "off" }
+    },
+    {
+      // Playwright reads a fixture's dependencies from its first parameter, which has to be a
+      // destructuring pattern even when the fixture has none.
+      "files": ["e2e/**"],
+      "rules": { "no-empty-pattern": ["error", { "allowObjectPatternsAsParameters": true }] }
     },
     {
       // Stryker doesn't mutate components or entry points, so logic in them would go untested.

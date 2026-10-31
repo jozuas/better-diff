@@ -53,4 +53,6 @@ playwright-cli run-code "async page => { await page.getByText('Hello, Paseo!').w
 - Save screenshots under `.playwright-cli/`, which git ignores. A bare `--filename` lands in the current directory.
 - The browser gets the light theme. For the dark one: `playwright-cli run-code "async page => { await page.emulateMedia({ colorScheme: 'dark' }) }"`.
 
+A check worth repeating, such as one that caught a bug, belongs in an end-to-end test in `e2e/`, which takes the same locators.
+
 The first line of `playwright-cli --help` names its full skill file, for anything this doesn't cover.

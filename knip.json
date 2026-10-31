@@ -5,6 +5,7 @@
     "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}!",
     "!vitest.setup.ts!",
     "!test/**!",
+    "!e2e/**!",
     "!tools/**!"
   ],
   "ignore": ["tools/oxlint/anti-slop/**"],

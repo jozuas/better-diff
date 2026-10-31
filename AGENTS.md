@@ -26,10 +26,15 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 - Keep client logic, such as line selection and word highlighting, in `.ts` modules that don't import `react-native`: Vitest can't load it, and Stryker only mutates `.ts` modules.
 - Every Stryker mutant must be killed, by a test of the behaviour it breaks, not one that restates the mutated code. Disable a mutant with a Stryker comment only if it can't change behaviour or its module can't load under Vitest.
 - Under Stryker, fast-check runs with a fixed seed (`vitest.setup.ts`). If a property misses a mutant only because its generator rarely produces the case, generate it more often or add it to `examples`.
+- End-to-end tests in `e2e/` drive Paseo's web UI with Playwright, against a daemon of their own. Write one for each behaviour in `SPEC.md` a user can see, named after it, and check what an action did to the repository with git, not only what the screen shows.
+- Import `test` and `expect` from `e2e/fixtures.ts`. Its fixtures give a test a temporary repository, open the plugin's screens and workspaces, and fail a test whose page logs an error.
+- Find elements by role and accessible name, so give every control `accessibilityRole` and `accessibilityLabel`.
+- Keep `@playwright/test` at the version of nixpkgs' `playwright-driver`: devenv provides nixpkgs' Chromium, built for that version.
 
 ## Commands
 
 - `npm run check`: typecheck, lint, format check, tests, Knip and mutation tests of the plugin's code, stopping at the first failure. The pre-commit hook runs it along with secret scanners and other linters.
 - `npm run mutate:rules`: mutation tests of the local Oxlint rules in `tools/oxlint/local/`. The pre-commit hook runs it when a commit changes them or the Stryker config.
+- `npm run test:e2e`: the end-to-end tests. The pre-commit hook runs them when a commit changes the plugin, the tests or their dependencies. A failure prints the paths of a screenshot, the page's accessibility tree (`error-context.md`), a trace and the plugin's logs.
 - On their own: `npm run typecheck`, `npm run lint`, `npm run format` (also sorts imports), `npm test`, `npm run knip`, `npm run mutate` (prints surviving mutants as diffs, report in `reports/mutation/mutation.html`).
 - Try it in Paseo: `paseo plugin add "$PWD" --id <id>` once, with `better-diff` as the `<id>` in the main checkout and `better-diff-<worktree name>` in a worktree. Then `paseo plugin reload <id>` after a change, and `paseo plugin logs <id>` for its output.

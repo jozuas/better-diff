@@ -43,6 +43,8 @@ let
     set -eu
     # Nix pins the version, so the npm update banner is never actionable.
     export NO_UPDATE_NOTIFIER=1
+    # devenv points it at the browsers of @playwright/test's Playwright, which isn't this one.
+    unset PLAYWRIGHT_BROWSERS_PATH
     default_config="@defaultConfig@"
     cli="@cli@"
 

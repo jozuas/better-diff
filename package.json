@@ -22,6 +22,7 @@
     "format": "oxfmt",
     "format:check": "oxfmt --check",
     "test": "vitest run",
+    "test:e2e": "playwright test",
     "knip": "knip && knip --production",
     "mutate": "stryker run stryker.config.mts",
     "mutate:rules": "stryker run stryker.rules.config.mts",
@@ -30,6 +31,7 @@
   "devDependencies": {
     "@getpaseo/plugin": "0.14.0",
     "@oxlint/plugins": "1.90.0",
+    "@playwright/test": "1.64.1",
     "@stryker-mutator/api": "10.1.1",
     "@stryker-mutator/core": "10.1.1",
     "@stryker-mutator/instrumenter": "10.1.1",
