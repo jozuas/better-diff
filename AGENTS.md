@@ -14,6 +14,15 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 - Paseo supplies the SDK, React, React Native, TanStack Query and Zod at runtime. Ask before adding any other runtime dependency.
 - Git runs on the server side, through `execCommand` from `@getpaseo/plugin/server`.
 
+## Tests
+
+- Property-test with fast-check wherever a property can be stated: round trips (staging then unstaging restores the index), invariants, agreement with git itself or with a simpler model. Use example tests for cases that matter on their own, such as an exact output format. A property that computes the expected value the way the code does tests nothing.
+- Write a property as `fc.assert(fc.property(...))` inside Vitest's `test`, with `import * as fc from "fast-check"`, and assert with `expect` instead of returning a boolean: Vitest fails tests that make no assertions. Not `@fast-check/vitest`: Oxlint doesn't recognise its `test`, so the Vitest lint rules would skip those tests.
+- `fc.string()` generates only printable ASCII: no newlines, `\r`, tabs or other Unicode, which is where diffs break. Pass a `unit` such as `"binary"`, or build the lines yourself.
+- Test git operations against real git in a temporary repository, not mocks.
+- A failing property prints its `seed`, `path` and shrunk counterexample; pass `{ seed, path }` to `fc.assert` to replay it. After the fix, keep the counterexample in `fc.assert`'s `examples` so every run checks it.
+- Vitest can't load `react-native`, so keep client logic such as line selection and word highlighting in modules that don't import it.
+
 ## Commands
 
 - Check: `npm run check` runs the typecheck, lint, format check, tests and Knip, stopping at the first failure. A pre-commit hook runs it against the staged changes, along with nixfmt on `.nix` files (`git-hooks` in `devenv.nix`, installed when the devenv shell starts); don't bypass it with `--no-verify`. CI (`.github/workflows/check.yml`) runs it on pushes to `main` and on PRs.
