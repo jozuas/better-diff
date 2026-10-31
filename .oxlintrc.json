@@ -1,0 +1,127 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "import", "promise"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "pedantic": "error",
+    "perf": "error"
+  },
+  "options": {
+    "typeAware": true,
+    "denyWarnings": true,
+    "reportUnusedDisableDirectives": "error"
+  },
+  "rules": {
+    "max-lines": "off",
+    "max-lines-per-function": "off",
+    "import/max-dependencies": "off",
+    "no-warning-comments": "off",
+    "react/react-in-jsx-scope": "off",
+    "typescript/prefer-readonly-parameter-types": "off",
+    // The Paseo SDK declares callback props as methods, so destructuring them is flagged.
+    "typescript/unbound-method": "off",
+    "unicorn/no-array-callback-reference": "off",
+
+    "typescript/no-confusing-void-expression": ["error", { "ignoreArrowShorthand": true }],
+
+    "no-empty": "error",
+    "no-var": "error",
+    "import/no-cycle": "error",
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-invalid-void-type": "error",
+    "typescript/no-dynamic-delete": "error",
+    "typescript/no-namespace": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-import-type-side-effects": "error",
+    "typescript/prefer-literal-enum-member": "error",
+    "typescript/use-unknown-in-catch-callback-variable": "error",
+    "typescript/prefer-find": "error",
+    "typescript/prefer-string-starts-ends-with": "error",
+    "typescript/prefer-reduce-type-parameter": "error",
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/prefer-optional-chain": "error",
+    "unicorn/no-abusive-eslint-disable": "error",
+    "unicorn/prefer-node-protocol": "error"
+  },
+  "overrides": [
+    {
+      "files": ["index.client.tsx", "client/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/server", "**/server/**", "**/index.server"],
+                "message": "Client code runs in the app and can't import daemon code."
+              },
+              {
+                "group": ["node:*"],
+                "message": "Client code runs in the app, which has no Node built-ins."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["index.server.ts", "server/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react-native",
+                "message": "Server code runs in the daemon, which has no React Native."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/client", "**/client/**", "**/index.client"],
+                "message": "Server code runs in the daemon and can't import app code."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["shared/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "paths": [
+              {
+                "name": "react-native",
+                "message": "Shared code also runs in the daemon, which has no React Native."
+              }
+            ],
+            "patterns": [
+              {
+                "group": [
+                  "**/client",
+                  "**/client/**",
+                  "**/index.client",
+                  "**/server",
+                  "**/server/**",
+                  "**/index.server"
+                ],
+                "message": "Shared code runs in both the app and the daemon, so it can only import shared code."
+              },
+              {
+                "group": ["node:*"],
+                "message": "Shared code also runs in the app, which has no Node built-ins."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

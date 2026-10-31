@@ -17,5 +17,6 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 ## Commands
 
 - Typecheck: `npm run typecheck`.
+- Lint: `npm run lint` (Oxlint, type-aware; config in `.oxlintrc.json`). It also enforces the client/server/shared import boundaries.
 - Try it in Paseo: `paseo plugin add "$PWD" --id <id>` once, with `better-diff` as the `<id>` in the main checkout and `better-diff-<worktree name>` in a worktree, so several can be installed side by side. Then `paseo plugin reload <id>` after a change, and `paseo plugin logs <id>` for its output.
 - Nix packages go in `devenv.nix`; npm packages via `npm install`.

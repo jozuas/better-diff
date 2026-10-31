@@ -37,7 +37,7 @@ export function GreetingScreen({ theme, layout }: PluginScreenProps) {
         accessibilityRole="link"
         accessibilityLabel="Open the Paseo website"
         style={styles.button}
-        onPress={() => openExternal("https://paseo.sh")}
+        onPress={() => void openExternal("https://paseo.sh")}
       >
         <Text style={styles.buttonText}>Open paseo.sh</Text>
       </Pressable>
