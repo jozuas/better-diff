@@ -20,8 +20,9 @@
   packages = [
     pkgs.git
     pkgs.jq
-    pkgs.mcp-nixos
-  ];
+  ]
+  # Only agents use it, through .mcp.json, and its Python dependencies often fail to build upstream.
+  ++ lib.optionals (!config.devenv.isTesting) [ pkgs.mcp-nixos ];
 
   git-hooks.hooks = {
     nixfmt.enable = true;

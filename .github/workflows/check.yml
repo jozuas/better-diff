@@ -19,10 +19,17 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
         with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npm audit signatures
-      - run: npm run check
+          name: devenv
+      - run: nix profile add "github:nixos/nixpkgs/$(jq -r .nodes.nixpkgs.locked.rev devenv.lock)#devenv"
+      - run: devenv shell -- npm ci
+      - run: devenv shell -- npm audit signatures
+      - name: Lint commit messages
+        env:
+          FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
+          TO: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: devenv shell -- gitlint --commits "$FROM..$TO"
+      - run: devenv test
