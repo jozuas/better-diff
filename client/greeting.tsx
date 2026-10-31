@@ -2,13 +2,14 @@ import type { PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin
 import { useRpc } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useMutation } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import { greetingRpc } from "../shared/greeting";
 import { openExternal } from "./web";
 
-export function GreetingScreen({ theme, layout }: PluginScreenProps) {
+export function GreetingScreen({ theme, layout }: PluginScreenProps): ReactElement {
   const createGreeting = useRpc(greetingRpc);
   const greeting = useMutation({ mutationFn: createGreeting });
 
@@ -49,7 +50,7 @@ export function GreetingScreen({ theme, layout }: PluginScreenProps) {
   );
 }
 
-export function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
+export function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps): ReactElement {
   return (
     <SidebarRow
       icon="MessageCircle"

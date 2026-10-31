@@ -94,6 +94,7 @@
     "react/jsx-fragments": "error",
     "react/prefer-function-component": "error",
     "typescript/no-explicit-any": "error",
+    "typescript/explicit-module-boundary-types": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/no-non-null-asserted-nullish-coalescing": "error",
     "typescript/no-empty-object-type": "error",
