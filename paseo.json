@@ -1,0 +1,8 @@
+{
+  "worktree": {
+    "setup": [
+      "direnv allow \"$PASEO_WORKTREE_PATH\"",
+      "cd \"$PASEO_WORKTREE_PATH\" && direnv exec . npm ci"
+    ]
+  }
+}

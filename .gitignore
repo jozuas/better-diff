@@ -1,0 +1,6 @@
+node_modules/
+.devenv*
+devenv.local.nix
+.direnv/
+.claude/settings.local.json
+.claude/worktrees/

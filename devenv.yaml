@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
+inputs:
+  nixpkgs:
+    # A nixpkgs-unstable commit: https://github.com/nixos/nixpkgs/commits/nixpkgs-unstable/
+    url: github:nixos/nixpkgs/8d5d270900d3fc75655ea2d9d248b234f6631439

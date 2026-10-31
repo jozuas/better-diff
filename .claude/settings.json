@@ -1,0 +1,16 @@
+{
+  "enabledMcpjsonServers": ["nixos"],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "direnv export bash > \"$CLAUDE_ENV_FILE\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

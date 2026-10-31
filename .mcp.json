@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "nixos": {
+      "command": "direnv",
+      "args": ["exec", ".", "mcp-nixos"]
+    }
+  }
+}
