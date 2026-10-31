@@ -1,0 +1,6 @@
+{
+  "$schema": "./node_modules/knip/schema.json",
+  "entry": ["index.{client,server}.{ts,tsx}!"],
+  "ignore": ["tools/oxlint/anti-slop/**"],
+  "treatConfigHintsAsErrors": true
+}

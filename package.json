@@ -21,13 +21,15 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
-    "test": "vitest run"
+    "test": "vitest run",
+    "knip": "knip && knip --production"
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.14.0",
     "@oxlint/plugins": "1.90.0",
     "@tanstack/react-query": "^5.90.11",
     "@types/react": "~19.2.0",
+    "knip": "6.44.1",
     "oxfmt": "0.75.0",
     "oxlint": "1.90.0",
     "oxlint-tsgolint": "7.0.2005",
