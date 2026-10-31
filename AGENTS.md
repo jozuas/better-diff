@@ -22,6 +22,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 - Write a property as `fc.assert(fc.property(...))` inside Vitest's `test`. Not `@fast-check/vitest`: Oxlint's Vitest rules don't recognise its `test`.
 - Generate what diffs break on: newlines, `\r`, tabs and non-ASCII.
 - Test git operations against real git in a temporary repository, not mocks.
+- Code only tests use, such as shared generators and temporary repositories, goes in `test/`: it isn't shipped, and Stryker doesn't mutate it.
 - Keep client logic, such as line selection and word highlighting, in `.ts` modules that don't import `react-native`: Vitest can't load it, and Stryker only mutates `.ts` modules in `client/`, `server/` and `shared/`.
 - Every Stryker mutant must be killed, by a test of the behaviour it breaks, not one that restates the mutated code. Disable a mutant with a Stryker comment only if it can't change behaviour or its module can't load under Vitest.
 - Under Stryker, fast-check runs with a fixed seed (`vitest.setup.ts`). If a property misses a mutant only because its generator rarely produces the case, generate it more often or add it to `examples`.

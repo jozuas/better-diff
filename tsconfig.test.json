@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": { "types": ["node"], "outDir": "node_modules/.cache/tsc/test" },
-  "include": ["client/**/*.test.*", "server/**/*.test.*", "shared/**/*.test.*"],
+  "include": ["client/**/*.test.*", "server/**/*.test.*", "shared/**/*.test.*", "test"],
   "references": [
     { "path": "./tsconfig.client.json" },
     { "path": "./tsconfig.server.json" },
