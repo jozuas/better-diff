@@ -15,7 +15,10 @@
     "tools/oxlint/anti-slop/**"
   ],
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "react", "import", "promise", "vitest"],
-  "jsPlugins": [{ "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" }],
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./tools/oxlint/anti-slop/index.ts" },
+    { "name": "local", "specifier": "./tools/oxlint/local/index.ts" }
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
@@ -184,12 +187,14 @@
     "anti-slop/no-unsafe-dictionary-type": "error",
     "anti-slop/no-widen-then-assert": "error",
     "anti-slop/require-readable-spacing": "error",
-    "anti-slop/require-safety-comment-for-type-assertion": "error"
+    "anti-slop/require-safety-comment-for-type-assertion": "error",
+
+    "local/no-html-elements": "error"
   },
   "overrides": [
     {
-      // Paseo and Vitest load these files' default exports.
-      "files": ["index.{client,server}.{ts,tsx}", "*.config.*"],
+      // Paseo, Vitest and Oxlint load these files' default exports.
+      "files": ["index.{client,server}.{ts,tsx}", "*.config.*", "tools/oxlint/local/index.ts"],
       "rules": { "import/no-default-export": "off" }
     },
     {
