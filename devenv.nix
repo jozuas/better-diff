@@ -36,6 +36,7 @@
 
   git-hooks.hooks = {
     nixfmt.enable = true;
+    shellcheck.enable = true;
     actionlint.enable = true;
     zizmor.enable = true;
     gitleaks.enable = true;
