@@ -12,8 +12,12 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
+    "erasableSyntaxOnly": true,
     "skipLibCheck": true,
     "composite": true,
     "emitDeclarationOnly": true
