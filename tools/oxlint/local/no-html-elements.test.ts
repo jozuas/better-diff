@@ -1,19 +1,13 @@
 import * as fc from "fast-check";
-import { RuleTester } from "oxlint/plugins-dev";
+import type { RuleTester } from "oxlint/plugins-dev";
 import { transformWithOxc } from "vite";
 import { expect, test } from "vitest";
 
-import { noHtmlElementsRule } from "./index";
-
-// Run cases inline instead of as tests of their own, so `expect` can check them.
-RuleTester.describe = (_text, run) => run();
-
-RuleTester.it = (_text, run) => run();
-
-const tester = new RuleTester({ languageOptions: { parserOptions: { lang: "tsx" } } });
+import { noHtmlElementsRule } from "./no-html-elements.ts";
+import { lint as lintWith } from "./rule-tester.ts";
 
 function lint(tests: RuleTester.TestCases): () => void {
-  return () => tester.run("no-html-elements", noHtmlElementsRule, tests);
+  return lintWith("no-html-elements", noHtmlElementsRule, tests);
 }
 
 async function compilesToString(element: string): Promise<boolean> {

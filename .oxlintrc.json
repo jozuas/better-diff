@@ -189,7 +189,13 @@
     "anti-slop/require-readable-spacing": "error",
     "anti-slop/require-safety-comment-for-type-assertion": "error",
 
-    "local/no-html-elements": "error"
+    "local/fast-check-namespace-import": "error",
+    "local/fast-check-no-predicate-return": "error",
+    "local/fast-check-no-replay": "error",
+    "local/fast-check-string-unit": "error",
+    "local/no-html-elements": "error",
+    "local/no-lint-directives": "error",
+    "local/stryker-directive-format": "error"
   },
   "overrides": [
     {

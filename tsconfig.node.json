@@ -1,7 +1,12 @@
 {
   // Everything outside the plugin's runtimes, such as tool configs.
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "types": ["node"], "outDir": "node_modules/.cache/tsc/node" },
+  "compilerOptions": {
+    "types": ["node"],
+    "outDir": "node_modules/.cache/tsc/node",
+    // Oxlint loads its JS plugins through Node, which needs extensions on relative imports.
+    "allowImportingTsExtensions": true
+  },
   "include": ["**/*"],
   "exclude": [
     "index.client.*",
