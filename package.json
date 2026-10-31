@@ -42,5 +42,15 @@
     "vite": "^8.3.5",
     "vitest": "^5.0.5",
     "zod": "^4.4.3"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "npm",
+      "version": ">=11.19.0",
+      "onFail": "error"
+    }
+  },
+  "allowScripts": {
+    "fsevents": false
   }
 }
