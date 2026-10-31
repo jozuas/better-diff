@@ -6,6 +6,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 - No comments restating code or its history, unless asked.
 - Commit subjects: imperative.
 - Don't get around a check: no `--no-verify`, no lint suppressions, severity changes or casts to silence a rule, no Knip ignores (delete the unused code), and never lower Stryker's `thresholds.break`. If a secret scanner fires, take the secret out of the commit, and ask if you think it's a false positive.
+- Change the files that `.claude/settings.json` lists under `permissions.ask` with the Edit or Write tool, never from the shell, so the change comes to me for approval.
 - Ask before adding a runtime dependency. Paseo supplies the SDK, React, React Native, TanStack Query and Zod.
 - npm packages via `npm install`, Nix packages in `devenv.nix`. If `.npmrc` refuses an install (version under 7 days old, git or URL dependency, install script not in `allowScripts`), ask instead of working around it.
 

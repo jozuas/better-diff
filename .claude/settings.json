@@ -1,5 +1,28 @@
 {
   "enabledMcpjsonServers": ["nixos"],
+  "permissions": {
+    "ask": [
+      "Edit(/.oxlintrc.json)",
+      "Edit(/.oxfmtrc.json)",
+      "Edit(/tsconfig*.json)",
+      "Edit(/vitest.*)",
+      "Edit(/stryker.*)",
+      "Edit(/knip.*)",
+      "Edit(/tools/**)",
+      "Edit(/package.json)",
+      "Edit(/.npmrc)",
+      "Edit(/devenv.*)",
+      "Edit(/.envrc)",
+      "Edit(/.pre-commit-config.yaml)",
+      "Edit(/.gitlint)",
+      "Edit(/.github/**)",
+      "Edit(/.claude/*.json)",
+      "Edit(/AGENTS.md)",
+      "Bash(*--no-verify*)",
+      "Bash(*hooksPath*)",
+      "Bash(*SKIP=*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
