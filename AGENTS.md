@@ -17,7 +17,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 ## Commands
 
 - Typecheck: `npm run typecheck`.
-- Lint: `npm run lint` (Oxlint, type-aware; config in `.oxlintrc.json`). It also enforces the client/server/shared import boundaries.
+- Lint: `npm run lint` (Oxlint, type-aware; config in `.oxlintrc.json`). It also enforces the client/server/shared import boundaries and runs the vendored anti-slop rules in `tools/oxlint/anti-slop/` (provenance in its `UPSTREAM.md`). Fix findings in the code; don't suppress rules, lower their severity, or add casts to get past them.
 - Format: `npm run format` (Oxfmt, which also sorts imports; config in `.oxfmtrc.json`). `npm run format:check` only checks.
 - Test: `npm test` (Vitest; config in `vitest.config.mts`). Tests sit next to the code they cover, as `*.test.ts`.
 - Try it in Paseo: `paseo plugin add "$PWD" --id <id>` once, with `better-diff` as the `<id>` in the main checkout and `better-diff-<worktree name>` in a worktree, so several can be installed side by side. Then `paseo plugin reload <id>` after a change, and `paseo plugin logs <id>` for its output.

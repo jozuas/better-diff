@@ -5,5 +5,6 @@ import { greetingRpc } from "./shared/greeting";
 
 export default function contribute(server: PluginServerContext) {
   server.handle(greetingRpc, createGreeting);
+
   return () => {};
 }

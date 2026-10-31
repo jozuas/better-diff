@@ -10,6 +10,7 @@ import { openExternal } from "./web";
 export function GreetingScreen({ theme, layout }: PluginScreenProps) {
   const createGreeting = useRpc(greetingRpc);
   const greeting = useMutation({ mutationFn: createGreeting });
+
   const styles = useMemo(
     () => ({
       screen: {
@@ -23,6 +24,7 @@ export function GreetingScreen({ theme, layout }: PluginScreenProps) {
     }),
     [theme, layout.compact],
   );
+
   return (
     <View style={styles.screen}>
       <Text style={styles.text}>{greeting.data?.message ?? "Ask the daemon for a greeting."}</Text>

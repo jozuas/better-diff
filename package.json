@@ -17,7 +17,7 @@
     "!**/*.test.tsx"
   ],
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tools/oxlint",
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check",
@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@getpaseo/plugin": "0.14.0",
+    "@oxlint/plugins": "1.90.0",
     "@tanstack/react-query": "^5.90.11",
     "@types/react": "~19.2.0",
     "oxfmt": "0.75.0",
