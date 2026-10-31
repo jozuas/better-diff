@@ -7,7 +7,7 @@ export async function listChanges({
   directory,
 }: RpcInput<typeof changesRpc>): Promise<RpcOutput<typeof changesRpc>> {
   const status = await git(directory, "status", ["--porcelain=v2", "--untracked-files=all"]);
-  const entries = status.split("\0").values();
+  const entries = status.toString().split("\0").values();
   const modified: string[] = [];
   const untracked: string[] = [];
   const staged: string[] = [];

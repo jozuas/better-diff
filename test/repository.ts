@@ -11,6 +11,9 @@ export function runGit(repository: string, args: readonly string[]): string {
   });
 }
 
+// For a property test whose runs each set up a repository, which takes git about 100ms.
+export const timeout = 60_000;
+
 export async function inRepository(test: (repository: string) => Promise<void>): Promise<void> {
   const repository = mkdtempSync(join(tmpdir(), "better-diff-"));
 

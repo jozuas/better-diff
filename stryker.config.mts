@@ -15,6 +15,10 @@ export default {
   // An incremental run keeps a static mutant's "Survived" even after a test that kills it is added,
   // since nothing records which tests cover module-level code.
   incremental: false,
+  // Tests run git, so mutants tested side by side slow each other down, past a time limit set from
+  // a test run that had the machine to itself. Stryker counts a mutant that times out as detected,
+  // which would hide one that survives.
+  timeoutFactor: 3,
   reporters: ["clear-text", "html"],
   thresholds: { high: 100, low: 100, break: 100 },
 } satisfies PartialStrykerOptions;

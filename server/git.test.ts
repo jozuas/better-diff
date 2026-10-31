@@ -5,7 +5,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { canCoexist, filePath } from "../test/file-names";
-import { inRepository, runGit, writeFile } from "../test/repository";
+import { inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { git } from "./git";
 
 // With no paths, a command covers every file, so at least one is selected.
@@ -16,31 +16,35 @@ const files = fc
   })
   .filter(({ selected, others }) => canCoexist([...selected, ...others]));
 
-test("selects exactly the files its paths name, whatever characters they hold", async () => {
-  await fc.assert(
-    fc.asyncProperty(files, async ({ selected, others }) => {
-      await inRepository(async (repository) => {
-        for (const path of [...selected, ...others]) {
-          writeFile(repository, path, "");
-        }
+test(
+  "selects exactly the files its paths name, whatever characters they hold",
+  async () => {
+    await fc.assert(
+      fc.asyncProperty(files, async ({ selected, others }) => {
+        await inRepository(async (repository) => {
+          for (const path of [...selected, ...others]) {
+            writeFile(repository, path, "");
+          }
 
-        const status = await git(
-          repository,
-          "status",
-          ["--porcelain=v2", "--untracked-files=all"],
-          selected,
-        );
+          const status = await git(
+            repository,
+            "status",
+            ["--porcelain=v2", "--untracked-files=all"],
+            selected,
+          );
 
-        expect(status.split("\0").toSorted()).toStrictEqual(
-          ["", ...selected.map((path) => `? ${path}`)].toSorted(),
-        );
-      });
-    }),
-    {
-      examples: [[{ selected: ["*"], others: ["a"] }], [{ selected: ["-s"], others: ["a"] }]],
-    },
-  );
-});
+          expect(status.toString().split("\0").toSorted()).toStrictEqual(
+            ["", ...selected.map((path) => `? ${path}`)].toSorted(),
+          );
+        });
+      }),
+      {
+        examples: [[{ selected: ["*"], others: ["a"] }], [{ selected: ["-s"], others: ["a"] }]],
+      },
+    );
+  },
+  timeout,
+);
 
 test.each([
   ["an external diff tool", "diff.external", "false"],
@@ -49,22 +53,27 @@ test.each([
   ["no prefixes", "diff.noprefix", "true"],
   ["other prefixes", "diff.mnemonicPrefix", "true"],
   ["quoted names", "core.quotePath", "true"],
+  ["no context", "diff.context", "0"],
+  ["no space before an empty line", "diff.suppressBlankEmpty", "true"],
 ])("diffs as git does by default, though the user's config asks for %s", async (_, key, value) => {
   await inRepository(async (repository) => {
     // Gives every file the diff driver whose textconv filter one case sets.
     writeFileSync(join(repository, ".git", "info", "attributes"), "* diff=upper\n");
-    writeFile(repository, "é", "x\n");
+    writeFile(repository, "é", "\nx\n");
     runGit(repository, ["add", "--all"]);
-    writeFile(repository, "é", "y\n");
+    writeFile(repository, "é", "\ny\n");
     runGit(repository, ["config", key, value]);
 
-    await expect(git(repository, "diff", [])).resolves.toBe(
+    const diff = await git(repository, "diff", []);
+
+    expect(diff.toString()).toBe(
       [
         "diff --git a/é b/é",
-        "index 587be6b..975fbec 100644",
+        "index 5f6a263..8cb8bae 100644",
         "--- a/é",
         "+++ b/é",
-        "@@ -1 +1 @@",
+        "@@ -1,2 +1,2 @@",
+        " ",
         "-x",
         "+y",
         "",
@@ -97,5 +106,42 @@ test("returns output longer than execFile's default limit of 1 MiB", async () =>
     const diff = await git(repository, "diff", []);
 
     expect(diff.length).toBeGreaterThan(2 ** 21);
+  });
+});
+
+test.each(["fix", "error"])(
+  "applies a patch as it is, though the user's config says to %s trailing whitespace",
+  async (action) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, "a", "a\n");
+      runGit(repository, ["add", "--all"]);
+      runGit(repository, ["config", "apply.whitespace", action]);
+
+      await git(
+        repository,
+        "apply",
+        ["--cached"],
+        [],
+        Buffer.from("diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1,2 @@\n a\n+b \r\n"),
+      );
+
+      expect(runGit(repository, ["show", ":a"])).toBe("a\nb \r\n");
+    });
+  },
+);
+
+test("rejects with what git says when it fails", async () => {
+  await inRepository(async (repository) => {
+    await expect(
+      git(repository, "apply", ["--cached"], [], Buffer.from("not a patch\n")),
+    ).rejects.toThrow("git apply failed: error: No valid patches in input");
+  });
+});
+
+test("ignores input a command doesn't read", async () => {
+  await inRepository(async (repository) => {
+    const status = await git(repository, "status", [], [], Buffer.alloc(2 ** 24));
+
+    expect(status.toString()).toBe("");
   });
 });

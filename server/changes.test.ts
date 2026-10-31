@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 
 import { changesRpc } from "../shared/changes";
 import { canCoexist, filePath } from "../test/file-names";
-import { deleteFile, inRepository, runGit, writeFile } from "../test/repository";
+import { deleteFile, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { listChanges } from "./changes";
 
 type Changes = RpcOutput<typeof changesRpc>;
@@ -68,26 +68,30 @@ function sorted({ modified, untracked, staged }: Changes): Changes {
   };
 }
 
-test("lists what git status does: modified, untracked and staged files", async () => {
-  await fc.assert(
-    fc.asyncProperty(versions, async (files) => {
-      await inRepository(async (repository) => {
-        writeVersions(repository, files, "head");
-        runGit(repository, ["add", "--all"]);
-        runGit(repository, ["commit", "--quiet", "--allow-empty", "--message", "Commit"]);
-        writeVersions(repository, files, "index");
-        runGit(repository, ["add", "--all"]);
-        writeVersions(repository, files, "worktree");
+test(
+  "lists what git status does: modified, untracked and staged files",
+  async () => {
+    await fc.assert(
+      fc.asyncProperty(versions, async (files) => {
+        await inRepository(async (repository) => {
+          writeVersions(repository, files, "head");
+          runGit(repository, ["add", "--all"]);
+          runGit(repository, ["commit", "--quiet", "--allow-empty", "--message", "Commit"]);
+          writeVersions(repository, files, "index");
+          runGit(repository, ["add", "--all"]);
+          writeVersions(repository, files, "worktree");
 
-        const changes = await listChanges({ directory: repository });
+          const changes = await listChanges({ directory: repository });
 
-        expect(sorted(changes)).toStrictEqual(sorted(expectedChanges(files)));
-      });
-    }),
-    // A run takes about 70ms, most of it in git, so there are fewer runs, each with more files.
-    { numRuns: 30 },
-  );
-});
+          expect(sorted(changes)).toStrictEqual(sorted(expectedChanges(files)));
+        });
+      }),
+      // A run takes about 70ms, most of it in git, so there are fewer runs, each with more files.
+      { numRuns: 30 },
+    );
+  },
+  timeout,
+);
 
 test("lists a staged rename under its new name, and never reads the old name as an entry", async () => {
   await inRepository(async (repository) => {
