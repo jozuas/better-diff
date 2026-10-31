@@ -1,5 +1,6 @@
 import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { SidebarRow } from "@getpaseo/plugin/client/ui";
+
 import { GreetingScreen } from "./client/greeting";
 
 function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps) {

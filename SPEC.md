@@ -5,6 +5,7 @@ Desktop only: the mobile app isn't supported for now.
 ### Diff view
 
 Replicates Sublime Merge as much as possible:
+
 - Syntax highlighted.
 - Diffs come from git itself (`git diff --no-ext-diff`), honouring the user's `diff.algorithm`.
 - Changed words within a line are highlighted, as in Sublime Merge.
@@ -15,11 +16,11 @@ Replicates Sublime Merge as much as possible:
 
 ### Actions
 
-| Diff shown          | File bar        | Hunk bar                 | Line actions               |
-|---------------------|-----------------|--------------------------|----------------------------|
-| Modified (unstaged) | Discard, Stage  | Discard Hunk, Stage Hunk | Discard Lines, Stage Lines |
-| Untracked           | Delete, Stage   | Stage Hunk               | Stage Lines                |
-| Staged              | Unstage         | Unstage Hunk             | Unstage Lines              |
+| Diff shown          | File bar       | Hunk bar                 | Line actions               |
+| ------------------- | -------------- | ------------------------ | -------------------------- |
+| Modified (unstaged) | Discard, Stage | Discard Hunk, Stage Hunk | Discard Lines, Stage Lines |
+| Untracked           | Delete, Stage  | Stage Hunk               | Stage Lines                |
+| Staged              | Unstage        | Unstage Hunk             | Unstage Lines              |
 
 - Line actions appear only while lines in that hunk are selected.
 - Staged changes can't be discarded, only unstaged.

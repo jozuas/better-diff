@@ -3,6 +3,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
+
 import { greetingRpc } from "../shared/greeting";
 import { openExternal } from "./web";
 
