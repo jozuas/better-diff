@@ -31,7 +31,6 @@
     "reportUnusedDisableDirectives": "error"
   },
   "rules": {
-    "max-lines": "off",
     "max-lines-per-function": "off",
     "import/max-dependencies": "off",
     "no-warning-comments": "off",
@@ -52,6 +51,7 @@
     ],
     "vitest/consistent-test-filename": ["error", { "pattern": ".*\\.test\\.tsx?$" }],
     "typescript/ban-ts-comment": ["error", { "ts-expect-error": true }],
+    "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
 
     "no-empty": "error",
     "no-var": "error",
@@ -207,7 +207,16 @@
       "rules": { "import/no-default-export": "off" }
     },
     {
-      "files": ["index.client.tsx", "client/**"],
+      // Stryker doesn't mutate components or entry points, so logic in them would go untested.
+      "files": ["**/*.tsx", "index.{client,server}.{ts,tsx}"],
+      "rules": { "complexity": ["error", 3] }
+    },
+    {
+      "files": ["**/*.tsx"],
+      "rules": { "react/only-export-components": "error", "local/no-tsx-helpers": "error" }
+    },
+    {
+      "files": ["index.client.{ts,tsx}", "client/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -233,7 +242,7 @@
       }
     },
     {
-      "files": ["index.server.ts", "server/**"],
+      "files": ["index.server.{ts,tsx}", "server/**"],
       "rules": {
         "no-restricted-imports": [
           "error",

@@ -8,6 +8,7 @@ import {
 } from "./fast-check.ts";
 import { noHtmlElementsRule } from "./no-html-elements.ts";
 import { noLintDirectivesRule } from "./no-lint-directives.ts";
+import { noTsxHelpersRule } from "./no-tsx-helpers.ts";
 import { noViStubsRule } from "./no-vi-stubs.ts";
 import { strykerDirectiveFormatRule } from "./stryker-directive-format.ts";
 
@@ -20,6 +21,7 @@ export default definePlugin({
     "fast-check-string-unit": fastCheckStringUnitRule,
     "no-html-elements": noHtmlElementsRule,
     "no-lint-directives": noLintDirectivesRule,
+    "no-tsx-helpers": noTsxHelpersRule,
     "no-vi-stubs": noViStubsRule,
     "stryker-directive-format": strykerDirectiveFormatRule,
   },

@@ -1,5 +1,6 @@
-import type { PluginScreenProps } from "@getpaseo/plugin/client";
+import type { PluginScreenProps, PluginSidebarItemProps } from "@getpaseo/plugin/client";
 import { useRpc } from "@getpaseo/plugin/client";
+import { SidebarRow } from "@getpaseo/plugin/client/ui";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -45,5 +46,15 @@ export function GreetingScreen({ theme, layout }: PluginScreenProps) {
         <Text style={styles.buttonText}>Open paseo.sh</Text>
       </Pressable>
     </View>
+  );
+}
+
+export function GreetingItem({ currentScreen, openScreen }: PluginSidebarItemProps) {
+  return (
+    <SidebarRow
+      icon="MessageCircle"
+      active={currentScreen?.screenId === "greeting"}
+      onPress={() => openScreen({ screenId: "greeting" })}
+    />
   );
 }

@@ -13,7 +13,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 ## Paseo plugin SDK
 
 - Reference: the SDK's types in `node_modules/@getpaseo/plugin/dist` (`client/`, `client/ui`, `server/`) and `node_modules/@getpaseo/client/dist`. Docs: https://paseo.sh/docs/plugins, https://paseo.sh/docs/plugins/reference.
-- `index.client.tsx` and `client/` run in the app and render with React Native primitives through React Native Web. `index.server.ts` and `server/` run in a daemon subprocess. `shared/` runs in both.
+- `index.client.ts` and `client/` run in the app and render with React Native primitives through React Native Web. `index.server.ts` and `server/` run in a daemon subprocess. `shared/` runs in both.
 - Git runs on the server side, through `execCommand` from `@getpaseo/plugin/server`.
 
 ## Tests
