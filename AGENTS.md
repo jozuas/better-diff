@@ -29,6 +29,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 ## Commands
 
-- `npm run check`: typecheck, lint, format check, tests, Knip and mutation tests, stopping at the first failure. The pre-commit hook runs it along with secret scanners and other linters.
+- `npm run check`: typecheck, lint, format check, tests, Knip and mutation tests of the plugin's code, stopping at the first failure. The pre-commit hook runs it along with secret scanners and other linters.
+- `npm run mutate:rules`: mutation tests of the local Oxlint rules in `tools/oxlint/local/`. The pre-commit hook runs it when a commit changes them or the Stryker config.
 - On their own: `npm run typecheck`, `npm run lint`, `npm run format` (also sorts imports), `npm test`, `npm run knip`, `npm run mutate` (prints surviving mutants as diffs, report in `reports/mutation/mutation.html`).
 - Try it in Paseo: `paseo plugin add "$PWD" --id <id>` once, with `better-diff` as the `<id>` in the main checkout and `better-diff-<worktree name>` in a worktree. Then `paseo plugin reload <id>` after a change, and `paseo plugin logs <id>` for its output.

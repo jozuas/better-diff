@@ -3,14 +3,9 @@ import type { PartialStrykerOptions } from "@stryker-mutator/api/core";
 export default {
   testRunner: "vitest",
   // Components and entry points render or register through React Native or Paseo, which Vitest
-  // can't load, so logic belongs in .ts modules. The local Oxlint plugin's index only registers
-  // its rules.
-  mutate: [
-    "{client,server,shared}/**/*.ts",
-    "tools/oxlint/local/*.ts",
-    "!**/*.test.ts",
-    "!tools/oxlint/local/index.ts",
-  ],
+  // can't load, so logic belongs in .ts modules. stryker.rules.config.mts mutates the local Oxlint
+  // rules.
+  mutate: ["{client,server,shared}/**/*.ts", "!**/*.test.ts"],
   // Stryker rewrites the tsconfig it finds through TypeScript's JavaScript API, which TypeScript 7
   // doesn't have. Nothing needs rewriting, since every tsconfig stays inside the project.
   tsconfigFile: "no-tsconfig-to-rewrite.json",

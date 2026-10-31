@@ -5,6 +5,21 @@
   ...
 }:
 
+let
+  npmScriptHook = name: script: {
+    enable = true;
+    name = "npm run ${script}";
+    # Paseo's own commit button runs hooks outside the devenv shell.
+    entry = lib.getExe (
+      pkgs.writeShellApplication {
+        inherit name;
+        runtimeInputs = [ config.languages.javascript.package ];
+        text = "npm run ${script}";
+      }
+    );
+    pass_filenames = false;
+  };
+in
 {
   # See full reference at https://devenv.sh/reference/options/
 
@@ -42,18 +57,11 @@
     gitleaks.enable = true;
     detect-private-keys.enable = true;
     gitlint.enable = true;
-    check = {
-      enable = true;
-      name = "npm run check";
-      # Paseo's own commit button runs hooks outside the devenv shell.
-      entry = lib.getExe (
-        pkgs.writeShellApplication {
-          name = "check";
-          runtimeInputs = [ config.languages.javascript.package ];
-          text = "npm run check";
-        }
-      );
-      pass_filenames = false;
+    check = npmScriptHook "check" "check";
+    # Mutating the local Oxlint rules takes most of a minute, so only a commit that changes them or
+    # the Stryker config waits for it. `devenv test` runs every hook on every file.
+    mutate-rules = npmScriptHook "mutate-rules" "mutate:rules" // {
+      files = "^(tools/oxlint/local/|stryker\\.)";
     };
   };
 }
