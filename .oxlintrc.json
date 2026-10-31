@@ -261,6 +261,39 @@
         "no-restricted-imports": [
           "error",
           {
+            "paths": [
+              {
+                "name": "@getpaseo/plugin/server",
+                "importNames": ["execCommand", "spawnProcess"],
+                "message": "Run git through `git` from server/git.ts, so the user's config and unusual file names can't change what it prints."
+              },
+              {
+                "name": "node:child_process",
+                "message": "Run git through `git` from server/git.ts, so the user's config and unusual file names can't change what it prints."
+              }
+            ],
+            "patterns": [
+              {
+                "group": ["**/client", "**/client/**", "**/index.client"],
+                "message": "Server code runs in the daemon and can't import app code."
+              },
+              {
+                "regex": "^(react(-dom|-native)?|use-sync-external-store|@tanstack/react-query)(/|$)",
+                "message": "Server code runs in the daemon, which has no React."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      // The one module that runs git. An override replaces a rule's options rather than merging
+      // them, so this repeats the patterns above.
+      "files": ["server/git.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
             "patterns": [
               {
                 "group": ["**/client", "**/client/**", "**/index.client"],

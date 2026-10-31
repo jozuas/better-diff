@@ -14,14 +14,14 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 - Reference: the SDK's types in `node_modules/@getpaseo/plugin/dist` (`client/`, `client/ui`, `server/`) and `node_modules/@getpaseo/client/dist`. Docs: https://paseo.sh/docs/plugins, https://paseo.sh/docs/plugins/reference.
 - `index.client.ts` and `client/` run in the app and render with React Native primitives through React Native Web. `index.server.ts` and `server/` run in a daemon subprocess. `shared/` runs in both.
-- Git runs on the server side, through `execCommand` from `@getpaseo/plugin/server`.
+- Git runs on the server side, through `git` from `server/git.ts`, the one module allowed to start processes. An option a command needs whatever the user's config says goes in its `commandOptions`, with a test that sets the config it overrides.
 
 ## Tests
 
 - Property-test with fast-check wherever a property can be stated: round trips (staging then unstaging restores the index), invariants, agreement with git itself or with a simpler model. A property that computes the expected value the way the code does tests nothing. Use example tests for cases that matter on their own, such as an exact output format.
 - Write a property as `fc.assert(fc.property(...))` inside Vitest's `test`. Not `@fast-check/vitest`: Oxlint's Vitest rules don't recognise its `test`.
-- Generate what diffs break on: newlines, `\r`, tabs and non-ASCII.
-- Test git operations against real git in a temporary repository, not mocks.
+- Generate what diffs break on: newlines, `\r`, tabs and non-ASCII. Generate file paths with `filePath` from `test/file-names.ts`.
+- Test git operations against real git in a temporary repository (`inRepository` from `test/repository.ts`), not mocks.
 - Code only tests use, such as shared generators and temporary repositories, goes in `test/`: it isn't shipped, and Stryker doesn't mutate it.
 - Keep client logic, such as line selection and word highlighting, in `.ts` modules that don't import `react-native`: Vitest can't load it, and Stryker only mutates `.ts` modules.
 - Every Stryker mutant must be killed, by a test of the behaviour it breaks, not one that restates the mutated code. Disable a mutant with a Stryker comment only if it can't change behaviour or its module can't load under Vitest.
