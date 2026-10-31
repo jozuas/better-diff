@@ -46,7 +46,7 @@ export async function readDiff({
 
 // Stages, unstages or discards the selected lines' changes, if the diff they were chosen from is
 // still the file's diff.
-export async function applyLines({
+async function apply({
   directory,
   path,
   operation,
@@ -78,4 +78,30 @@ export async function applyLines({
   }
 
   return {};
+}
+
+// The last apply to start.
+let applying: Promise<unknown> = Promise.resolve();
+
+async function applyAfter(
+  previous: Promise<unknown>,
+  input: RpcInput<typeof applyRpc>,
+): Promise<RpcOutput<typeof applyRpc>> {
+  await Promise.allSettled([previous]);
+
+  return apply(input);
+}
+
+// One apply at a time. Two at once could both find the diff unchanged, and the second patch would
+// then apply to what the first left, where `git apply` can find its lines in another place.
+export async function applyLines(
+  input: RpcInput<typeof applyRpc>,
+): Promise<RpcOutput<typeof applyRpc>> {
+  const applied = applyAfter(applying, input);
+
+  applying = applied;
+
+  const output = await applied;
+
+  return output;
 }

@@ -21,7 +21,7 @@ const files = fc
 
 interface RepositoryState {
   index: string;
-  worktree: Buffer[];
+  worktree: (Buffer | undefined)[];
 }
 
 function state(repository: string, all: readonly File[]): RepositoryState {

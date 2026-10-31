@@ -13,6 +13,7 @@ import {
   setUp,
   sides,
   targets,
+  writeVersion,
 } from "../test/staging";
 import type { Diff } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
@@ -30,9 +31,9 @@ test.each(operations)(
           const diff = await readDiff({ directory: repository, path, side });
           const shown = runGitBytes(repository, diffArgs);
 
-          writeFile(repository, path, later.index);
-          runGit(repository, ["add", "--", path]);
-          writeFile(repository, path, later.worktree);
+          writeVersion(repository, path, later.index);
+          runGit(repository, ["add", "--all"]);
+          writeVersion(repository, path, later.worktree);
           fc.pre(!runGitBytes(repository, diffArgs).equals(shown));
 
           const before = fileState(repository, path);
@@ -176,28 +177,38 @@ test.each(operations)(
 const repeated = "a\n".repeat(20);
 const withInserted = `${"a\n".repeat(2)}X\n${"a\n".repeat(13)}Y\n${"a\n".repeat(5)}`;
 
-test.each([
+// Versions in which each operation makes the target version `withInserted`.
+const insertions = [
   ["stage", { head: repeated, index: repeated, worktree: withInserted }],
   ["unstage", { head: withInserted, index: repeated, worktree: repeated }],
   ["discard", { head: repeated, index: withInserted, worktree: repeated }],
-] as const)(
+] as const;
+
+function setUpFile(
+  repository: string,
+  versions: { head: string; index: string; worktree: string },
+): void {
+  setUp(
+    repository,
+    [
+      {
+        path: "a",
+        versions: {
+          head: Buffer.from(versions.head),
+          index: Buffer.from(versions.index),
+          worktree: Buffer.from(versions.worktree),
+        },
+      },
+    ],
+    "myers",
+  );
+}
+
+test.each(insertions)(
   "%s a hunk after one that changes the line count where the lines around it repeat",
   async (operation, versions) => {
     await inRepository(async (repository) => {
-      setUp(
-        repository,
-        [
-          {
-            path: "a",
-            versions: {
-              head: Buffer.from(versions.head),
-              index: Buffer.from(versions.index),
-              worktree: Buffer.from(versions.worktree),
-            },
-          },
-        ],
-        "myers",
-      );
+      setUpFile(repository, versions);
 
       const diff = await readDiff({ directory: repository, path: "a", side: sides[operation] });
 
@@ -210,7 +221,62 @@ test.each([
       });
 
       expect(diff.hunks).toHaveLength(2);
-      expect(fileState(repository, "a")[targets[operation]].toString()).toBe(withInserted);
+      expect(fileState(repository, "a")[targets[operation]]?.toString()).toBe(withInserted);
     });
   },
 );
+
+test.each(insertions)(
+  "%s refuses a second apply of a diff that starts before the first ends, and runs the next",
+  async (operation, versions) => {
+    await inRepository(async (repository) => {
+      setUpFile(repository, versions);
+
+      const side = sides[operation];
+      const diff = await readDiff({ directory: repository, path: "a", side });
+
+      const input = {
+        directory: repository,
+        path: "a",
+        operation,
+        version: diff.version,
+        lines: linesOf(diff, () => true),
+      };
+
+      await expect(Promise.all([applyLines(input), applyLines(input)])).rejects.toThrow(
+        "changed since it was read",
+      );
+
+      expect(fileState(repository, "a")[targets[operation]]?.toString()).toBe(withInserted);
+
+      const { version } = await readDiff({ directory: repository, path: "a", side });
+
+      await expect(applyLines({ ...input, version, lines: [] })).resolves.toStrictEqual({});
+    });
+  },
+);
+
+test("discards a hunk of 50,000 lines, as changing a long file's line endings makes", async () => {
+  await inRepository(async (repository) => {
+    const numbers = Array.from({ length: 25_000 }, (_, number) => String(number));
+    const lf = numbers.map((number) => `${number}\n`).join("");
+
+    setUpFile(repository, {
+      head: lf,
+      index: lf,
+      worktree: numbers.map((number) => `${number}\r\n`).join(""),
+    });
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await applyLines({
+      directory: repository,
+      path: "a",
+      operation: "discard",
+      version: diff.version,
+      lines: linesOf(diff, () => true),
+    });
+
+    expect(fileState(repository, "a").worktree?.toString()).toBe(lf);
+  });
+});

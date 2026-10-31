@@ -1,5 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -40,17 +49,29 @@ export function writeFile(repository: string, path: string, content: string | Ui
   writeFileSync(file, content);
 }
 
+export function writeSymlink(repository: string, path: string, target: string): void {
+  symlinkSync(target, join(repository, path));
+}
+
 export function deleteFile(repository: string, path: string): void {
   rmSync(join(repository, path), { force: true });
 }
 
-export function worktreeFile(repository: string, path: string): Buffer {
-  return readFileSync(join(repository, path));
+export function makeExecutable(repository: string, path: string): void {
+  chmodSync(join(repository, path), 0o755);
 }
 
-export function indexFile(repository: string, path: string): Buffer {
-  // An entry reads `<mode> <blob> <stage>\t<path>`.
-  const [, blob = ""] = runGit(repository, ["ls-files", "--stage", "-z", "--", path]).split(" ");
+// Undefined if the worktree doesn't have the file.
+export function worktreeFile(repository: string, path: string): Buffer | undefined {
+  const file = join(repository, path);
 
-  return runGitBytes(repository, ["cat-file", "blob", blob]);
+  return existsSync(file) ? readFileSync(file) : undefined;
+}
+
+// Undefined if the index doesn't have the file.
+export function indexFile(repository: string, path: string): Buffer | undefined {
+  // An entry reads `<mode> <blob> <stage>\t<path>`.
+  const [, blob] = runGit(repository, ["ls-files", "--stage", "-z", "--", path]).split(" ");
+
+  return blob === undefined ? undefined : runGitBytes(repository, ["cat-file", "blob", blob]);
 }

@@ -5,7 +5,7 @@ import type { applyRpc, diffRpc } from "../shared/diff";
 import { fileVersions } from "./file-contents";
 import type { FileVersions } from "./file-contents";
 import { filePath } from "./file-names";
-import { indexFile, runGit, worktreeFile, writeFile } from "./repository";
+import { deleteFile, indexFile, runGit, worktreeFile, writeFile } from "./repository";
 
 export type Operation = RpcInput<typeof applyRpc>["operation"];
 
@@ -39,31 +39,42 @@ export const file: fc.Arbitrary<File> = fc.record({ path: filePath, versions: fi
 
 export const diffAlgorithm = fc.constantFrom("myers", "minimal", "patience", "histogram");
 
+// Writes the file, or deletes it for a version without it.
+export function writeVersion(repository: string, path: string, version: Buffer | undefined): void {
+  if (version === undefined) {
+    deleteFile(repository, path);
+  } else {
+    writeFile(repository, path, version);
+  }
+}
+
 // Commits each file's HEAD version, stages its index version and leaves its worktree version.
 export function setUp(repository: string, files: readonly File[], algorithm: string): void {
   runGit(repository, ["config", "diff.algorithm", algorithm]);
 
   for (const { path, versions } of files) {
-    writeFile(repository, path, versions.head);
+    writeVersion(repository, path, versions.head);
   }
 
   runGit(repository, ["add", "--all"]);
-  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+  // Empty when HEAD has none of the files.
+  runGit(repository, ["commit", "--quiet", "--allow-empty", "--message", "Commit"]);
 
   for (const { path, versions } of files) {
-    writeFile(repository, path, versions.index);
+    writeVersion(repository, path, versions.index);
   }
 
   runGit(repository, ["add", "--all"]);
 
   for (const { path, versions } of files) {
-    writeFile(repository, path, versions.worktree);
+    writeVersion(repository, path, versions.worktree);
   }
 }
 
+// Undefined for a version without the file.
 export interface FileState {
-  index: Buffer;
-  worktree: Buffer;
+  index: Buffer | undefined;
+  worktree: Buffer | undefined;
 }
 
 // The version of the file each operation changes.

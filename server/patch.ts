@@ -12,18 +12,31 @@ interface Hunk {
   lines: Line[];
 }
 
+// The lines of git's header a patch needs, which name the file in each version and say whether the
+// patch creates or deletes it. A patch leaves out the others, such as a mode change: like Magit and
+// `git add -p`, line and hunk actions leave that alone.
+const fields = ["diff --git", "new file mode", "deleted file mode", "---", "+++"] as const;
+
+type Field = (typeof fields)[number];
+
+// What follows each field, if git printed it.
+type Header = Record<Field, string | undefined>;
+
 // One file's diff, as git prints it.
 export interface FileDiff {
-  // The lines naming the file, which a patch of it starts with.
-  header: Buffer[];
+  header: Header;
   hunks: Hunk[];
 }
 
-const hunkStart = /^@@ -(?<oldStart>\d+)(?:,\d+)? \+(?<newStart>\d+)(?:,\d+)? @@/u;
+// A count left out is 1.
+const hunkStart =
+  /^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@/u;
 
 const noNewline = "\\";
 
 const prefixes = { context: " ", removed: "-", added: "+" } as const;
+
+const kinds = ["context", "removed", "added"] as const;
 
 const opposites = { context: "context", removed: "added", added: "removed" } as const;
 
@@ -33,47 +46,83 @@ function bytes(text: string): Buffer {
   return Buffer.from(text, "latin1");
 }
 
-function kindOf(prefix: string): Line["kind"] {
-  if (prefix === prefixes.removed) {
-    return "removed";
-  }
-
-  return prefix === prefixes.added ? "added" : "context";
+function field(lines: readonly string[], name: Field): string | undefined {
+  return lines.find((line) => line.startsWith(`${name} `))?.slice(name.length + 1);
 }
 
+// Each field is on the first line that starts with it: the header comes before the hunks, whose
+// lines can start with `---` or `+++` too.
+function headerOf(lines: readonly string[]): Header {
+  return {
+    "diff --git": field(lines, "diff --git"),
+    "new file mode": field(lines, "new file mode"),
+    "deleted file mode": field(lines, "deleted file mode"),
+    "---": field(lines, "---"),
+    "+++": field(lines, "+++"),
+  };
+}
+
+// A hunk ends where its start says, after as many lines of each version as it counts, as
+// `git apply` reads it. A line after the last hunk is the start of another diff, as git prints for
+// a file that changed type or for a directory.
 export function parseDiff(diff: Buffer): FileDiff {
-  const header: Buffer[] = [];
   const hunks: Hunk[] = [];
   const lines = diff.toString("latin1").split("\n").slice(0, -1);
+  // The hunk being read, and how many of each version's lines it has yet to show.
+  let reading: { lines: Line[]; oldLeft: number; newLeft: number } | undefined;
 
   for (const [index, line] of lines.entries()) {
-    const start = hunkStart.exec(line)?.groups;
-    const hunk = hunks.at(-1);
+    if (line.startsWith(noNewline)) {
+      continue;
+    }
 
-    if (start !== undefined) {
-      hunks.push({
-        oldStart: Number(start["oldStart"]),
-        newStart: Number(start["newStart"]),
-        lines: [],
-      });
-    } else if (hunk === undefined) {
-      header.push(bytes(line));
-    } else if (!line.startsWith(noNewline)) {
-      hunk.lines.push({
-        kind: kindOf(line.charAt(0)),
+    const start = hunkStart.exec(line)?.groups;
+
+    if (reading !== undefined && (reading.oldLeft > 0 || reading.newLeft > 0)) {
+      const kind = kinds.find((each) => prefixes[each] === line.charAt(0));
+
+      if (kind === undefined) {
+        throw new Error(`A line in a hunk of git's diff has no " ", "-" or "+" prefix: ${line}`);
+      }
+
+      reading.lines.push({
+        kind,
         content: bytes(line.slice(1)),
         newline: lines[index + 1]?.startsWith(noNewline) !== true,
       });
+      reading.oldLeft -= kind === "added" ? 0 : 1;
+      reading.newLeft -= kind === "removed" ? 0 : 1;
+    } else if (start !== undefined) {
+      const hunkLines: Line[] = [];
+
+      hunks.push({
+        oldStart: Number(start["oldStart"]),
+        newStart: Number(start["newStart"]),
+        lines: hunkLines,
+      });
+      reading = {
+        lines: hunkLines,
+        oldLeft: Number(start["oldCount"] ?? 1),
+        newLeft: Number(start["newCount"] ?? 1),
+      };
+    } else if (reading !== undefined) {
+      throw new Error("git printed more than one diff for the path.");
     }
   }
 
-  return { header, hunks };
+  return { header: headerOf(lines), hunks };
 }
 
-// The diff the other way round, which undoes its changes.
+// The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.
 export function reverse({ header, hunks }: FileDiff): FileDiff {
   return {
-    header,
+    header: {
+      "diff --git": header["diff --git"],
+      "new file mode": header["deleted file mode"],
+      "deleted file mode": header["new file mode"],
+      "---": header["+++"],
+      "+++": header["---"],
+    },
     hunks: hunks.map(({ oldStart, newStart, lines }) => ({
       oldStart: newStart,
       newStart: oldStart,
@@ -97,10 +146,10 @@ function selectChanges({ lines }: Hunk, isSelected: (line: number) => boolean): 
 // Only the new version's last line can lack a newline, so a line that is no longer last gets one.
 // An unchanged line, which the old version has without one, is removed and added back.
 function endLines(lines: readonly Line[]): Line[] {
-  return lines.flatMap((line, index) => {
-    const isLast = lines.slice(index + 1).every(({ kind }) => kind === "removed");
+  const last = lines.findLastIndex(({ kind }) => kind !== "removed");
 
-    if (line.kind === "removed" || line.newline || isLast) {
+  return lines.flatMap((line, index) => {
+    if (line.kind === "removed" || line.newline || index === last) {
       return [line];
     }
 
@@ -110,6 +159,21 @@ function endLines(lines: readonly Line[]): Line[] {
           { ...line, kind: "removed" },
           { ...line, kind: "added", newline: true },
         ];
+  });
+}
+
+// A patch that deletes a file can't leave any of its lines, so one that does changes the file
+// instead.
+function patchHeader(header: Header, leavesLines: boolean): Buffer[] {
+  const changed =
+    header["deleted file mode"] !== undefined && leavesLines
+      ? { ...header, "deleted file mode": undefined, "+++": header["---"] }
+      : header;
+
+  return fields.flatMap((name) => {
+    const value = changed[name];
+
+    return value === undefined ? [] : [bytes(`${name} ${value}\n`)];
   });
 }
 
@@ -126,9 +190,12 @@ export function buildPatch(
   diff: FileDiff,
   isSelected: (hunk: number, line: number) => boolean,
 ): Buffer {
-  const hunks: Buffer[] = [];
+  // Each hunk's start line and lines, kept apart until the end: a hunk can have more lines than a
+  // function call can take arguments.
+  const hunks: Buffer[][] = [];
   // How many more lines the new version has than the old one before the next hunk.
   let offset = 0;
+  let leavesLines = false;
 
   for (const [index, hunk] of diff.hunks.entries()) {
     const lines = endLines(selectChanges(hunk, (line) => isSelected(index, line)));
@@ -140,15 +207,16 @@ export function buildPatch(
       // `git apply` looks for a hunk's lines from where its new start says, by which point it has
       // applied the hunks before it. Where the same lines are in more than one place, a wrong new
       // start would patch the wrong ones.
-      hunks.push(
+      hunks.push([
         bytes(`@@ -${hunk.oldStart},${oldCount} +${hunk.oldStart + offset},${newCount} @@\n`),
         ...lines.flatMap(render),
-      );
+      ]);
       offset += newCount - oldCount;
+      leavesLines ||= newCount > 0;
     }
   }
 
   return hunks.length === 0
     ? Buffer.alloc(0)
-    : Buffer.concat([...diff.header.flatMap((line) => [line, bytes("\n")]), ...hunks]);
+    : Buffer.concat([...patchHeader(diff.header, leavesLines), ...hunks.flat()]);
 }

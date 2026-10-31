@@ -24,7 +24,8 @@ interface Trees<T> {
   worktree: T;
 }
 
-export type FileVersions = Trees<Buffer>;
+// Undefined for a version without the file.
+export type FileVersions = Trees<Buffer | undefined>;
 
 interface Line {
   bytes: Buffer;
@@ -45,21 +46,36 @@ const presence: fc.Arbitrary<Trees<boolean>> = fc.oneof(
   { weight: 1, arbitrary: trees(fc.boolean()) },
 );
 
-// Now and then a version is empty, as a new or emptied file is, so a diff has a hunk that one
-// version has no lines in.
-const isEmptied = fc.oneof(
-  { weight: 6, arbitrary: fc.constant(false) },
-  { weight: 1, arbitrary: fc.constant(true) },
+type Fate = "kept" | "emptied" | "absent";
+
+// Now and then a version is empty, as an emptied file is, or doesn't have the file, as when it's
+// new or deleted, so a diff has a hunk that one version has no lines in.
+const fate = fc.oneof(
+  { weight: 6, arbitrary: fc.constant<Fate>("kept") },
+  { weight: 1, arbitrary: fc.constant<Fate>("emptied") },
+  { weight: 1, arbitrary: fc.constant<Fate>("absent") },
 );
 
 const newline = Buffer.from("\n");
 
-function version(lines: readonly Line[], finalNewline: boolean, tree: keyof Trees<never>): Buffer {
-  const present = lines.flatMap((line) => (line.presence[tree] ? [line.bytes] : []));
+function version(
+  lines: readonly Line[],
+  finalNewline: Trees<boolean>,
+  fates: Trees<Fate>,
+  tree: keyof Trees<never>,
+): Buffer | undefined {
+  if (fates[tree] === "absent") {
+    return undefined;
+  }
+
+  const present =
+    fates[tree] === "emptied"
+      ? []
+      : lines.flatMap((line) => (line.presence[tree] ? [line.bytes] : []));
 
   return Buffer.concat(
     present.flatMap((line, index) =>
-      index < present.length - 1 || finalNewline ? [line, newline] : [line],
+      index < present.length - 1 || finalNewline[tree] ? [line, newline] : [line],
     ),
   );
 }
@@ -71,12 +87,10 @@ export const fileVersions: fc.Arbitrary<FileVersions> = fc
     lines: fc.array(fc.record({ bytes: lineBytes, presence }), { maxLength: 60, size: "max" }),
     // Whether each version's last line ends with a newline.
     finalNewline: trees(fc.boolean()),
-    emptied: trees(isEmptied),
+    fates: trees(fate),
   })
-  .map(({ lines, finalNewline, emptied }) => ({
-    head: emptied.head ? Buffer.alloc(0) : version(lines, finalNewline.head, "head"),
-    index: emptied.index ? Buffer.alloc(0) : version(lines, finalNewline.index, "index"),
-    worktree: emptied.worktree
-      ? Buffer.alloc(0)
-      : version(lines, finalNewline.worktree, "worktree"),
+  .map(({ lines, finalNewline, fates }) => ({
+    head: version(lines, finalNewline, fates, "head"),
+    index: version(lines, finalNewline, fates, "index"),
+    worktree: version(lines, finalNewline, fates, "worktree"),
   }));
