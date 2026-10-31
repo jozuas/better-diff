@@ -1,4 +1,9 @@
-{ pkgs, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 {
   # See full reference at https://devenv.sh/reference/options/
@@ -15,7 +20,23 @@
   packages = [
     pkgs.git
     pkgs.jq
-    pkgs.nixfmt
     pkgs.mcp-nixos
   ];
+
+  git-hooks.hooks = {
+    nixfmt.enable = true;
+    check = {
+      enable = true;
+      name = "npm run check";
+      # Paseo's own commit button runs hooks outside the devenv shell.
+      entry = lib.getExe (
+        pkgs.writeShellApplication {
+          name = "check";
+          runtimeInputs = [ config.languages.javascript.package ];
+          text = "npm run check";
+        }
+      );
+      pass_filenames = false;
+    };
+  };
 }

@@ -16,7 +16,7 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 ## Commands
 
-- Check: `npm run check` runs the typecheck, lint, format check, tests and Knip, stopping at the first failure. Run it before committing; CI (`.github/workflows/check.yml`) runs it on pushes to `main` and on PRs.
+- Check: `npm run check` runs the typecheck, lint, format check, tests and Knip, stopping at the first failure. A pre-commit hook runs it against the staged changes, along with nixfmt on `.nix` files (`git-hooks` in `devenv.nix`, installed when the devenv shell starts); don't bypass it with `--no-verify`. CI (`.github/workflows/check.yml`) runs it on pushes to `main` and on PRs.
 - Typecheck: `npm run typecheck`.
 - Lint: `npm run lint` (Oxlint, type-aware; config in `.oxlintrc.json`). It also enforces the client/server/shared import boundaries and runs the vendored anti-slop rules in `tools/oxlint/anti-slop/` (provenance in its `UPSTREAM.md`). Fix findings in the code; don't suppress rules, lower their severity, or add casts to get past them.
 - Format: `npm run format` (Oxfmt, which also sorts imports; config in `.oxfmtrc.json`). `npm run format:check` only checks.

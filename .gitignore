@@ -4,3 +4,4 @@ devenv.local.nix
 .direnv/
 .claude/settings.local.json
 .claude/worktrees/
+.pre-commit-config.yaml
