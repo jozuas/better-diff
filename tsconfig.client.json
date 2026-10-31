@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "types": ["react"], "outDir": "node_modules/.cache/tsc/client" },
+  "include": ["index.client.*", "client"],
+  "exclude": ["**/*.test.*"],
+  "references": [{ "path": "./tsconfig.shared.json" }]
+}

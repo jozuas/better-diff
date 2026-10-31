@@ -1,0 +1,7 @@
+{
+  // Everything outside the plugin's runtimes, such as tool configs.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": { "types": ["node"], "outDir": "node_modules/.cache/tsc/node" },
+  "include": ["**/*"],
+  "exclude": ["index.client.*", "index.server.*", "client", "server", "shared", "tools"]
+}
