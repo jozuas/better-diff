@@ -38,6 +38,10 @@ export const diffRpc = defineRpc({
         ),
       }),
     ),
+    // Every line of the versions a text diff goes between, the hunks' and the unchanged ones
+    // around them, as the hunks' lines have them. None for a diff of another kind, or a version
+    // without the file.
+    contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
   }),
 });
 

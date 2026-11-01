@@ -105,26 +105,35 @@ async function changesOf(directory: string, path: string, side: Side): Promise<C
   return { diff, renamedFrom: undefined, paths: [path], untracked, intentToAdd };
 }
 
+function text(content: Buffer): string {
+  return content.toString("utf8");
+}
+
 export async function readDiff({
   directory,
   path,
   side,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
   const { diff, renamedFrom } = await changesOf(directory, path, side);
+  const { hunks, lines } = parseDiff(diff);
 
   return {
     version: versionOf(diff),
     kind: kindOf(diff),
     renamedFrom,
-    hunks: parseDiff(diff).hunks.map(({ oldStart, newStart, lines }) => ({
+    hunks: hunks.map(({ oldStart, newStart, lines: hunkLines }) => ({
       oldStart,
       newStart,
-      lines: lines.map(({ kind, content, newline }) => ({
+      lines: hunkLines.map(({ kind, content, newline }) => ({
         kind,
-        text: content.toString("utf8"),
+        text: text(content),
         newline,
       })),
     })),
+    contents: {
+      old: lines.flatMap(({ kind, content }) => (kind === "added" ? [] : [text(content)])),
+      new: lines.flatMap(({ kind, content }) => (kind === "removed" ? [] : [text(content)])),
+    },
   };
 }
 

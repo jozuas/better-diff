@@ -9,9 +9,10 @@ const commandOptions = {
   status: ["-z"],
   // Git's own patch, which `git apply` takes back: not an external tool's or a textconv filter's,
   // without colour codes, with the a/ and b/ prefixes whatever diff.noprefix and
-  // diff.mnemonicPrefix say, and with the context lines `git apply` needs to place each hunk
-  // whatever diff.context says. A renamed file's two paths make one diff whatever diff.renames
-  // says, since git status, which finds the rename, follows status.renames first.
+  // diff.mnemonicPrefix say, and with every line of the file whatever diff.context says: the plugin
+  // shows whole files, and works out the hunks with three lines of context from them. A renamed
+  // file's two paths make one diff whatever diff.renames says, since git status, which finds the
+  // rename, follows status.renames first.
   diff: [
     "--find-renames",
     "--no-ext-diff",
@@ -19,7 +20,7 @@ const commandOptions = {
     "--no-color",
     "--src-prefix=a/",
     "--dst-prefix=b/",
-    "--unified=3",
+    "--unified=1000000000",
   ],
   // The patch as it is, where apply.whitespace would fix or reject lines with trailing whitespace,
   // such as each line of a CRLF file.

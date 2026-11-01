@@ -35,12 +35,11 @@ export function runGitBytes(repository: string, args: readonly string[], input =
   });
 }
 
-// Runs `git diff --no-index`, which exits with 1 where the files differ.
-export function diffNoIndex(repository: string, from: string, to: string): void {
-  spawnSync("git", ["--literal-pathspecs", "diff", "--no-index", "--", from, to], {
+// Runs `git diff --no-index`, which exits with 1 where the files differ, and returns what it prints.
+export function diffNoIndex(repository: string, from: string, to: string): Buffer {
+  return spawnSync("git", ["--literal-pathspecs", "diff", "--no-index", "--", from, to], {
     cwd: repository,
-    stdio: "ignore",
-  });
+  }).stdout;
 }
 
 // For a property test whose runs each set up a repository, which takes git about 100ms.

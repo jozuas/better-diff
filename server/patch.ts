@@ -135,15 +135,9 @@ export function isRename(diff: Buffer): boolean {
 // A hunk ends where its start says, after as many lines of each version as it counts, as
 // `git apply` reads it. A line after the last hunk is the start of another diff, as git prints for
 // a directory.
-export function parseDiff(diff: Buffer): FileDiff {
+function hunksOf(diff: Buffer): Hunk[] {
   const hunks: Hunk[] = [];
   const lines = diff.toString("latin1").split("\n").slice(0, -1);
-
-  // The plugin shows other kinds of diff without their lines. A file that changed type, as to a
-  // symlink, has a diff for each version.
-  if (kindOf(diff) !== "text") {
-    return { header: headerOf(lines), hunks };
-  }
 
   // The hunk being read, and how many of each version's lines it has yet to show.
   let reading: { lines: Line[]; oldLeft: number; newLeft: number } | undefined;
@@ -187,7 +181,92 @@ export function parseDiff(diff: Buffer): FileDiff {
     }
   }
 
-  return { header: headerOf(lines), hunks };
+  return hunks;
+}
+
+// The lines of context git prints around a change.
+const context = 3;
+
+// How many lines of each version some lines have.
+interface Counts {
+  old: number;
+  new: number;
+}
+
+function countsOf(lines: readonly Line[]): Counts {
+  return {
+    old: lines.filter(({ kind }) => kind !== "added").length,
+    new: lines.filter(({ kind }) => kind !== "removed").length,
+  };
+}
+
+// Where a hunk starts in a version: at its first line there, or, where it has none, after the line
+// before it.
+function startOf(before: number, count: number): number {
+  return count > 0 ? before + 1 : before;
+}
+
+// The hunks git prints with three lines of context, from all of both versions' lines. As in git,
+// changes share a hunk if no more unchanged lines than its context before and after one change
+// are between them.
+function narrow(lines: readonly Line[]): Hunk[] {
+  // Each hunk's first and last changed line.
+  const changes: [number, number][] = [];
+
+  for (const [index, { kind }] of lines.entries()) {
+    const last = changes.at(-1);
+
+    if (kind !== "context") {
+      if (last !== undefined && index - last[1] - 1 <= 2 * context) {
+        last[1] = index;
+      } else {
+        changes.push([index, index]);
+      }
+    }
+  }
+
+  const hunks: Hunk[] = [];
+  // Each version's lines before the next hunk, and where the lines after the last hunk start.
+  const before: Counts = { old: 0, new: 0 };
+  let read = 0;
+
+  for (const [first, last] of changes) {
+    const start = Math.max(first - context, 0);
+    const end = last + context + 1;
+    const between = countsOf(lines.slice(read, start));
+    const hunkLines = lines.slice(start, end);
+    const counts = countsOf(hunkLines);
+
+    before.old += between.old;
+    before.new += between.new;
+    hunks.push({
+      oldStart: startOf(before.old, counts.old),
+      newStart: startOf(before.new, counts.new),
+      lines: hunkLines,
+    });
+    before.old += counts.old;
+    before.new += counts.new;
+    read = end;
+  }
+
+  return hunks;
+}
+
+// A file's diff as git prints it with more lines of context than either version has, whose one
+// hunk has all of their lines, and its hunks as git prints them with three lines of context. A
+// diff of another kind has no lines.
+export function parseDiff(diff: Buffer): FileDiff & { lines: Line[] } {
+  const header = headerOf(diff.toString("latin1").split("\n"));
+
+  // The plugin shows other kinds of diff without their lines. A file that changed type, as to a
+  // symlink, has a diff for each version.
+  if (kindOf(diff) !== "text") {
+    return { header, hunks: [], lines: [] };
+  }
+
+  const lines = hunksOf(diff).flatMap((hunk) => hunk.lines);
+
+  return { header, hunks: narrow(lines), lines };
 }
 
 // The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.
