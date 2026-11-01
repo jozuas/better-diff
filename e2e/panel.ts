@@ -1,14 +1,19 @@
 import type { Locator, Page } from "@playwright/test";
 
-// A group's files in the sidebar, by the group's heading.
+// A group's files' rows in the sidebar, by the group's heading.
 export function group(page: Page, heading: string): Locator {
-  return page.getByRole("list", { name: heading }).getByRole("button");
+  return page.getByRole("list", { name: heading }).getByRole("listitem");
+}
+
+// A file's row in the sidebar, with its actions.
+export function row(page: Page, heading: string, path: string): Locator {
+  return group(page, heading).filter({
+    has: page.getByRole("button", { name: path, exact: true }),
+  });
 }
 
 export async function openFile(page: Page, heading: string, path: string): Promise<void> {
-  await group(page, heading)
-    .and(page.getByRole("button", { name: path, exact: true }))
-    .click();
+  await row(page, heading, path).getByRole("button", { name: path, exact: true }).click();
 }
 
 export function line(page: Page, text: string): Locator {

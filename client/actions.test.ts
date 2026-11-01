@@ -1,18 +1,50 @@
 import { expect, test } from "vitest";
 
-import { buttonText, fileActions, hunkActions, hunkLines, lineActions } from "./actions";
+import {
+  buttonText,
+  fileActions,
+  groupActions,
+  hunkActions,
+  hunkLines,
+  lineActions,
+  sidebarButtonName,
+} from "./actions";
 
 test("offers discarding and staging a modified file, deleting and staging an untracked one, and unstaging a staged one, asking before discarding or deleting", () => {
   expect(fileActions).toStrictEqual({
     modified: [
-      { operation: "discard", label: "Discard", confirmation: "Confirm discard?" },
-      { operation: "stage", label: "Stage" },
+      { operation: "discard", label: "Discard", confirmation: "Confirm discard?", icon: "Undo2" },
+      { operation: "stage", label: "Stage", icon: "Plus" },
     ],
     untracked: [
-      { operation: "discard", label: "Delete", confirmation: "Confirm delete?" },
-      { operation: "stage", label: "Stage" },
+      { operation: "discard", label: "Delete", confirmation: "Confirm delete?", icon: "Trash2" },
+      { operation: "stage", label: "Stage", icon: "Plus" },
     ],
-    staged: [{ operation: "unstage", label: "Unstage" }],
+    staged: [{ operation: "unstage", label: "Unstage", icon: "Minus" }],
+  });
+});
+
+test("offers discarding and staging all modified files, deleting and staging all untracked ones, and unstaging all staged ones, asking before discarding or deleting", () => {
+  expect(groupActions).toStrictEqual({
+    modified: [
+      {
+        operation: "discard",
+        label: "Discard All",
+        confirmation: "Confirm discard?",
+        icon: "Undo2",
+      },
+      { operation: "stage", label: "Stage All", icon: "Plus" },
+    ],
+    untracked: [
+      {
+        operation: "discard",
+        label: "Delete All",
+        confirmation: "Confirm delete?",
+        icon: "Trash2",
+      },
+      { operation: "stage", label: "Stage All", icon: "Plus" },
+    ],
+    staged: [{ operation: "unstage", label: "Unstage All", icon: "Minus" }],
   });
 });
 
@@ -52,6 +84,19 @@ test("an armed button asks for confirmation, and otherwise says what it does", (
   expect(buttonText(discard, false)).toBe("Discard");
   expect(buttonText(discard, true)).toBe("Confirm discard?");
   expect(buttonText({ operation: "stage", label: "Stage" }, true)).toBe("Stage");
+});
+
+test("names a sidebar button by what it does to its file, if it acts on one, until it's armed", () => {
+  const discard = {
+    operation: "discard",
+    label: "Discard",
+    confirmation: "Confirm discard?",
+  } as const;
+
+  expect(sidebarButtonName(discard, false, "src/a.ts")).toBe("Discard src/a.ts");
+  expect(sidebarButtonName(discard, true, "src/a.ts")).toBe("Confirm discard?");
+  expect(sidebarButtonName({ ...discard, label: "Discard All" }, false)).toBe("Discard All");
+  expect(sidebarButtonName({ ...discard, label: "Discard All" }, true)).toBe("Confirm discard?");
 });
 
 test("names each of a hunk's lines by the hunk's index and its own", () => {

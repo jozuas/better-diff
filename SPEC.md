@@ -48,11 +48,14 @@ Replicates Sublime Merge as much as possible:
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
 - Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's coloured bar is a sticky header, so you always know which file you're looking at.
-- Right-clicking a group offers:
-  - MODIFIED: Stage all, Discard all
-  - UNTRACKED: Stage all, Delete all
-  - STAGED: Unstage all
-- Right-clicking a file offers the same actions as its file bar.
+- Each file's row has its file bar's actions as icons at its end (Stage +, Unstage −, Discard ↺, Delete 🗑), over the end of its path. They show while the pointer is over the row or focus is in it, and always on the open file's row, whose actions act on the diff shown.
+- Each group's heading has the actions on all its files the same way:
+  - MODIFIED: Stage All, Discard All
+  - UNTRACKED: Stage All, Delete All
+  - STAGED: Unstage All
+
+  They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
+
 - "Filter files..." input to quickly find a file.
 
 ### Confirmation
@@ -66,6 +69,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - Sending line comments to an agent.
 - Show/hide whitespace changes.
 - Keyboard shortcuts.
+- Right-click menus on files and groups, with the same actions as their buttons.
 - Mobile.
 
 ### Out of scope
@@ -76,7 +80,6 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 ### Open questions
 
 - Refreshing: the agent edits the worktree while you stage. When does the view refresh, does it keep scroll position and selection, and what happens when an action targets a diff that has changed since it was shown? (Suggestion: fail and refresh, never apply a stale patch.)
-- Right-click: plugins can't use DOM events directly. If right-click can't be caught, use a "⋯" button on each file and group instead?
 - Mode-only changes (e.g. `chmod +x`): a plain label like "Binary file", or collapsed?
 - Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)

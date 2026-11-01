@@ -1,6 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
+import type { Target } from "./apply";
 import type { GroupName } from "./groups";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
@@ -17,17 +18,27 @@ export interface Action {
   confirmation?: string;
 }
 
-const discardFile: Action = {
+// An action the sidebar offers too, whose button there shows the icon until it's armed.
+export interface SidebarAction extends Action {
+  // A Lucide icon's name.
+  icon: string;
+}
+
+const discardFile: SidebarAction = {
   operation: "discard",
   label: "Discard",
   confirmation: "Confirm discard?",
+  icon: "Undo2",
 };
 
-const deleteFile: Action = {
+const deleteFile: SidebarAction = {
   operation: "discard",
   label: "Delete",
   confirmation: "Confirm delete?",
+  icon: "Trash2",
 };
+
+const stageFile: SidebarAction = { operation: "stage", label: "Stage", icon: "Plus" };
 
 const discardLines: Action = {
   operation: "discard",
@@ -42,10 +53,23 @@ const discardHunk: Action = {
 };
 
 // Discarding staged changes is left out: they can only be unstaged.
-export const fileActions: Record<GroupName, Action[]> = {
-  modified: [discardFile, { operation: "stage", label: "Stage" }],
-  untracked: [deleteFile, { operation: "stage", label: "Stage" }],
-  staged: [{ operation: "unstage", label: "Unstage" }],
+export const fileActions: Record<GroupName, SidebarAction[]> = {
+  modified: [discardFile, stageFile],
+  untracked: [deleteFile, stageFile],
+  staged: [{ operation: "unstage", label: "Unstage", icon: "Minus" }],
+};
+
+// On a group's heading, acting on all its files.
+export const groupActions: Record<GroupName, SidebarAction[]> = {
+  modified: [
+    { ...discardFile, label: "Discard All" },
+    { ...stageFile, label: "Stage All" },
+  ],
+  untracked: [
+    { ...deleteFile, label: "Delete All" },
+    { ...stageFile, label: "Stage All" },
+  ],
+  staged: [{ operation: "unstage", label: "Unstage All", icon: "Minus" }],
 };
 
 export const hunkActions: Record<GroupName, Action[]> = {
@@ -54,13 +78,7 @@ export const hunkActions: Record<GroupName, Action[]> = {
   staged: [{ operation: "unstage", label: "Unstage Hunk" }],
 };
 
-// What an action acts on in the diff with the version: all of the file, or the lines.
-export interface Target {
-  version: string;
-  lines?: Selection;
-}
-
-// What the buttons over a diff share: the one armed, whether an action is running, and pressing one,
+// What the panel's buttons share: the one armed, whether an action is running, and pressing one,
 // which calls `onRun` just before the action runs, if it does.
 export interface Controls {
   armed: string | undefined;
@@ -77,6 +95,12 @@ export const lineActions: Record<GroupName, Action[]> = {
 
 export function buttonText({ label, confirmation }: Action, armed: boolean): string {
   return (armed ? confirmation : undefined) ?? label;
+}
+
+// A sidebar button's name: what it does to the file at the path, if it acts on one, until it's
+// armed.
+export function sidebarButtonName(action: Action, armed: boolean, path?: string): string {
+  return armed || path === undefined ? buttonText(action, armed) : `${action.label} ${path}`;
 }
 
 // Each of the hunk's lines, as an action on lines names them.

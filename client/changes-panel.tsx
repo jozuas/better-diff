@@ -1,8 +1,8 @@
-import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useRpc, useTabState, useWorkspace } from "@getpaseo/plugin/client";
-import { Loading } from "@getpaseo/plugin/client/ui";
-import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loading, useToast } from "@getpaseo/plugin/client/ui";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
@@ -10,17 +10,113 @@ import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 
 import { changesRpc } from "../shared/changes";
+import { applyFileRpc, applyGroupRpc, applyLinesRpc, diffRpc, groupRpc } from "../shared/diff";
+import type { Controls } from "./actions";
+import { apply, staleMessage } from "./apply";
+import type { Server, Target } from "./apply";
+import { confirmation } from "./confirmation";
 import { FileDiff } from "./file-diff";
 import { FileList } from "./file-list";
-import { openAfter, placeholder, sidebarGroups } from "./groups";
+import { groups, openAfter, placeholder, sidebarGroups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { defaultWidth, fileListWidth } from "./resize";
 import { Separator } from "./separator";
-import { fittingWidth, onWindowFocus } from "./web";
+import { clearSelection, fittingWidth, onWindowFocus } from "./web";
 
 // What the panel keeps of each tab across reloads.
 const tabState = z.object({ fileListWidth: z.number() });
+
+type Diff = RpcOutput<typeof diffRpc>;
+
+interface Request {
+  operation: RpcInput<typeof applyFileRpc>["operation"];
+  target: Target;
+}
+
+// The queries of a file's diff, as opened from its group, collapsed or not, whose keys start with
+// the file's.
+function useDiffQueries(directory: string) {
+  const readDiff = useRpc(diffRpc);
+
+  function fileKey({ group, path }: OpenFile): string[] {
+    return [directory, "diff", groups[group].side, path];
+  }
+
+  return {
+    fileKey,
+    query: (file: OpenFile, expand: boolean) =>
+      queryOptions({
+        queryKey: [...fileKey(file), expand],
+        queryFn: async () => {
+          const read = await readDiff({
+            directory,
+            path: file.path,
+            side: groups[file.group].side,
+            expand,
+          });
+
+          return read;
+        },
+      }),
+  };
+}
+
+// Runs the actions the panel's buttons ask for, once confirmed where they ask for it, one at a time,
+// on the diff `shownDiff` gives where they act on the one shown. After each, the page's selection
+// is cleared, since what it selected may be gone, `onApplied` hears of it, and a refused one says
+// why.
+function useControls(
+  directory: string,
+  shownDiff: Server["shownDiff"],
+  onApplied: () => Promise<void>,
+): Controls {
+  const toast = useToast();
+  const [armed, setArmed] = useState<string>();
+  const confirm = useMemo(() => confirmation(setArmed), []);
+
+  const server: Server = {
+    shownDiff,
+    readDiff: useRpc(diffRpc),
+    readGroup: useRpc(groupRpc),
+    applyFile: useRpc(applyFileRpc),
+    applyLines: useRpc(applyLinesRpc),
+    applyGroup: useRpc(applyGroupRpc),
+  };
+
+  const run = useMutation({
+    mutationFn: async ({ operation, target }: Request) => {
+      const status = await apply(server, directory, operation, target);
+
+      return status;
+    },
+    onSuccess: (status, { target }) => {
+      if (status === "stale") {
+        toast.show(staleMessage(target), { variant: "warning" });
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+    onSettled: async () => {
+      clearSelection();
+      await onApplied();
+    },
+  });
+
+  useEffect(() => confirm.dispose, [confirm]);
+
+  return {
+    armed,
+    busy: run.isPending,
+    press: (button, action, target, onRun) => {
+      confirm.press(button, action.confirmation !== undefined, () => {
+        onRun?.();
+        run.mutate({ operation: action.operation, target });
+      });
+    },
+  };
+}
 
 // Calls the latest `refresh` whenever the window regains focus, as on switching back from an
 // editor.
@@ -81,6 +177,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   });
 
   const changes = useQuery(changesQuery);
+  const diffs = useDiffQueries(directory);
   const fileList = useId();
   const { width, onLayout, onResize, onResized, onFit } = useFileListWidth(tab, fileList);
 
@@ -95,6 +192,14 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
 
     setOpen((shown) => openAfter(shown, before, after));
   }
+
+  const controls = useControls(
+    directory,
+    // The one of the file's queries the diff shown watches.
+    (file) =>
+      queryClient.getQueriesData<Diff>({ queryKey: diffs.fileKey(file), type: "active" })[0]?.[1],
+    refresh,
+  );
 
   const styles = useMemo(
     () =>
@@ -119,6 +224,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
               onOpen={setOpen}
               filter={filter}
               onFilter={setFilter}
+              controls={controls}
               theme={theme}
             />
           )}
@@ -137,10 +243,10 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
         ) : (
           <FileDiff
             key={`${open.group}:${open.path}`}
-            directory={directory}
+            query={(expand) => diffs.query(open, expand)}
             file={open}
+            controls={controls}
             theme={theme}
-            onApplied={refresh}
           />
         )}
       </View>

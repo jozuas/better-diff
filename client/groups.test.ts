@@ -5,21 +5,21 @@ import { filePath } from "../test/file-names";
 import { groups, isOpen, openAfter, placeholder, sidebarGroups } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 
-test("heads each group with its title and number of files: modified, then untracked, then staged", () => {
+test("heads each group with its title and number of files: modified, then untracked, then staged, and acts on all the files of each that has some", () => {
   expect(sidebarGroups({ modified: ["a", "b/c"], untracked: ["d"], staged: [] })).toStrictEqual([
-    { name: "modified", heading: "MODIFIED FILES (2)", paths: ["a", "b/c"] },
-    { name: "untracked", heading: "UNTRACKED FILES (1)", paths: ["d"] },
-    { name: "staged", heading: "STAGED FILES (0)", paths: [] },
+    { name: "modified", heading: "MODIFIED FILES (2)", paths: ["a", "b/c"], files: ["a", "b/c"] },
+    { name: "untracked", heading: "UNTRACKED FILES (1)", paths: ["d"], files: ["d"] },
+    { name: "staged", heading: "STAGED FILES (0)", paths: [], files: undefined },
   ]);
 });
 
-test("lists only the files that match the filter, and heads a group that lists fewer with how many of its files it lists", () => {
+test("lists only the files that match the filter, and heads a group that lists fewer with how many of its files it lists, and no action on all its files", () => {
   expect(
     sidebarGroups({ modified: ["src/a", "docs/b"], untracked: ["SRC/c"], staged: ["d"] }, "src"),
   ).toStrictEqual([
-    { name: "modified", heading: "MODIFIED FILES (1 of 2)", paths: ["src/a"] },
-    { name: "untracked", heading: "UNTRACKED FILES (1)", paths: ["SRC/c"] },
-    { name: "staged", heading: "STAGED FILES (0 of 1)", paths: [] },
+    { name: "modified", heading: "MODIFIED FILES (1 of 2)", paths: ["src/a"], files: undefined },
+    { name: "untracked", heading: "UNTRACKED FILES (1)", paths: ["SRC/c"], files: ["SRC/c"] },
+    { name: "staged", heading: "STAGED FILES (0 of 1)", paths: [], files: undefined },
   ]);
 });
 

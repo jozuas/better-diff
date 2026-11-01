@@ -8,7 +8,7 @@ import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import { hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
-import type { GroupName } from "./groups";
+import type { OpenFile } from "./groups";
 import { labelOf } from "./labels";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
@@ -143,7 +143,7 @@ interface HunkBarProps {
   hunk: Diff["hunks"][number];
   index: number;
   version: string;
-  group: GroupName;
+  file: OpenFile;
   selection: LineRange | undefined;
   controls: Controls;
   // Hears the bar's height.
@@ -159,7 +159,7 @@ function HunkBar({
   hunk,
   index,
   version,
-  group,
+  file,
   selection,
   controls,
   onHeight,
@@ -178,18 +178,18 @@ function HunkBar({
       <View style={styles.hunkButtons}>
         {selection?.hunk === index ? (
           <ActionButtons
-            actions={lineActions[group]}
+            actions={lineActions[file.group]}
             bar={`${version}:lines ${index}:${selection.first}-${selection.last}`}
-            target={{ version, lines: rangeLines(selection) }}
+            target={{ file, version, lines: rangeLines(selection) }}
             controls={controls}
             color={theme.colors.foreground}
             theme={theme}
           />
         ) : null}
         <ActionButtons
-          actions={hunkActions[group]}
+          actions={hunkActions[file.group]}
           bar={`${version}:hunk ${index}`}
-          target={{ version, lines: hunkLines(hunk.lines, index) }}
+          target={{ file, version, lines: hunkLines(hunk.lines, index) }}
           controls={controls}
           onRun={onRun}
           color={theme.colors.foreground}
@@ -226,7 +226,7 @@ function HunkLines({ hunk, index, container, selection, styles }: HunkLinesProps
 
 interface DiffBodyProps {
   diff: Diff;
-  group: GroupName;
+  file: OpenFile;
   controls: Controls;
   // Asks for a collapsed diff's lines.
   onExpand: () => void;
@@ -238,7 +238,7 @@ interface DiffBodyProps {
 // under it, until the next hunk's bar covers it. Just before an action on a hunk runs, the view
 // scrolls up to the hunk's start if it's above, so the next hunk, which then takes its place, shows
 // from its start.
-export function DiffBody({ diff, group, controls, onExpand, theme }: DiffBodyProps): ReactElement {
+export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProps): ReactElement {
   const styles = useStyles(theme);
   const container = useId();
   const selection = useSelectedLines(container);
@@ -273,7 +273,7 @@ export function DiffBody({ diff, group, controls, onExpand, theme }: DiffBodyPro
           hunk={hunk}
           index={index}
           version={diff.version}
-          group={group}
+          file={file}
           selection={selection}
           controls={controls}
           onHeight={(height) => {

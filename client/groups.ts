@@ -29,6 +29,9 @@ export interface SidebarGroup {
   heading: string;
   // Those that match the filter.
   paths: string[];
+  // All of them, which an action on the group acts on, while there are some and it lists them all:
+  // none while the filter hides some, so the action never reaches a file it doesn't list.
+  files: string[] | undefined;
 }
 
 // Whether the path has the filter in it, whatever their case. Every path has an empty filter.
@@ -40,9 +43,15 @@ export function sidebarGroups(changes: Changes, filter = ""): SidebarGroup[] {
   return order.map((name) => {
     const all = changes[name];
     const paths = all.filter((path) => matches(path, filter));
-    const count = paths.length < all.length ? `${paths.length} of ${all.length}` : all.length;
+    const listsAll = paths.length === all.length;
+    const count = listsAll ? all.length : `${paths.length} of ${all.length}`;
 
-    return { name, heading: `${groups[name].title} (${count})`, paths };
+    return {
+      name,
+      heading: `${groups[name].title} (${count})`,
+      paths,
+      files: listsAll && all.length > 0 ? all : undefined,
+    };
   });
 }
 

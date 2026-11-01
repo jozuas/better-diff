@@ -4,7 +4,8 @@ import { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { buttonText } from "./actions";
-import type { Action, Controls, Target } from "./actions";
+import type { Action, Controls } from "./actions";
+import type { Target } from "./apply";
 
 function useStyles(theme: PluginTheme, color: string) {
   return useMemo(() => {

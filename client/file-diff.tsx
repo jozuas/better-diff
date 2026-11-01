@@ -1,28 +1,20 @@
-import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
-import { useRpc } from "@getpaseo/plugin/client";
-import { useToast } from "@getpaseo/plugin/client/ui";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
+import { useQuery } from "@tanstack/react-query";
+import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
+import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import { fileActions } from "./actions";
-import type { Controls, Target } from "./actions";
-import { confirmation } from "./confirmation";
+import type { Controls } from "./actions";
 import { DiffBody } from "./diff-body";
 import { groups } from "./groups";
-import type { GroupName, OpenFile } from "./groups";
+import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
-import { clearSelection } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
-
-type Request = Target & Pick<RpcInput<typeof applyFileRpc>, "operation">;
-
-const staleMessage =
-  "The diff changed after it was shown, so nothing was done. It's been reloaded.";
 
 function useStyles(theme: PluginTheme) {
   return useMemo(
@@ -47,72 +39,24 @@ function useStyles(theme: PluginTheme) {
 
 type Styles = ReturnType<typeof useStyles>;
 
-// Runs the actions the diff's buttons ask for, once confirmed where they ask for it, one at a time.
-// After each, the page's selection is cleared, since what it selected may be gone, `onApplied`
-// hears of it, and a refused one says why.
-function useControls(directory: string, file: OpenFile, onApplied: () => Promise<void>): Controls {
-  const applyFile = useRpc(applyFileRpc);
-  const applyLines = useRpc(applyLinesRpc);
-  const toast = useToast();
-  const [armed, setArmed] = useState<string>();
-  const confirm = useMemo(() => confirmation(setArmed), []);
-
-  const apply = useMutation({
-    mutationFn: async ({ lines, ...action }: Request) => {
-      const { path } = file;
-
-      const { status } = await (lines === undefined
-        ? applyFile({ directory, path, ...action })
-        : applyLines({ directory, path, ...action, lines }));
-
-      return status;
-    },
-    onSuccess: (status) => {
-      if (status === "stale") {
-        toast.show(staleMessage, { variant: "warning" });
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    onSettled: async () => {
-      clearSelection();
-      await onApplied();
-    },
-  });
-
-  useEffect(() => confirm.dispose, [confirm]);
-
-  return {
-    armed,
-    busy: apply.isPending,
-    press: (button, action, target, onRun) => {
-      confirm.press(button, action.confirmation !== undefined, () => {
-        onRun?.();
-        apply.mutate({ operation: action.operation, ...target });
-      });
-    },
-  };
-}
-
 interface FileActionsProps {
   // Undefined until it's read.
   diff: Diff | undefined;
-  group: GroupName;
+  file: OpenFile;
   controls: Controls;
   theme: PluginTheme;
 }
 
-function FileActions({ diff, group, controls, theme }: FileActionsProps): ReactElement | null {
+function FileActions({ diff, file, controls, theme }: FileActionsProps): ReactElement | null {
   if (diff === undefined) {
     return null;
   }
 
   return (
     <ActionButtons
-      actions={fileActions[group]}
+      actions={fileActions[file.group]}
       bar={`${diff.version}:file`}
-      target={{ version: diff.version }}
+      target={{ file, version: diff.version }}
       controls={controls}
       color={theme.colors.accentForeground}
       theme={theme}
@@ -140,42 +84,35 @@ function FileBar({ status, path, renamedFrom, styles, children }: FileBarProps):
 }
 
 interface FileDiffProps {
-  directory: string;
+  // The query of its diff, collapsed or not.
+  query: (expand: boolean) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   file: OpenFile;
+  controls: Controls;
   theme: PluginTheme;
-  // Hears of each action on the file, once it's done, refused or failed.
-  onApplied: () => Promise<void>;
 }
 
 // The file's diff, as opened from its group, under a bar that says which file it is. A collapsed
 // diff shows its lines once asked to, until another file is opened.
-export function FileDiff({ directory, file, theme, onApplied }: FileDiffProps): ReactElement {
-  const { group, path } = file;
-  const { status, side } = groups[group];
-  const readDiff = useRpc(diffRpc);
+export function FileDiff({ query, file, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
-  const controls = useControls(directory, file, onApplied);
   const [expand, setExpand] = useState(false);
-
-  const diff = useQuery({
-    queryKey: [directory, "diff", side, path, expand],
-    queryFn: async () => {
-      const read = await readDiff({ directory, path, side, expand });
-
-      return read;
-    },
-  });
+  const diff = useQuery(query(expand));
 
   return (
     <View style={styles.file}>
-      <FileBar status={status} path={path} renamedFrom={diff.data?.renamedFrom} styles={styles}>
-        <FileActions diff={diff.data} group={group} controls={controls} theme={theme} />
+      <FileBar
+        status={groups[file.group].status}
+        path={file.path}
+        renamedFrom={diff.data?.renamedFrom}
+        styles={styles}
+      >
+        <FileActions diff={diff.data} file={file} controls={controls} theme={theme} />
       </FileBar>
       <Queried query={diff} theme={theme}>
         {(data) => (
           <DiffBody
             diff={data}
-            group={group}
+            file={file}
             controls={controls}
             onExpand={() => {
               setExpand(true);
