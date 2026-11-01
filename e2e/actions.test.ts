@@ -253,7 +253,7 @@ test('discarding a hunk asks "Confirm discard?" first, then discards only it', a
   expect(worktreeFile(repository, "a.txt")?.toString()).toBe("1\n2\n3\n4\n5\n6\n7\n8\nlast\n");
 });
 
-test("an untracked file's hunk can be staged, but not discarded", async ({
+test('discarding the hunk of an untracked file, which is all of it, asks "Confirm discard?" first, then deletes the file', async ({
   app,
   page,
   repository,
@@ -262,9 +262,22 @@ test("an untracked file's hunk can be staged, but not discarded", async ({
 
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+  await button(page, "Discard Hunk").click();
+  await expect(button(page, "Confirm discard?")).toBeVisible();
 
-  await expect(button(page, "Discard Hunk")).toHaveCount(0);
+  expect(worktreeFile(repository, "a.txt")).toBeDefined();
 
+  await button(page, "Confirm discard?").click();
+
+  await expect(page.getByRole("heading", { name: "UNTRACKED FILES (0)" })).toBeVisible();
+  expect(worktreeFile(repository, "a.txt")).toBeUndefined();
+});
+
+test("an untracked file's hunk can be staged", async ({ app, page, repository }) => {
+  writeFile(repository, "a.txt", "a\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
   await button(page, "Stage Hunk").click();
 
   await expect(group(page, "STAGED FILES (1)")).toHaveText(["a.txt"]);

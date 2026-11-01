@@ -50,7 +50,7 @@ export const fileActions: Record<GroupName, Action[]> = {
 
 export const hunkActions: Record<GroupName, Action[]> = {
   modified: [discardHunk, { operation: "stage", label: "Stage Hunk" }],
-  untracked: [{ operation: "stage", label: "Stage Hunk" }],
+  untracked: [discardHunk, { operation: "stage", label: "Stage Hunk" }],
   staged: [{ operation: "unstage", label: "Unstage Hunk" }],
 };
 
@@ -71,7 +71,7 @@ export interface Controls {
 // Over the hunk whose lines are selected.
 export const lineActions: Record<GroupName, Action[]> = {
   modified: [discardLines, { operation: "stage", label: "Stage Lines" }],
-  untracked: [{ operation: "stage", label: "Stage Lines" }],
+  untracked: [discardLines, { operation: "stage", label: "Stage Lines" }],
   staged: [{ operation: "unstage", label: "Unstage Lines" }],
 };
 

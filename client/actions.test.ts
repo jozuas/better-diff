@@ -16,24 +16,28 @@ test("offers discarding and staging a modified file, deleting and staging an unt
   });
 });
 
-test("offers discarding and staging a modified file's hunk, staging an untracked one's, and unstaging a staged one's, asking before discarding", () => {
+test("offers discarding and staging a modified or untracked file's hunk, and unstaging a staged one's, asking before discarding", () => {
+  const discardOrStage = [
+    { operation: "discard", label: "Discard Hunk", confirmation: "Confirm discard?" },
+    { operation: "stage", label: "Stage Hunk" },
+  ];
+
   expect(hunkActions).toStrictEqual({
-    modified: [
-      { operation: "discard", label: "Discard Hunk", confirmation: "Confirm discard?" },
-      { operation: "stage", label: "Stage Hunk" },
-    ],
-    untracked: [{ operation: "stage", label: "Stage Hunk" }],
+    modified: discardOrStage,
+    untracked: discardOrStage,
     staged: [{ operation: "unstage", label: "Unstage Hunk" }],
   });
 });
 
-test("offers discarding and staging a modified file's selected lines, staging an untracked one's, and unstaging a staged one's, asking before discarding", () => {
+test("offers discarding and staging a modified or untracked file's selected lines, and unstaging a staged one's, asking before discarding", () => {
+  const discardOrStage = [
+    { operation: "discard", label: "Discard Lines", confirmation: "Confirm discard?" },
+    { operation: "stage", label: "Stage Lines" },
+  ];
+
   expect(lineActions).toStrictEqual({
-    modified: [
-      { operation: "discard", label: "Discard Lines", confirmation: "Confirm discard?" },
-      { operation: "stage", label: "Stage Lines" },
-    ],
-    untracked: [{ operation: "stage", label: "Stage Lines" }],
+    modified: discardOrStage,
+    untracked: discardOrStage,
     staged: [{ operation: "unstage", label: "Unstage Lines" }],
   });
 });

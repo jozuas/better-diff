@@ -77,6 +77,30 @@ test.each(["stage", "discard"] as const)(
   },
 );
 
+test("discarding some of an untracked file's lines leaves it untracked with the others, and discarding the rest deletes it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\nb\nc\n");
+
+    const action = { directory: repository, path: "a", operation: "discard" } as const;
+    const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await expect(
+      applyLines({ ...action, version: diff.version, lines: [{ hunk: 0, line: 1 }] }),
+    ).resolves.toStrictEqual({ status: "applied" });
+    expect(fileState(repository, "a")).toStrictEqual({
+      index: undefined,
+      worktree: Buffer.from("a\nc\n"),
+    });
+
+    const rest = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await expect(
+      applyLines({ ...action, version: rest.version, lines: linesOf(rest, () => true) }),
+    ).resolves.toStrictEqual({ status: "applied" });
+    expect(fileState(repository, "a")).toStrictEqual({ index: undefined, worktree: undefined });
+  });
+});
+
 type Line = Diff["hunks"][number]["lines"][number];
 
 function line(kind: Line["kind"], text: string, newline = true): Line {

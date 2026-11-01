@@ -19,12 +19,12 @@ Replicates Sublime Merge as much as possible:
 | Diff shown          | File bar       | Hunk bar                 | Line actions               |
 | ------------------- | -------------- | ------------------------ | -------------------------- |
 | Modified (unstaged) | Discard, Stage | Discard Hunk, Stage Hunk | Discard Lines, Stage Lines |
-| Untracked           | Delete, Stage  | Stage Hunk               | Stage Lines                |
+| Untracked           | Delete, Stage  | Discard Hunk, Stage Hunk | Discard Lines, Stage Lines |
 | Staged              | Unstage        | Unstage Hunk             | Unstage Lines              |
 
 - Line actions appear only while lines in that hunk are selected.
 - Staged changes can't be discarded, only unstaged.
-- Untracked files support staging specific lines, as in Sublime Merge.
+- An untracked file's lines can be staged and discarded like a modified file's. Its one hunk is the whole file, so discarding that hunk, or all its lines, deletes the file, as Delete does.
 - A partly staged file appears in both MODIFIED and STAGED. Opened from MODIFIED it shows the unstaged part, from STAGED the staged part.
 - After a hunk action the view moves to the next hunk; after a file action, to the next file.
 
@@ -76,7 +76,6 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 
 - Refreshing: the agent edits the worktree while you stage. When does the view refresh, does it keep scroll position and selection, and what happens when an action targets a diff that has changed since it was shown? (Suggestion: fail and refresh, never apply a stale patch.)
 - Right-click: plugins can't use DOM events directly. If right-click can't be caught, use a "⋯" button on each file and group instead?
-- Untracked files: can hunks and lines also be discarded, or only staged?
 - Mode-only changes (e.g. `chmod +x`) and huge or generated files such as lockfiles: a plain label like "Binary file", or collapsed?
 - Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)

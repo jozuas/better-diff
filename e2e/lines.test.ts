@@ -83,7 +83,19 @@ test('discarding selected lines asks "Confirm discard?" first, then discards onl
   expect(worktreeFile(repository, "a.txt")?.toString()).toBe("kept\nalpha\ncharlie\n");
 });
 
-test("an untracked file's selected lines can be staged, but not discarded", async ({
+test("an untracked file's selected lines can be staged", async ({ app, page, repository }) => {
+  writeFile(repository, "a.txt", "alpha\nbravo\ncharlie\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+  await selectLines(page, "bravo");
+  await button(page, "Stage Lines").click();
+
+  await expect(page.getByRole("heading", { name: "STAGED FILES (1)" })).toBeVisible();
+  expect(staged(repository)).toMatch(/^\+bravo$/mu);
+});
+
+test('discarding selected lines of an untracked file asks "Confirm discard?" first, then discards only them, and leaves it untracked', async ({
   app,
   page,
   repository,
@@ -93,14 +105,12 @@ test("an untracked file's selected lines can be staged, but not discarded", asyn
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
   await selectLines(page, "bravo");
+  await button(page, "Discard Lines").click();
+  await button(page, "Confirm discard?").click();
 
-  await expect(button(page, "Stage Lines")).toBeVisible();
-  await expect(button(page, "Discard Lines")).toHaveCount(0);
-
-  await button(page, "Stage Lines").click();
-
-  await expect(page.getByRole("heading", { name: "STAGED FILES (1)" })).toBeVisible();
-  expect(staged(repository)).toMatch(/^\+bravo$/mu);
+  await expect(line(page, "bravo")).toBeHidden();
+  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("alpha\ncharlie\n");
+  expect(runGit(repository, ["status", "--porcelain"])).toBe("?? a.txt\n");
 });
 
 test("a selection stays within the hunk it starts in", async ({ app, page, repository }) => {
