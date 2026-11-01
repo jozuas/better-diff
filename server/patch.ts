@@ -36,9 +36,9 @@ export interface FileDiff {
   hunks: Hunk[];
 }
 
-// A count left out is 1.
-const hunkStart =
-  /^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@/u;
+// With every line of context, git starts each version's lines at its first, or at 0 for a version
+// without any. A count left out is 1.
+const hunkStart = /^@@ -[01](?:,(?<oldCount>\d+))? \+[01](?:,(?<newCount>\d+))? @@/u;
 
 const noNewline = "\\";
 
@@ -132,15 +132,21 @@ export function isRename(diff: Buffer): boolean {
   );
 }
 
-// A hunk ends where its start says, after as many lines of each version as it counts, as
-// `git apply` reads it. A line after the last hunk is the start of another diff, as git prints for
-// a directory.
-function hunksOf(diff: Buffer): Hunk[] {
-  const hunks: Hunk[] = [];
+// How many lines of each version some lines have.
+interface Counts {
+  old: number;
+  new: number;
+}
+
+// The lines of a diff's hunks. A hunk ends where its start says, after as many lines of each version
+// as it counts, as `git apply` reads it. A line after the last hunk is the start of another diff, as
+// git prints for a directory.
+function linesOf(diff: Buffer): Line[] {
+  const read: Line[] = [];
   const lines = diff.toString("latin1").split("\n").slice(0, -1);
 
-  // The hunk being read, and how many of each version's lines it has yet to show.
-  let reading: { lines: Line[]; oldLeft: number; newLeft: number } | undefined;
+  // How many of each version's lines the hunk being read has yet to show, once one is.
+  let left: Counts | undefined;
 
   for (const [index, line] of lines.entries()) {
     if (line.startsWith(noNewline)) {
@@ -149,49 +155,32 @@ function hunksOf(diff: Buffer): Hunk[] {
 
     const start = hunkStart.exec(line)?.groups;
 
-    if (reading !== undefined && (reading.oldLeft > 0 || reading.newLeft > 0)) {
+    if (left !== undefined && (left.old > 0 || left.new > 0)) {
       const kind = kinds.find((each) => prefixes[each] === line.charAt(0));
 
       if (kind === undefined) {
         throw new Error(`A line in a hunk of git's diff has no " ", "-" or "+" prefix: ${line}`);
       }
 
-      reading.lines.push({
+      read.push({
         kind,
         content: bytes(line.slice(1)),
         newline: lines[index + 1]?.startsWith(noNewline) !== true,
       });
-      reading.oldLeft -= kind === "added" ? 0 : 1;
-      reading.newLeft -= kind === "removed" ? 0 : 1;
+      left.old -= kind === "added" ? 0 : 1;
+      left.new -= kind === "removed" ? 0 : 1;
     } else if (start !== undefined) {
-      const hunkLines: Line[] = [];
-
-      hunks.push({
-        oldStart: Number(start["oldStart"]),
-        newStart: Number(start["newStart"]),
-        lines: hunkLines,
-      });
-      reading = {
-        lines: hunkLines,
-        oldLeft: Number(start["oldCount"] ?? 1),
-        newLeft: Number(start["newCount"] ?? 1),
-      };
-    } else if (reading !== undefined) {
+      left = { old: Number(start["oldCount"] ?? 1), new: Number(start["newCount"] ?? 1) };
+    } else if (left !== undefined) {
       throw new Error("git printed more than one diff for the path.");
     }
   }
 
-  return hunks;
+  return read;
 }
 
 // The lines of context git prints around a change.
 const context = 3;
-
-// How many lines of each version some lines have.
-interface Counts {
-  old: number;
-  new: number;
-}
 
 function countsOf(lines: readonly Line[]): Counts {
   return {
@@ -264,7 +253,7 @@ export function parseDiff(diff: Buffer): FileDiff & { lines: Line[] } {
     return { header, hunks: [], lines: [] };
   }
 
-  const lines = hunksOf(diff).flatMap((hunk) => hunk.lines);
+  const lines = linesOf(diff);
 
   return { header, hunks: narrow(lines), lines };
 }

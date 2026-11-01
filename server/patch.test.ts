@@ -10,6 +10,14 @@ test("rejects a hunk line with no prefix, as git prints a blank one with diff.su
   );
 });
 
+test("rejects a diff that goes on past where its hunk's counts end, as git prints for each file in a directory", () => {
+  const diff = Buffer.from(
+    "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1 @@\n-a\n-b\n+c\ndiff --git a/b b/b\n",
+  );
+
+  expect(() => parseDiff(diff)).toThrow("git printed more than one diff for the path.");
+});
+
 const rename = "diff --git a/a b/b\nsimilarity index 100%\nrename from a\nrename to b\n";
 
 const newFile =
