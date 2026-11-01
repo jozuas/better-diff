@@ -301,11 +301,15 @@ export async function applyChanges(
   );
 }
 
+// Unstaging a renamed file unstages only the file, and leaves the deletion of the one it was renamed
+// from staged, as Sublime Merge and Magit do. Unstaging a group unstages both.
 export async function applyFile(action: Action): Promise<Status> {
   const { directory, path, operation } = action;
 
   const status = await applyToFile(action, async (changes) => {
-    await applyChanges(directory, operation, [{ path, changes }]);
+    const paths = operation === "unstage" ? [path] : changes.paths;
+
+    await applyChanges(directory, operation, [{ path, changes: { ...changes, paths } }]);
   });
 
   return status;

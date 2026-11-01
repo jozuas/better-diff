@@ -97,6 +97,23 @@ function afterLines(
   };
 }
 
+// What acting on the renamed file leaves at each path: the version the operation puts in its
+// target, at both paths, but for unstaging, which leaves the original's deletion staged.
+function afterFile(
+  operation: Operation,
+  before: Paths<FileState>,
+  { from, to }: Paths<File>,
+): Paths<FileState> {
+  const target = targets[operation];
+  const source = sources[operation];
+
+  return {
+    from:
+      operation === "unstage" ? before.from : { ...before.from, [target]: from.versions[source] },
+    to: { ...before.to, [target]: to.versions[source] },
+  };
+}
+
 test.each(operations)(
   "%s lines of a renamed file as of the file where it is, keeping the rename",
   async (operation) => {
@@ -161,14 +178,12 @@ test.each(operations)(
 );
 
 test.each(operations)(
-  "%s file: makes or undoes a rename and the file's other changes, at both paths",
+  "%s file: makes or undoes a rename and the file's other changes, at both paths, or when unstaging at the new one",
   async (operation) => {
     await fc.assert(
       fc.asyncProperty(renamesOn(sides[operation]), async (rename) => {
         const side = sides[operation];
         const files = renamedFiles(rename, side);
-        const target = targets[operation];
-        const source = sources[operation];
 
         await inRepository(async (repository) => {
           setUp(repository, [files.from, files.to], "myers");
@@ -188,10 +203,7 @@ test.each(operations)(
             }),
           ).resolves.toStrictEqual({ status: "applied" });
 
-          expect(states(repository, files)).toStrictEqual({
-            from: { ...before.from, [target]: files.from.versions[source] },
-            to: { ...before.to, [target]: files.to.versions[source] },
-          });
+          expect(states(repository, files)).toStrictEqual(afterFile(operation, before, files));
         });
       }),
       { numRuns: 30 },
@@ -206,7 +218,7 @@ function commitRenamed(repository: string): void {
   runGit(repository, ["mv", "a", "b"]);
 }
 
-test("unstage file: a staged rename, both of whose paths it unstages, and nothing else", async () => {
+test("unstage file: the new path of a staged rename, and nothing else", async () => {
   await inRepository(async (repository) => {
     commitRenamed(repository);
     writeFile(repository, "c", "c\n");
@@ -216,7 +228,23 @@ test("unstage file: a staged rename, both of whose paths it unstages, and nothin
 
     await applyFile({ directory: repository, path: "b", operation: "unstage", version });
 
-    expect(runGit(repository, ["status", "--porcelain"])).toBe(" D a\nA  c\n?? b\n");
+    expect(runGit(repository, ["status", "--porcelain"])).toBe("D  a\nA  c\n?? b\n");
+  });
+});
+
+test("unstage file: the new path of a staged rename whose original path a directory has taken, leaving the directory's file staged", async () => {
+  await inRepository(async (repository) => {
+    commitRenamed(repository);
+    writeFile(repository, "a/b", "b\n");
+    runGit(repository, ["add", "--all"]);
+
+    const { version } = await readDiff({ directory: repository, path: "b", side: "staged" });
+
+    await applyFile({ directory: repository, path: "b", operation: "unstage", version });
+
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe(
+      "D  a\nA  a/b\n?? b\n",
+    );
   });
 });
 

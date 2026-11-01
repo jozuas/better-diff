@@ -1,3 +1,4 @@
+import { commitTenLines } from "../test/renames";
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { box, button, group, line, openFile } from "./panel";
@@ -80,6 +81,23 @@ test("unstaging a file unstages all its changes, which can't be discarded", asyn
 
   await expect(page.getByRole("heading", { name: "STAGED FILES (0)" })).toBeVisible();
   expect(staged(repository)).toBe("");
+});
+
+test("unstaging a renamed file unstages only the new file, and leaves the old one's deletion staged", async ({
+  app,
+  page,
+  repository,
+}) => {
+  commitTenLines(repository);
+  runGit(repository, ["mv", "a", "b"]);
+
+  await app.openPanel();
+  await openFile(page, "STAGED FILES (1)", "b");
+  await button(page, "Unstage").click();
+
+  await expect(page.getByRole("heading", { name: "UNTRACKED FILES (1)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "STAGED FILES (1)" })).toBeVisible();
+  expect(runGit(repository, ["status", "--porcelain"])).toBe("D  a\n?? b\n");
 });
 
 test('discarding a file asks "Confirm discard?" first, then restores it', async ({

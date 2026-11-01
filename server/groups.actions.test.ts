@@ -28,6 +28,23 @@ async function actOnEach(
   }
 }
 
+// Acts on each file the group lists in turn, then on each file that joined it meanwhile, until no
+// file it lists is left to act on: unstaging a renamed file leaves the deletion of the one it was
+// renamed from staged.
+async function actOnEachListed(
+  repository: string,
+  action: GroupAction,
+  done: readonly string[] = [],
+): Promise<void> {
+  const { [action.group]: listed } = await listChanges({ directory: repository });
+  const paths = listed.filter((path) => !done.includes(path));
+
+  if (paths.length > 0) {
+    await actOnEach(repository, paths, action.operation);
+    await actOnEachListed(repository, action, [...done, ...paths]);
+  }
+}
+
 interface Outcome {
   status: RpcOutput<typeof applyGroupRpc>;
   group: RepositoryState;
@@ -43,10 +60,9 @@ async function actOnGroupAndEachFile(
 ): Promise<Outcome> {
   const outcome = await inCopyOf(repository, async (copy) => {
     const { version } = await readGroup({ directory: repository, group: action.group });
-    const listed = await listChanges({ directory: copy });
     const status = await applyGroup({ directory: repository, version, ...action });
 
-    await actOnEach(copy, listed[action.group], action.operation);
+    await actOnEachListed(copy, action);
 
     return {
       status,
