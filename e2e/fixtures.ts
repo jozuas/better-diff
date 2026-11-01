@@ -8,23 +8,27 @@ import { inRepository } from "../test/repository";
 import { paseoUi, pluginId, setting } from "./paseo";
 
 interface App {
-  // One of the plugin's screens.
-  openScreen: (id: string) => Promise<void>;
+  // Shows the repository's workspace, and opens the plugin's panel in it.
+  openPanel: () => Promise<void>;
+  // Has the page's window regain focus, as switching back to Paseo from another app does.
+  focus: () => Promise<void>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
 interface Fixtures extends Record<"pageErrors" | "pluginLogs", void> {
   // A git repository in a temporary directory, removed after the test.
   repository: string;
-  // The ID of repository's workspace, which the page shows. Archived after the test, before
-  // repository is removed, so the daemon isn't left watching a directory that's gone.
+  // The ID of repository's workspace. Archived after the test, before repository is removed, so the
+  // daemon isn't left watching a directory that's gone.
   workspace: string;
   app: App;
 }
 
 async function show(page: Page, path: string): Promise<void> {
-  // A fresh browser sent straight to a deep link lands on /open-project.
+  // A fresh browser sent straight to a deep link lands on /open-project, and one sent there before
+  // the app has added the daemon to its hosts lands on /welcome. The app leaves / once it has.
   await page.goto("/");
+  await page.waitForURL((url) => url.pathname !== "/");
   await page.goto(`/h/${setting("PASEO_UI_SERVER")}/${path}`);
 }
 
@@ -37,7 +41,7 @@ export const test = base.extend<Fixtures>({
     await inRepository(provide);
   },
 
-  workspace: async ({ page, repository }, provide) => {
+  workspace: async ({ repository }, provide) => {
     const created = await paseoUi([
       "paseo",
       "workspace",
@@ -52,17 +56,21 @@ export const test = base.extend<Fixtures>({
     const { workspaceId } = z.object({ workspaceId: z.string() }).parse(JSON.parse(created));
 
     try {
-      await show(page, `workspace/${workspaceId}`);
       await provide(workspaceId);
     } finally {
       await paseoUi(["paseo", "workspace", "archive", workspaceId]);
     }
   },
 
-  app: async ({ page }, provide) => {
+  app: async ({ page, workspace }, provide) => {
     await provide({
-      openScreen: async (id) => {
-        await show(page, `plugin/${pluginId}/surface/${id}`);
+      openPanel: async () => {
+        await show(page, `workspace/${workspace}`);
+        await page.getByRole("button", { name: "Better Diff", exact: true }).click();
+      },
+      focus: async () => {
+        // A string, since the tests typecheck without the DOM library.
+        await page.evaluate("window.dispatchEvent(new Event('focus'))");
       },
     });
   },
