@@ -3,6 +3,38 @@ import { z } from "zod";
 
 const index = z.int().nonnegative();
 
+const diff = z.object({
+  // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
+  // date.
+  version: z.string(),
+  // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
+  // lines: none, a rename on its own, a symlink's, a binary file's, a mode change on its own, or a
+  // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
+  // A renamed file with other changes is what they are.
+  kind: z.enum(["text", "unchanged", "renamed", "symlink", "binary", "mode", "unmerged"]),
+  // The path the file had before the side's changes, if they rename it. On the unstaged side,
+  // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
+  renamedFrom: z.string().optional(),
+  hunks: z.array(
+    z.object({
+      oldStart: index,
+      newStart: index,
+      lines: z.array(
+        z.object({
+          kind: z.enum(["context", "removed", "added"]),
+          text: z.string(),
+          // False only for a file's last line, when the file doesn't end with a newline.
+          newline: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+  // Every line of the versions a text diff goes between, the hunks' and the unchanged ones
+  // around them, as the hunks' lines have them. None for a diff of another kind, or a version
+  // without the file.
+  contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
+});
+
 export const diffRpc = defineRpc({
   name: "diff.read",
   input: z.object({
@@ -12,36 +44,21 @@ export const diffRpc = defineRpc({
     // to the index.
     side: z.enum(["unstaged", "staged"]),
   }),
+  output: diff,
+});
+
+// The groups changes.list lists files in.
+const group = z.enum(["modified", "untracked", "staged"]);
+
+export const groupRpc = defineRpc({
+  name: "diff.read-group",
+  input: z.object({ directory: z.string(), group }),
   output: z.object({
-    // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
-    // date.
+    // Changes whenever a file joins or leaves the group, or its diff changes.
     version: z.string(),
-    // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
-    // lines: none, a rename on its own, a symlink's, a binary file's, a mode change on its own, or a
-    // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
-    // A renamed file with other changes is what they are.
-    kind: z.enum(["text", "unchanged", "renamed", "symlink", "binary", "mode", "unmerged"]),
-    // The path the file had before the side's changes, if they rename it. On the unstaged side,
-    // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
-    renamedFrom: z.string().optional(),
-    hunks: z.array(
-      z.object({
-        oldStart: index,
-        newStart: index,
-        lines: z.array(
-          z.object({
-            kind: z.enum(["context", "removed", "added"]),
-            text: z.string(),
-            // False only for a file's last line, when the file doesn't end with a newline.
-            newline: z.boolean(),
-          }),
-        ),
-      }),
-    ),
-    // Every line of the versions a text diff goes between, the hunks' and the unchanged ones
-    // around them, as the hunks' lines have them. None for a diff of another kind, or a version
-    // without the file.
-    contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
+    // The group's files, in the order changes.list lists them, each with its diff: the staged one
+    // for a staged file, the unstaged one for the others.
+    files: z.array(diff.extend({ path: z.string() })),
   }),
 });
 
@@ -71,5 +88,32 @@ export const applyLinesRpc = defineRpc({
 export const applyFileRpc = defineRpc({
   name: "diff.apply-file",
   input: z.object(action),
+  output: status,
+});
+
+const groupAction = {
+  directory: z.string(),
+  // The group's. The action is stale, and changes nothing, if a file has joined or left the group
+  // or its diff has changed since it was read.
+  version: z.string(),
+};
+
+// All of the changes of each of the group's files, as applying them to each file would. Modified
+// and untracked files can be staged or discarded, and staged ones unstaged.
+export const applyGroupRpc = defineRpc({
+  name: "diff.apply-group",
+  input: z.discriminatedUnion("group", [
+    z.object({
+      ...groupAction,
+      group: z.literal("modified"),
+      operation: z.enum(["stage", "discard"]),
+    }),
+    z.object({
+      ...groupAction,
+      group: z.literal("untracked"),
+      operation: z.enum(["stage", "discard"]),
+    }),
+    z.object({ ...groupAction, group: z.literal("staged"), operation: z.literal("unstage") }),
+  ]),
   output: status,
 });

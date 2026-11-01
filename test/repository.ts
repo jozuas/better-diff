@@ -45,12 +45,14 @@ export function diffNoIndex(repository: string, from: string, to: string): Buffe
 // For a property test whose runs each set up a repository, which takes git about 100ms.
 export const timeout = 60_000;
 
-// Runs the test in a temporary directory, removed afterwards.
-async function inDirectory(test: (directory: string) => Promise<void>): Promise<void> {
+// Runs the test in a temporary directory, removed afterwards, and returns what it returns.
+async function inDirectory<T>(test: (directory: string) => Promise<T>): Promise<T> {
   const directory = mkdtempSync(join(tmpdir(), "better-diff-"));
 
   try {
-    await test(directory);
+    const result = await test(directory);
+
+    return result;
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
@@ -103,16 +105,22 @@ export async function inRepository(test: (repository: string) => Promise<void>):
   });
 }
 
-// Runs the test in a copy of the repository, its index and worktree included.
-export async function inCopyOf(
+// Runs the test in a copy of the repository, its index and worktree included, and returns what it
+// returns.
+export async function inCopyOf<T>(
   repository: string,
-  test: (copy: string) => Promise<void>,
-): Promise<void> {
-  await inDirectory(async (copy) => {
+  test: (copy: string) => Promise<T>,
+): Promise<T> {
+  const result = await inDirectory(async (copy) => {
     // A symlink's target as it is, not resolved to the absolute path of what it points to.
     cpSync(repository, copy, { recursive: true, verbatimSymlinks: true });
-    await test(copy);
+
+    const tested = await test(copy);
+
+    return tested;
   });
+
+  return result;
 }
 
 export function commitAll(repository: string): void {

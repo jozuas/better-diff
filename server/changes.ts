@@ -8,7 +8,7 @@ import { changesRpc } from "../shared/changes";
 import { git } from "./git";
 
 // A file git status lists.
-interface Entry {
+export interface Entry {
   path: string;
   // Not in the index. One git status pairs with a deleted file is also modified, as renamed.
   untracked: boolean;
@@ -234,14 +234,19 @@ export async function readStatus(directory: string): Promise<Entry[]> {
   return entries;
 }
 
-export async function listChanges({
-  directory,
-}: RpcInput<typeof changesRpc>): Promise<RpcOutput<typeof changesRpc>> {
-  const entries = await readStatus(directory);
-
+// The files in each group.
+export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc> {
   return {
     modified: pathsOf(entries, ({ modified }) => modified),
     untracked: pathsOf(entries, ({ untracked, modified }) => untracked && !modified),
     staged: pathsOf(entries, ({ staged }) => staged),
   };
+}
+
+export async function listChanges({
+  directory,
+}: RpcInput<typeof changesRpc>): Promise<RpcOutput<typeof changesRpc>> {
+  const entries = await readStatus(directory);
+
+  return groupsOf(entries);
 }

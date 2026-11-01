@@ -4,6 +4,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import { readStatus, withIntentToAdd } from "./changes";
+import type { Entry } from "./changes";
 import { git } from "./git";
 import { buildPatch, isRename, kindOf, parseDiff, reverse } from "./patch";
 
@@ -26,7 +27,7 @@ const fileCommands = { stage: "add", unstage: "reset", discard: "restore" } as c
 
 const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"] };
 
-interface Changes {
+export interface Changes {
   diff: Buffer;
   renamedFrom: string | undefined;
   // What the diff covers: the file, and a renamed one's original path.
@@ -36,7 +37,7 @@ interface Changes {
   intentToAdd: boolean;
 }
 
-function versionOf(diff: Buffer): string {
+export function versionOf(diff: Buffer): string {
   return createHash("sha256").update(diff).digest("hex");
 }
 
@@ -77,10 +78,14 @@ async function renameDiff(
   return isRename(diff) ? diff : undefined;
 }
 
-// The file's changes on the side, as git status lists the file. A file listed twice, as deleted
-// from the index and untracked, isn't renamed.
-async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
-  const entries = await readStatus(directory);
+// The file's changes on the side, as git status lists it in the entries. A file listed twice, as
+// deleted from the index and untracked, isn't renamed.
+export async function changesIn(
+  directory: string,
+  entries: readonly Entry[],
+  path: string,
+  side: Side,
+): Promise<Changes> {
   const listed = entries.filter((entry) => entry.path === path);
   const original = listed[0]?.original;
   const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
@@ -105,16 +110,19 @@ async function changesOf(directory: string, path: string, side: Side): Promise<C
   return { diff, renamedFrom: undefined, paths: [path], untracked, intentToAdd };
 }
 
+async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
+  const entries = await readStatus(directory);
+  const changes = await changesIn(directory, entries, path, side);
+
+  return changes;
+}
+
 function text(content: Buffer): string {
   return content.toString("utf8");
 }
 
-export async function readDiff({
-  directory,
-  path,
-  side,
-}: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
-  const { diff, renamedFrom } = await changesOf(directory, path, side);
+// The diff of the changes, as the plugin shows it.
+export function diffOf({ diff, renamedFrom }: Changes): RpcOutput<typeof diffRpc> {
   const { hunks, lines } = parseDiff(diff);
 
   return {
@@ -137,40 +145,57 @@ export async function readDiff({
   };
 }
 
+export async function readDiff({
+  directory,
+  path,
+  side,
+}: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
+  const changes = await changesOf(directory, path, side);
+
+  return diffOf(changes);
+}
+
 // The last apply to start.
 let applying: Promise<unknown> = Promise.resolve();
 
-// Once the previous apply has finished, acts on the diff the operation acts on, if it is still the
-// one the action was chosen from.
-async function applyAfter(
-  previous: Promise<unknown>,
-  { directory, path, operation, version }: Action,
-  act: (changes: Changes) => Promise<void>,
-): Promise<Status> {
+async function after(previous: Promise<unknown>, apply: () => Promise<Status>): Promise<Status> {
   await Promise.allSettled([previous]);
 
-  const changes = await changesOf(directory, path, sides[operation]);
+  const status = await apply();
 
-  if (versionOf(changes.diff) !== version) {
-    return { status: "stale" };
-  }
-
-  await act(changes);
-
-  return { status: "applied" };
+  return status;
 }
 
-// One apply at a time. Two at once could both find the diff unchanged, and the second would then
-// apply to what the first left, where `git apply` can find a patch's lines in another place.
-async function applyInTurn(
-  action: Action,
-  act: (changes: Changes) => Promise<void>,
-): Promise<Status> {
-  const applied = applyAfter(applying, action, act);
+// Applies once the previous apply has finished. Two at once could both find the diff unchanged,
+// and the second would then apply to what the first left, where `git apply` can find a patch's
+// lines in another place.
+export async function inTurn(apply: () => Promise<Status>): Promise<Status> {
+  const applied = after(applying, apply);
 
   applying = applied;
 
   const status = await applied;
+
+  return status;
+}
+
+// In turn, acts on the diff the operation acts on, if it is still the one the action was chosen
+// from.
+async function applyToFile(
+  { directory, path, operation, version }: Action,
+  act: (changes: Changes) => Promise<void>,
+): Promise<Status> {
+  const status = await inTurn(async () => {
+    const changes = await changesOf(directory, path, sides[operation]);
+
+    if (versionOf(changes.diff) !== version) {
+      return { status: "stale" };
+    }
+
+    await act(changes);
+
+    return { status: "applied" };
+  });
 
   return status;
 }
@@ -182,7 +207,7 @@ export async function applyLines({
 }: RpcInput<typeof applyLinesRpc>): Promise<Status> {
   const { directory, operation } = action;
 
-  const status = await applyInTurn(action, async ({ diff }) => {
+  const status = await applyToFile(action, async ({ diff }) => {
     const parsed = parseDiff(diff);
 
     for (const { hunk, line } of lines) {
@@ -207,40 +232,76 @@ export async function applyLines({
   return status;
 }
 
-// Readies a file new in the worktree for `git clean`, which deletes it without ever touching a
-// tracked file: brings back the file it was renamed from, and takes it out of the index if it's
-// there intent-to-add.
-async function readyToDelete(
-  directory: string,
-  path: string,
-  { renamedFrom, intentToAdd }: Changes,
-): Promise<void> {
-  if (renamedFrom !== undefined) {
-    await git(directory, "restore", [], [renamedFrom]);
-  }
+// A file, and its changes on the side an operation acts on.
+export interface ChangedFile {
+  path: string;
+  changes: Changes;
+}
 
-  if (intentToAdd) {
-    await git(directory, "rm", ["--cached"], [path]);
+// Whether the operation deletes the file: discarding a file new in the worktree, untracked or
+// intent-to-add, deletes it.
+function deletes(operation: Action["operation"], { untracked, intentToAdd }: Changes): boolean {
+  return operation === "discard" && (untracked || intentToAdd);
+}
+
+// Runs the command on the paths, if there are any: with none, `git clean` and `git reset` act on
+// every file.
+async function gitOn(
+  directory: string,
+  command: "restore" | "rm" | "add" | "reset" | "clean",
+  paths: readonly string[],
+  options: readonly string[] = [],
+): Promise<void> {
+  if (paths.length > 0) {
+    await git(directory, command, options, paths);
   }
 }
 
-// Stages, unstages or discards all of the file's changes, including those a patch can't make, such
-// as a binary file's or a mode change, and a rename, both of whose paths it acts on. Discarding an
-// untracked file, or one intent-to-add, deletes it. A diff with no changes leaves the file alone.
+// Stages, unstages or discards all of the files' changes, including those a patch can't make, such
+// as a binary file's or a mode change, and a rename, both of whose paths it acts on. A file whose
+// diff has no changes is left alone. A file discarding deletes goes with `git clean`, which never
+// touches a tracked file, once the file it was renamed from is back and it's out of the index.
+// Each command runs once, for all the files it acts on.
+export async function applyChanges(
+  directory: string,
+  operation: Action["operation"],
+  files: readonly ChangedFile[],
+): Promise<void> {
+  const changed = files.flatMap(({ path, changes }) =>
+    changes.diff.length > 0 ? [{ path, ...changes }] : [],
+  );
+
+  const deleted = changed.filter((file) => deletes(operation, file));
+  const kept = changed.filter((file) => !deletes(operation, file));
+
+  await gitOn(
+    directory,
+    "restore",
+    deleted.flatMap(({ renamedFrom }) => renamedFrom ?? []),
+  );
+  await gitOn(
+    directory,
+    "rm",
+    deleted.flatMap(({ path, intentToAdd }) => (intentToAdd ? [path] : [])),
+    ["--cached"],
+  );
+  await gitOn(
+    directory,
+    fileCommands[operation],
+    kept.flatMap(({ paths }) => paths),
+  );
+  await gitOn(
+    directory,
+    "clean",
+    deleted.flatMap(({ paths }) => paths),
+  );
+}
+
 export async function applyFile(action: Action): Promise<Status> {
   const { directory, path, operation } = action;
 
-  const status = await applyInTurn(action, async (changes) => {
-    const { diff, paths, untracked, intentToAdd } = changes;
-    const deletes = (untracked || intentToAdd) && operation === "discard";
-
-    if (diff.length > 0) {
-      if (deletes) {
-        await readyToDelete(directory, path, changes);
-      }
-
-      await git(directory, deletes ? "clean" : fileCommands[operation], [], paths);
-    }
+  const status = await applyToFile(action, async (changes) => {
+    await applyChanges(directory, operation, [{ path, changes }]);
   });
 
   return status;
