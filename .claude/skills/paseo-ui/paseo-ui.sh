@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # A Paseo daemon of this checkout's own, serving Paseo's web UI with this checkout's plugin
 # installed. Its home is in the checkout's git directory, so each worktree gets its own and
-# the user's Paseo is never touched. PASEO_UI_HOME picks another home, as the end-to-end tests do.
+# the user's Paseo is never touched. PASEO_UI_HOME picks another home, as the end-to-end tests do,
+# and PASEO_UI_PASEO another paseo than the one on PATH, as devenv does.
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
 home=${PASEO_UI_HOME:-"$(git rev-parse --absolute-git-dir)/paseo-ui"}
 plugin=$(jq -r .id "$root/paseo-plugin.json")
 
-on_home() { paseo "$@" --home "$home"; }
+on_home() { "${PASEO_UI_PASEO:-paseo}" "$@" --home "$home"; }
 
 case "${1:-}" in
   start)

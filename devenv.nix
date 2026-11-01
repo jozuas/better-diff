@@ -50,6 +50,11 @@ in
 
   env =
     playwright
+    // {
+      # The end-to-end tests' and the paseo-ui skill's daemon, so they run the Paseo nixpkgs pins
+      # rather than the one installed on the machine. The shell's `paseo` stays the machine's.
+      PASEO_UI_PASEO = lib.getExe pkgs.paseo;
+    }
     // lib.optionalAttrs (pkgs.stdenv.hostPlatform.isLinux && !config.devenv.isTesting) {
       # nixpkgs' Chromium, so a bare `playwright-cli open` works. Darwin has no nixpkgs chromium
       # and keeps playwright-cli's managed one (`playwright-cli install-browser`).
