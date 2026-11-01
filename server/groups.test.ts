@@ -3,13 +3,18 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { applyGroupRpc, groupRpc } from "../shared/diff";
-import { fileVersions } from "../test/file-contents";
-import { canCoexist, filePath } from "../test/file-names";
-import { files, groupActions, repositoryState } from "../test/groups";
+import {
+  diffChanges,
+  files,
+  filesAndLater,
+  groupActions,
+  replaceFileWithDirectory,
+  repositoryState,
+  writeLater,
+} from "../test/groups";
 import type { GroupAction } from "../test/groups";
-import { inRepository, runGit, timeout, writeFile } from "../test/repository";
-import { setUp, writeVersion } from "../test/staging";
-import type { File } from "../test/staging";
+import { inRepository, timeout, writeFile } from "../test/repository";
+import { setUp } from "../test/staging";
 import { listChanges } from "./changes";
 import { readDiff } from "./diff";
 import { applyGroup, readGroup } from "./groups";
@@ -21,7 +26,8 @@ type Group = (typeof groups)[number];
 // The diff each group's files are shown with.
 const groupSides = { modified: "unstaged", untracked: "unstaged", staged: "staged" } as const;
 
-// Each file changes.list lists in the group, with its diff as diff.read reads it.
+// Each file changes.list lists in the group, with its diff as diff.read reads it, or the error
+// diff.read fails with.
 async function eachFile(
   repository: string,
   group: Group,
@@ -30,9 +36,13 @@ async function eachFile(
 
   const diffs = await Promise.all(
     paths.map(async (path) => {
-      const diff = await readDiff({ directory: repository, path, side: groupSides[group] });
+      try {
+        const diff = await readDiff({ directory: repository, path, side: groupSides[group] });
 
-      return Object.assign(diff, { path });
+        return Object.assign(diff, { path });
+      } catch (error) {
+        return { path, error: String(error) };
+      }
     }),
   );
 
@@ -70,23 +80,31 @@ test("reads a group of more files than it reads at once", async () => {
   });
 });
 
-// A file written after the group was read, which can be one of its files, or a new one.
-const later = fc.record({ path: filePath, versions: fileVersions });
+test("reads the other files of a group with one whose diff can't be read, which has why", async () => {
+  await inRepository(async (repository) => {
+    replaceFileWithDirectory(repository);
 
-function writeLater(repository: string, { path, versions }: File): void {
-  writeVersion(repository, path, versions.index);
-  runGit(repository, ["add", "--all"]);
-  writeVersion(repository, path, versions.worktree);
-}
+    const answer = await readGroup({ directory: repository, group: "staged" });
+    const { files: read } = answer;
+
+    expect(groupRpc.output.parse(answer)).toStrictEqual(answer);
+    expect(read).toStrictEqual(await eachFile(repository, "staged"));
+
+    expect(read.map(({ path }) => path)).toStrictEqual(["a", "a/x", "b"]);
+
+    expect(read[0]).toStrictEqual({
+      path: "a",
+      error: "Error: git printed more than one diff for the path.",
+    });
+  });
+});
 
 test.each(groupActions)(
   "$operation all $group files: does nothing once a file has joined or left the group, or its diff has changed",
   async (action) => {
     await fc.assert(
-      fc.asyncProperty(files, later, async (all, written) => {
+      fc.asyncProperty(filesAndLater, async ([all, written]) => {
         const paths = all.map(({ path }) => path);
-
-        fc.pre(canCoexist([...paths.filter((path) => path !== written.path), written.path]));
 
         await inRepository(async (repository) => {
           setUp(repository, all, "myers");
@@ -108,7 +126,7 @@ test.each(groupActions)(
           expect(repositoryState(repository, [...paths, written.path])).toStrictEqual(before);
         });
       }),
-      { numRuns: 20 },
+      { numRuns: 20, examples: diffChanges },
     );
   },
   timeout,

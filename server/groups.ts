@@ -2,8 +2,10 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyGroupRpc, diffRpc, groupRpc } from "../shared/diff";
 import { groupsOf, readStatus } from "./changes";
-import { applyChanges, changesIn, diffOf, inTurn, versionOf } from "./diff";
+import type { Entry } from "./changes";
+import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
 import type { ChangedFile } from "./diff";
+import { versionOf } from "./version";
 
 type Group = RpcInput<typeof groupRpc>["group"];
 
@@ -13,6 +15,14 @@ const groupSides: Record<Group, RpcInput<typeof diffRpc>["side"]> = {
   untracked: "unstaged",
   staged: "staged",
 };
+
+interface GroupFile {
+  shown: RpcOutput<typeof groupRpc>["files"][number];
+  // The diff's version, or why the diff can't be read.
+  version: string;
+  // Undefined where the changes can't be read.
+  changed: ChangedFile | undefined;
+}
 
 // Reads each item, a few at a time: a group can have hundreds of files, each read by git commands
 // of its own.
@@ -30,23 +40,46 @@ async function readInBatches<T, R>(
   return [...batch, ...rest];
 }
 
-// The group's files, with their changes, as one git status lists them.
-async function filesOf(directory: string, group: Group): Promise<ChangedFile[]> {
+// The file, with its changes, or why they can't be read, which leaves the group's other files to be
+// read: git can't open a file it has no permission to read, and diffs a file replaced by a
+// directory together with what's in the directory.
+async function readFile(
+  directory: string,
+  entries: readonly Entry[],
+  path: string,
+  group: Group,
+): Promise<GroupFile> {
+  try {
+    const changes = await changesIn(directory, entries, path, groupSides[group]);
+    const diff = diffOf(changes);
+
+    return {
+      shown: Object.assign(diff, { path }),
+      version: diff.version,
+      changed: { path, changes },
+    };
+  } catch (error) {
+    const reason = String(error);
+
+    return { shown: { path, error: reason }, version: reason, changed: undefined };
+  }
+}
+
+// The group's files, as one git status lists them.
+async function filesOf(directory: string, group: Group): Promise<GroupFile[]> {
   const entries = await readStatus(directory);
 
   const files = await readInBatches(groupsOf(entries)[group], async (path) => {
-    const changes = await changesIn(directory, entries, path, groupSides[group]);
+    const file = await readFile(directory, entries, path, group);
 
-    return { path, changes };
+    return file;
   });
 
   return files;
 }
 
-function groupVersionOf(files: readonly ChangedFile[]): string {
-  const versions = files.map(({ path, changes }) => [path, versionOf(changes.diff)]);
-
-  return versionOf(Buffer.from(JSON.stringify(versions)));
+function groupVersionOf(files: readonly GroupFile[]): string {
+  return versionOf(JSON.stringify(files.map(({ shown, version }) => [shown.path, version])));
 }
 
 export async function readGroup({
@@ -55,10 +88,7 @@ export async function readGroup({
 }: RpcInput<typeof groupRpc>): Promise<RpcOutput<typeof groupRpc>> {
   const files = await filesOf(directory, group);
 
-  return {
-    version: groupVersionOf(files),
-    files: files.map(({ path, changes }) => Object.assign(diffOf(changes), { path })),
-  };
+  return { version: groupVersionOf(files), files: files.map(({ shown }) => shown) };
 }
 
 export async function applyGroup({
@@ -74,7 +104,11 @@ export async function applyGroup({
       return { status: "stale" };
     }
 
-    await applyChanges(directory, operation, files);
+    await applyChanges(
+      directory,
+      operation,
+      files.flatMap(({ changed }) => changed ?? []),
+    );
 
     return { status: "applied" };
   });

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
@@ -7,6 +5,7 @@ import { readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { git } from "./git";
 import { buildPatch, isRename, kindOf, parseDiff, reverse } from "./patch";
+import { versionOf } from "./version";
 
 type Side = RpcInput<typeof diffRpc>["side"];
 
@@ -35,10 +34,6 @@ export interface Changes {
   // Whether the file isn't in the index, or is there intent-to-add.
   untracked: boolean;
   intentToAdd: boolean;
-}
-
-export function versionOf(diff: Buffer): string {
-  return createHash("sha256").update(diff).digest("hex");
 }
 
 // A file's own diff on the side. `git diff` leaves an untracked file out, though its changes are
@@ -257,11 +252,21 @@ async function gitOn(
   }
 }
 
+// Runs `git clean` on the paths a hundred at a time: it can't read them from its input, as the
+// others do, and as arguments, as many as a group of files can have would be more than a process
+// can start with.
+async function cleanEach(directory: string, paths: readonly string[]): Promise<void> {
+  if (paths.length > 0) {
+    await gitOn(directory, "clean", paths.slice(0, 100));
+    await cleanEach(directory, paths.slice(100));
+  }
+}
+
 // Stages, unstages or discards all of the files' changes, including those a patch can't make, such
 // as a binary file's or a mode change, and a rename, both of whose paths it acts on. A file whose
 // diff has no changes is left alone. A file discarding deletes goes with `git clean`, which never
 // touches a tracked file, once the file it was renamed from is back and it's out of the index.
-// Each command runs once, for all the files it acts on.
+// Each command runs once for all the files it acts on, and `git clean` once for each hundred.
 export async function applyChanges(
   directory: string,
   operation: Action["operation"],
@@ -290,9 +295,8 @@ export async function applyChanges(
     fileCommands[operation],
     kept.flatMap(({ paths }) => paths),
   );
-  await gitOn(
+  await cleanEach(
     directory,
-    "clean",
     deleted.flatMap(({ paths }) => paths),
   );
 }

@@ -4,11 +4,9 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { waitRpc } from "../shared/changes";
-import { fileVersions } from "../test/file-contents";
-import { canCoexist, filePath } from "../test/file-names";
-import { files } from "../test/groups";
+import { diffChanges, filesAndLater, writeLater } from "../test/groups";
 import { inRepository, runGit, timeout, writeFile } from "../test/repository";
-import { setUp, writeVersion } from "../test/staging";
+import { setUp } from "../test/staging";
 import { waitForChanges } from "./changes";
 import { readGroup } from "./groups";
 
@@ -79,18 +77,11 @@ test("answers once a modified file changes again, though git status says the sam
   });
 }, 10_000);
 
-// A file written later, which can be one already there, or a new one.
-const later = fc.record({ path: filePath, versions: fileVersions });
-
 test(
   "the version stays the same while nothing changes, and changes whenever the files listed or their diffs do",
   async () => {
     await fc.assert(
-      fc.asyncProperty(files, later, async (all, written) => {
-        const paths = all.map(({ path }) => path);
-
-        fc.pre(canCoexist([...paths.filter((path) => path !== written.path), written.path]));
-
+      fc.asyncProperty(filesAndLater, async ([all, written]) => {
         await inRepository(async (repository) => {
           setUp(repository, all, "myers");
 
@@ -99,16 +90,14 @@ test(
 
           await expect(versionNow(repository)).resolves.toBe(version);
 
-          writeVersion(repository, written.path, written.versions.index);
-          runGit(repository, ["add", "--all"]);
-          writeVersion(repository, written.path, written.versions.worktree);
+          writeLater(repository, written);
 
           fc.pre((await shown(repository)) !== before);
 
           await expect(versionNow(repository)).resolves.not.toBe(version);
         });
       }),
-      { numRuns: 30 },
+      { numRuns: 30, examples: diffChanges },
     );
   },
   timeout,

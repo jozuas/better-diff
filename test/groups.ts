@@ -2,9 +2,10 @@ import type { RpcInput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
 import type { applyGroupRpc } from "../shared/diff";
-import { canCoexist } from "./file-names";
-import { runGit, worktreeFile } from "./repository";
-import { file } from "./staging";
+import { fileVersions } from "./file-contents";
+import { canCoexist, filePath } from "./file-names";
+import { commitAll, deleteFile, runGit, worktreeFile, writeFile } from "./repository";
+import { file, writeVersion } from "./staging";
 import type { File } from "./staging";
 
 // Each group, with an operation its files can have.
@@ -27,6 +28,67 @@ export const groupActions: GroupAction[] = [
 export const files: fc.Arbitrary<File[]> = fc
   .uniqueArray(file, { selector: ({ path }) => path, minLength: 1, maxLength: 4 })
   .filter((all) => canCoexist(all.map(({ path }) => path)));
+
+// A few files, and one written after them: often one of them, with other versions, or else a new
+// one.
+export const filesAndLater: fc.Arbitrary<[File[], File]> = files
+  .chain((all) =>
+    fc.tuple(
+      fc.constant(all),
+      fc.record({
+        path: fc.oneof(fc.constantFrom(...all.map(({ path }) => path)), filePath),
+        versions: fileVersions,
+      }),
+    ),
+  )
+  .filter(([all, later]) =>
+    canCoexist([...all.flatMap(({ path }) => (path === later.path ? [] : [path])), later.path]),
+  );
+
+function fileA(head: string | undefined, index: string | undefined, worktree: string): File {
+  return {
+    path: "a",
+    versions: {
+      head: head === undefined ? undefined : Buffer.from(head),
+      index: index === undefined ? undefined : Buffer.from(index),
+      worktree: Buffer.from(worktree),
+    },
+  };
+}
+
+// Files, and a later file, whose diff changes while it stays in each group it's in: an untracked
+// file, and a modified and staged one. The untracked file's size changes, which a filesystem that
+// keeps times to the second can't miss.
+export const diffChanges: [[File[], File]][] = [
+  [[[fileA(undefined, undefined, "a\n")], fileA(undefined, undefined, "b\nc\n")]],
+  [[[fileA("a\n", "b\n", "c\n")], fileA("a\n", "d\n", "e\n")]],
+];
+
+// Writes the file's index and worktree versions, and leaves the other files as they are.
+export function writeLater(repository: string, { path, versions }: File): void {
+  writeVersion(repository, path, versions.index);
+
+  runGit(
+    repository,
+    versions.index === undefined
+      ? ["rm", "--cached", "--quiet", "--ignore-unmatch", "--", path]
+      : ["add", "--", path],
+  );
+
+  writeVersion(repository, path, versions.worktree);
+}
+
+// A staged file `a`, replaced by a staged directory, whose diff git reads together with the
+// directory's file `a/x`, beside another staged file `b`.
+export function replaceFileWithDirectory(repository: string): void {
+  writeFile(repository, "a", "a\n");
+  writeFile(repository, "b", "b\n");
+  commitAll(repository);
+  deleteFile(repository, "a");
+  writeFile(repository, "a/x", "x\n");
+  writeFile(repository, "b", "c\n");
+  runGit(repository, ["add", "--all"]);
+}
 
 export interface RepositoryState {
   // Each file's mode, blob and path, and git status, which also says which are intent-to-add.

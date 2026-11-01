@@ -34,8 +34,13 @@ const commandOptions = {
   clean: ["--force"],
 };
 
+// Commands that read their paths from their input: as arguments, as many as a group of files can
+// have would be more than a process can start with.
+const readsPaths = new Set<keyof typeof commandOptions>(["add", "reset", "restore", "rm"]);
+
 interface Extras {
-  // What the command reads, such as the patch `git apply` applies.
+  // What the command reads, such as the patch `git apply` applies. A command that reads its paths
+  // reads them in its place.
   input?: Uint8Array;
   // An index file the command uses in place of the repository's own.
   index?: string | undefined;
@@ -49,6 +54,8 @@ export async function git(
   paths: readonly string[] = [],
   { input = new Uint8Array(), index }: Extras = {},
 ): Promise<Buffer> {
+  const pathsOnInput = readsPaths.has(command);
+
   const child = spawnProcess(
     "git",
     [
@@ -67,8 +74,9 @@ export async function git(
       command,
       ...commandOptions[command],
       ...options,
-      "--",
-      ...paths,
+      ...(pathsOnInput
+        ? ["--pathspec-from-file=-", "--pathspec-file-nul", "--"]
+        : ["--", ...paths]),
     ],
     {
       cwd: directory,
@@ -93,7 +101,7 @@ export async function git(
 
   // A command that fails before reading all its input closes it, and its exit code says it failed.
   child.stdin.on("error", () => {});
-  child.stdin.end(input);
+  child.stdin.end(pathsOnInput ? Buffer.from(paths.map((path) => `${path}\0`).join("")) : input);
   await once(child, "close");
 
   // `git diff --no-index` exits with 1 when the files differ, as --exit-code makes `git diff`, and

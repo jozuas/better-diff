@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,6 +8,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import { changesRpc } from "../shared/changes";
 import type { waitRpc } from "../shared/changes";
 import { git } from "./git";
+import { versionOf } from "./version";
 
 // A file git status lists.
 export interface Entry {
@@ -94,13 +94,7 @@ export async function withIntentToAdd<T>(
     await copyFile(index, copy);
     await utimes(copy, atime, mtime);
 
-    await git(
-      directory,
-      "add",
-      ["--intent-to-add", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
-      [],
-      { input: Buffer.from(paths.map((path) => `${path}\0`).join("")), index: copy },
-    );
+    await git(directory, "add", ["--intent-to-add", "--sparse"], paths, { index: copy });
 
     const result = await act(copy);
 
@@ -246,7 +240,6 @@ export async function readStatus(directory: string): Promise<Entry[]> {
   return entries;
 }
 
-// The files in each group.
 export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc> {
   return {
     modified: pathsOf(entries, ({ modified }) => modified),
@@ -257,11 +250,11 @@ export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc
 
 // Changes whenever the files listed, or their diffs, could have: with what git status says, or a
 // listed file's content. Not with the config, such as diff.algorithm.
-async function versionOf(directory: string): Promise<string> {
+async function worktreeVersionOf(directory: string): Promise<string> {
   const status = await statusOf(directory);
   const sources = await sourcesOf(directory, status, () => true);
 
-  return createHash("sha256").update(sources).digest("hex");
+  return versionOf(sources);
 }
 
 // The version once it differs from the one given, checked every second, or once the wait has
@@ -271,7 +264,7 @@ async function changedFrom(
   version: string,
   expired: AbortSignal,
 ): Promise<string> {
-  const current = await versionOf(directory);
+  const current = await worktreeVersionOf(directory);
 
   if (current !== version || expired.aborted) {
     return current;

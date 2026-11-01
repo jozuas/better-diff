@@ -54,11 +54,18 @@ export const groupRpc = defineRpc({
   name: "diff.read-group",
   input: z.object({ directory: z.string(), group }),
   output: z.object({
-    // Changes whenever a file joins or leaves the group, or its diff changes.
+    // Changes whenever a file joins or leaves the group, or its diff, or why it can't be read,
+    // changes.
     version: z.string(),
     // The group's files, in the order changes.list lists them, each with its diff: the staged one
-    // for a staged file, the unstaged one for the others.
-    files: z.array(diff.extend({ path: z.string() })),
+    // for a staged file, the unstaged one for the others. A file whose diff can't be read, such as
+    // one git can't open, has why in its place.
+    files: z.array(
+      z.union([
+        diff.extend({ path: z.string() }),
+        z.object({ path: z.string(), error: z.string() }),
+      ]),
+    ),
   }),
 });
 
@@ -99,7 +106,8 @@ const groupAction = {
 };
 
 // All of the changes of each of the group's files, as applying them to each file would. Modified
-// and untracked files can be staged or discarded, and staged ones unstaged.
+// and untracked files can be staged or discarded, and staged ones unstaged. A file whose diff can't
+// be read is left as it is.
 export const applyGroupRpc = defineRpc({
   name: "diff.apply-group",
   input: z.discriminatedUnion("group", [
