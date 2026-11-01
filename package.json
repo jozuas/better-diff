@@ -24,9 +24,9 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "knip": "knip && knip --production",
-    "mutate": "stryker run stryker.config.mts",
-    "mutate:changed": "node tools/mutate-changed.mts",
-    "mutate:rules": "stryker run stryker.rules.config.mts",
+    "mutate": "exec 9>>\"$(git rev-parse --git-common-dir)/mutate.lock\" && bash tools/one-at-a-time.sh && stryker run stryker.config.mts",
+    "mutate:changed": "exec 9>>\"$(git rev-parse --git-common-dir)/mutate.lock\" && bash tools/one-at-a-time.sh && node tools/mutate-changed.mts",
+    "mutate:rules": "exec 9>>\"$(git rev-parse --git-common-dir)/mutate.lock\" && bash tools/one-at-a-time.sh && stryker run stryker.rules.config.mts",
     "check:fast": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run knip",
     "check": "npm run check:fast && npm run mutate"
   },

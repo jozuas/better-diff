@@ -38,6 +38,8 @@ in
   packages = [
     pkgs.git
     pkgs.jq
+    # For tools/one-at-a-time.sh. macOS doesn't have flock(1).
+    pkgs.flock
   ]
   ++ lib.optionals (!config.devenv.isTesting) [
     # Only agents use it, through .mcp.json, and its Python dependencies often fail to build upstream.

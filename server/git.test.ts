@@ -140,9 +140,25 @@ test("rejects with what git says when it fails", async () => {
 
 test("ignores input a command doesn't read", async () => {
   await inRepository(async (repository) => {
-    const status = await git(repository, "status", [], [], Buffer.alloc(2 ** 24));
+    // Writing input to a command that has exited fails. An error event nothing listens to is
+    // thrown where no caller catches it, which would take the daemon down while the call succeeds.
+    const uncaught: Error[] = [];
 
-    expect(status.toString()).toBe("");
+    function record(error: Error): void {
+      uncaught.push(error);
+    }
+
+    process.on("uncaughtException", record);
+
+    try {
+      const status = await git(repository, "status", [], [], Buffer.alloc(2 ** 24));
+
+      expect(status.toString()).toBe("");
+    } finally {
+      process.off("uncaughtException", record);
+    }
+
+    expect(uncaught).toStrictEqual([]);
   });
 });
 
