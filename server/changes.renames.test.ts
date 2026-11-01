@@ -1,9 +1,10 @@
-import { readdirSync, readFileSync, utimesSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, utimesSync } from "node:fs";
+import { access } from "node:fs/promises";
+import { dirname, join } from "node:path";
 
 import { expect, test } from "vitest";
 
-import { commitTenLines, move, tenLines } from "../test/renames";
+import { commitTenLines, move, noteCleaned, tenLines } from "../test/renames";
 import {
   commitAll,
   deleteFile,
@@ -12,7 +13,7 @@ import {
   worktreeFile,
   writeFile,
 } from "../test/repository";
-import { listChanges } from "./changes";
+import { listChanges, withIntentToAdd } from "./changes";
 
 test("pairs a moved file through a copy of the index, which it leaves as it was", async () => {
   await inRepository(async (repository) => {
@@ -185,17 +186,25 @@ test("pairs a file moved out of a sparse checkout", async () => {
   });
 });
 
-// Pairing files hashes each untracked one, which first runs it through its clean filter: this one
-// notes the path of each file it cleans.
+test("removes the copy of the index it pairs moved files through", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    move(repository);
+
+    const copy = await withIntentToAdd(repository, ["b"], async (index) => {
+      await access(index);
+
+      return index;
+    });
+
+    expect(existsSync(dirname(copy))).toBe(false);
+  });
+});
+
 test("pairs the same files without cleaning them again, while they don't change", async () => {
   await inRepository(async (repository) => {
     commitTenLines(repository);
-    writeFile(repository, ".git/info/attributes", "* filter=note\n");
-    runGit(repository, [
-      "config",
-      "filter.note.clean",
-      "sh -c 'echo \"$0\" >> .git/cleaned; cat' %f",
-    ]);
+    noteCleaned(repository);
     move(repository);
 
     const first = await listChanges({ directory: repository });

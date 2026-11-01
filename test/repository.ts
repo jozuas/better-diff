@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   cpSync,
@@ -32,6 +32,14 @@ export function runGitBytes(repository: string, args: readonly string[], input =
     cwd: repository,
     input,
     stdio: "pipe",
+  });
+}
+
+// Runs `git diff --no-index`, which exits with 1 where the files differ.
+export function diffNoIndex(repository: string, from: string, to: string): void {
+  spawnSync("git", ["--literal-pathspecs", "diff", "--no-index", "--", from, to], {
+    cwd: repository,
+    stdio: "ignore",
   });
 }
 

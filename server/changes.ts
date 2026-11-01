@@ -5,10 +5,7 @@ import { join, resolve } from "node:path";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { changesRpc } from "../shared/changes";
-import type { diffRpc } from "../shared/diff";
 import { git } from "./git";
-
-type Side = RpcInput<typeof diffRpc>["side"];
 
 // A file git status lists.
 interface Entry {
@@ -20,8 +17,9 @@ interface Entry {
   staged: boolean;
   modified: boolean;
   deleted: boolean;
-  // Where the file was renamed from on each side. A copy's original is still there.
-  renamedFrom: Partial<Record<Side, string | undefined>>;
+  // The path git status names as the one the file was renamed or copied from, on either side. Its
+  // diff on a side tells whether it's renamed there.
+  original: string | undefined;
 }
 
 function untrackedEntry(path: string): Entry {
@@ -31,8 +29,9 @@ function untrackedEntry(path: string): Entry {
     intentToAdd: false,
     staged: false,
     modified: false,
+    // Stryker disable next-line BooleanLiteral: an untracked file is never the one a new file is renamed from, so taking it for deleted only has git status asked again where it pairs nothing.
     deleted: false,
-    renamedFrom: {},
+    original: undefined,
   };
 }
 
@@ -61,10 +60,7 @@ function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
         staged: field.charAt(2) !== ".",
         modified: field.charAt(3) !== ".",
         deleted: field.charAt(3) === "D",
-        renamedFrom: {
-          staged: field.charAt(2) === "R" ? original : undefined,
-          unstaged: field.charAt(3) === "R" ? original : undefined,
-        },
+        original,
       };
     }
   }
@@ -150,11 +146,12 @@ async function pairsOf(directory: string, entries: readonly Entry[]): Promise<Ma
     return status;
   });
 
-  // The untracked file each deleted file is paired with.
+  // The untracked file each deleted file is paired with. Of several, git takes the last for the one
+  // it's renamed to, and the others for copies.
   const renamedTo = new Map(
     paired
       .filter(({ path }) => untracked.has(path))
-      .map(({ path, renamedFrom }) => [renamedFrom.unstaged, path] as const),
+      .map(({ path, original }) => [original, path] as const),
   );
 
   const renames = new Map<string, string>();
@@ -226,7 +223,7 @@ export async function readStatus(directory: string): Promise<Entry[]> {
 
     if (original !== undefined) {
       entry.modified = true;
-      entry.renamedFrom.unstaged = original;
+      entry.original = original;
     }
 
     if (originals.has(entry.path)) {

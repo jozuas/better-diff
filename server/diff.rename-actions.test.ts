@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import type { FileVersions } from "../test/file-contents";
 import { fileVersions } from "../test/file-contents";
 import { canCoexist, filePath } from "../test/file-names";
+import { commitTenLines, moveChangingLater, moveRefusedLater } from "../test/renames";
 import { commitAll, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import {
   diffAlgorithm,
@@ -231,6 +232,26 @@ test.each(["stage", "discard"] as const)(
       await applyFile({ directory: repository, path: "b", operation, version });
 
       expect(runGit(repository, [...diffCommands.unstaged, "--", "b"])).toBe("");
+    });
+  },
+);
+
+test.each([
+  ["no longer pairs it with its original", "b", moveChangingLater, " D a\n?? b\n"],
+  ["won't add it to diff it as renamed", "git~1/b", moveRefusedLater, " D a\n?? git~1/\n"],
+] as const)(
+  "discard file: stale for a moved file, where git %s",
+  async (_, path, moveLater, status) => {
+    await inRepository(async (repository) => {
+      commitTenLines(repository);
+      const later = moveLater(repository);
+      const { version } = await readDiff({ directory: repository, path, side: "unstaged" });
+      later();
+
+      await expect(
+        applyFile({ directory: repository, path, operation: "discard", version }),
+      ).resolves.toStrictEqual({ status: "stale" });
+      expect(runGit(repository, ["status", "--porcelain"])).toBe(status);
     });
   },
 );

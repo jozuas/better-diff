@@ -1,9 +1,25 @@
 import { expect, test } from "vitest";
 
 import { diffRpc } from "../shared/diff";
-import { commitTenLines, move, tenLines } from "../test/renames";
-import { commitAll, inRepository, runGit, writeFile } from "../test/repository";
+import {
+  commitTenLines,
+  move,
+  moveChangingLater,
+  moveRefusedLater,
+  noteCleaned,
+  tenLines,
+} from "../test/renames";
+import {
+  commitAll,
+  deleteFile,
+  diffNoIndex,
+  inRepository,
+  runGit,
+  worktreeFile,
+  writeFile,
+} from "../test/repository";
 import type { Side } from "../test/staging";
+import { listChanges } from "./changes";
 import { readDiff } from "./diff";
 
 // Each renames `a` to `b` on the side, with no other change.
@@ -185,5 +201,61 @@ test("reads a copy's staged diff as a new file's", async () => {
     expect(
       diff.hunks.map(({ oldStart, lines }) => ({ oldStart, lines: lines.length })),
     ).toStrictEqual([{ oldStart: 0, lines: 10 }]);
+  });
+});
+
+// Diffing a file as renamed copies the index, adds the file to it and cleans it again.
+test("reads an untracked file's diff, cleaning it as often as git diff does, where it isn't renamed", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    noteCleaned(repository);
+    writeFile(repository, "b", tenLines);
+    diffNoIndex(repository, "/dev/null", "b");
+    const cleaned = worktreeFile(repository, ".git/cleaned");
+    deleteFile(repository, ".git/cleaned");
+
+    await readDiff({ directory: repository, path: "b", side: "unstaged" });
+
+    expect(worktreeFile(repository, ".git/cleaned")).toStrictEqual(cleaned);
+  });
+});
+
+test("reads a moved file as new, where git no longer pairs it with its original", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    const change = moveChangingLater(repository);
+    await listChanges({ directory: repository });
+    change();
+
+    const diff = await readDiff({ directory: repository, path: "b", side: "unstaged" });
+
+    expect(diff).toMatchObject({ kind: "text", renamedFrom: undefined, hunks: [{ oldStart: 0 }] });
+  });
+});
+
+test("reads a moved file as new, where git won't add it to diff it as renamed", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    const refuse = moveRefusedLater(repository);
+    await listChanges({ directory: repository });
+    refuse();
+
+    const diff = await readDiff({ directory: repository, path: "git~1/b", side: "unstaged" });
+
+    expect(diff).toMatchObject({ kind: "text", renamedFrom: undefined, hunks: [{ oldStart: 0 }] });
+  });
+});
+
+// A path names the files in a directory too, so git diffs `a/b` along with the rename.
+test("reads a staged rename as a new file, where a directory takes the path it was renamed from", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    runGit(repository, ["mv", "a", "b"]);
+    writeFile(repository, "a/b", "b\n");
+    runGit(repository, ["add", "--all"]);
+
+    const diff = await readDiff({ directory: repository, path: "b", side: "staged" });
+
+    expect(diff).toMatchObject({ kind: "text", renamedFrom: undefined, hunks: [{ oldStart: 0 }] });
   });
 });

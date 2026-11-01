@@ -5,7 +5,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import { readStatus, withIntentToAdd } from "./changes";
 import { git } from "./git";
-import { buildPatch, kindOf, parseDiff, reverse } from "./patch";
+import { buildPatch, isRename, kindOf, parseDiff, reverse } from "./patch";
 
 type Side = RpcInput<typeof diffRpc>["side"];
 
@@ -40,45 +40,69 @@ function versionOf(diff: Buffer): string {
   return createHash("sha256").update(diff).digest("hex");
 }
 
-// An untracked file's unstaged diff. `git diff` leaves the file out, though its changes are all of
-// its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add. One git
-// status pairs with a deleted file is diffed intent-to-add, as git status found the rename.
-async function untrackedDiff(
+// A file's own diff on the side. `git diff` leaves an untracked file out, though its changes are
+// all of its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add.
+async function ownDiff(
   directory: string,
   path: string,
-  renamedFrom: string | undefined,
+  side: Side,
+  untracked: boolean,
 ): Promise<Buffer> {
-  if (renamedFrom === undefined) {
-    const diff = await git(directory, "diff", ["--no-index"], ["/dev/null", path]);
+  const diff = untracked
+    ? await git(directory, "diff", ["--no-index"], ["/dev/null", path])
+    : await git(directory, "diff", diffOptions[side], [path]);
 
-    return diff;
-  }
-
-  const renamed = await withIntentToAdd(directory, [path], async (index) => {
-    const diff = await git(directory, "diff", [], [renamedFrom, path], { index });
-
-    return diff;
-  });
-
-  return renamed;
+  return diff;
 }
 
-// The file's changes on the side, as git status lists the file. A diff of a renamed file's two
-// paths shows the rename, where one of either path shows a deletion or a new file. A file listed
-// twice, as deleted from the index and untracked, isn't renamed.
+// The diff of a renamed file's two paths, which shows the rename, where one of either path shows a
+// deletion or a new file. An untracked file is diffed intent-to-add, as git status found the
+// rename. There's no rename to diff where git status named the path a file was copied from, or
+// renamed from on the other side, or where the files changed after git status paired them, so git
+// no longer pairs them, or won't add a file that's gone.
+async function renameDiff(
+  directory: string,
+  paths: readonly [string, string],
+  side: Side,
+  untracked: boolean,
+): Promise<Buffer | undefined> {
+  const diff = untracked
+    ? await withIntentToAdd(directory, [paths[1]], async (index) => {
+        const renamed = await git(directory, "diff", [], paths, { index });
+
+        return renamed;
+      }).catch(() => Buffer.alloc(0))
+    : await git(directory, "diff", diffOptions[side], paths);
+
+  return isRename(diff) ? diff : undefined;
+}
+
+// The file's changes on the side, as git status lists the file. A file listed twice, as deleted
+// from the index and untracked, isn't renamed.
 async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
   const entries = await readStatus(directory);
   const listed = entries.filter((entry) => entry.path === path);
-  const renamedFrom = listed[0]?.renamedFrom[side];
-  const paths = renamedFrom === undefined ? [path] : [renamedFrom, path];
+  const original = listed[0]?.original;
   const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
   const intentToAdd = listed[0]?.intentToAdd === true;
 
-  const diff = untracked
-    ? await untrackedDiff(directory, path, renamedFrom)
-    : await git(directory, "diff", diffOptions[side], paths);
+  if (original !== undefined) {
+    const renamed = await renameDiff(directory, [original, path], side, untracked);
 
-  return { diff, renamedFrom, paths, untracked, intentToAdd };
+    if (renamed !== undefined) {
+      return {
+        diff: renamed,
+        renamedFrom: original,
+        paths: [original, path],
+        untracked,
+        intentToAdd,
+      };
+    }
+  }
+
+  const diff = await ownDiff(directory, path, side, untracked);
+
+  return { diff, renamedFrom: undefined, paths: [path], untracked, intentToAdd };
 }
 
 export async function readDiff({
