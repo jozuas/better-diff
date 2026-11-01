@@ -20,5 +20,7 @@ export default {
   // which would hide one that survives.
   timeoutFactor: 3,
   reporters: ["clear-text", "html"],
+  // The list of every test that ran says nothing about the mutants that survived.
+  clearTextReporter: { reportTests: false },
   thresholds: { high: 100, low: 100, break: 100 },
 } satisfies PartialStrykerOptions;
