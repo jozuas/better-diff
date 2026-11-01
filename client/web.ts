@@ -9,7 +9,10 @@ interface PageNode {
 interface PageElement extends PageNode {
   readonly id: string;
   scrollTop: number;
-  getBoundingClientRect: () => { readonly top: number };
+  readonly style: { cursor: string; userSelect: string; width: string };
+  getBoundingClientRect: () => { readonly top: number; readonly width: number };
+  addEventListener: (type: "dblclick", listener: () => void) => void;
+  removeEventListener: (type: "dblclick", listener: () => void) => void;
   contains: (node: PageNode | null) => boolean;
   querySelectorAll: (selectors: string) => Iterable<PageElement>;
 }
@@ -45,6 +48,7 @@ declare const document: {
   getSelection: () => PageSelection | null;
   querySelector: (selectors: string) => PageElement | null;
   createRange: () => PageRange;
+  readonly body: PageElement;
 };
 
 declare const CSS: { escape: (identifier: string) => string };
@@ -159,4 +163,69 @@ export function scrollUpTo(container: string, target: string, margin: number): v
   if (hidden > 0) {
     scroller.scrollTop -= hidden;
   }
+}
+
+// Has the element with the id show the cursor for resizing what's either side of it.
+export function showResizeCursor(id: string): void {
+  if (Platform.OS !== "web") {
+    return;
+  }
+
+  const element = document.querySelector(`#${CSS.escape(id)}`);
+
+  if (element !== null) {
+    element.style.cursor = "col-resize";
+  }
+}
+
+// Shows the cursor for resizing all over the page, which then selects no text, until the returned
+// function is called: a separator dragged past the diff's text resizes what's beside it, rather
+// than selecting the text.
+export function resizing(): () => void {
+  if (Platform.OS !== "web") {
+    return () => {};
+  }
+
+  const { style } = document.body;
+  const { cursor, userSelect } = style;
+
+  style.cursor = "col-resize";
+  style.userSelect = "none";
+
+  return () => {
+    style.cursor = cursor;
+    style.userSelect = userSelect;
+  };
+}
+
+// Calls the listener on each double click on the element with the id, until the returned function is
+// called.
+export function onDoubleClick(id: string, listener: () => void): () => void {
+  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+  element?.addEventListener("dblclick", listener);
+
+  return () => {
+    element?.removeEventListener("dblclick", listener);
+  };
+}
+
+// The width the element with the id takes to show all of its content, unwrapped and uncut, as it
+// does without a width of its own. Null without a page to measure it on.
+export function fittingWidth(id: string): number | null {
+  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+  if (element === null) {
+    return null;
+  }
+
+  const { width } = element.style;
+
+  element.style.width = "max-content";
+
+  const fitting = element.getBoundingClientRect().width;
+
+  element.style.width = width;
+
+  return Math.ceil(fitting);
 }
