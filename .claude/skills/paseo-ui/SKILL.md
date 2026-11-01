@@ -5,7 +5,7 @@ description: Try the plugin in Paseo's real UI in a headless browser, against a 
 
 # Trying the plugin in Paseo's UI
 
-Paseo's daemon can serve the app as a web page. `paseo-ui.sh` runs a daemon for this checkout alone, with this checkout's plugin installed, and `playwright-cli` drives a headless browser against it. The user's own Paseo isn't touched.
+Paseo's daemon can serve the app as a web page. `paseo-ui.sh` runs a daemon for this checkout alone, with this checkout's plugin installed, and `playwright-cli` drives a headless browser against it. The user's own Paseo isn't touched. Each checkout gets its own browser too: playwright-cli keeps the sessions of each directory with a `.playwright` directory apart, so the checkout has one, with a `cli.config.json` that picks Playwright's Chromium.
 
 ## Start it
 
