@@ -52,7 +52,9 @@ function ActionButton({ action, armed, busy, onPress, styles }: ActionButtonProp
       style={armed ? styles.armed : styles.button}
       onPress={onPress}
     >
-      <Text style={armed ? styles.armedText : styles.text}>{text}</Text>
+      <Text selectable={false} style={armed ? styles.armedText : styles.text}>
+        {text}
+      </Text>
     </Pressable>
   );
 }
@@ -64,6 +66,8 @@ interface ActionButtonsProps {
   // What the bar's actions act on.
   target: Target;
   controls: Controls;
+  // Called just before one of the actions runs.
+  onRun?: () => void;
   // The buttons' colour, against the bar's.
   color: string;
   theme: PluginTheme;
@@ -75,6 +79,7 @@ export function ActionButtons({
   bar,
   target,
   controls,
+  onRun,
   color,
   theme,
 }: ActionButtonsProps): ReactElement {
@@ -89,7 +94,7 @@ export function ActionButtons({
           armed={controls.armed === `${bar}:${action.operation}`}
           busy={controls.busy}
           onPress={() => {
-            controls.press(`${bar}:${action.operation}`, action, target);
+            controls.press(`${bar}:${action.operation}`, action, target, onRun);
           }}
           styles={styles}
         />

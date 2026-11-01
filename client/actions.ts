@@ -29,6 +29,12 @@ const deleteFile: Action = {
   confirmation: "Confirm delete?",
 };
 
+const discardLines: Action = {
+  operation: "discard",
+  label: "Discard Lines",
+  confirmation: "Confirm discard?",
+};
+
 const discardHunk: Action = {
   operation: "discard",
   label: "Discard Hunk",
@@ -54,12 +60,20 @@ export interface Target {
   lines?: Selection;
 }
 
-// What the buttons over a diff share: the one armed, whether an action is running, and pressing one.
+// What the buttons over a diff share: the one armed, whether an action is running, and pressing one,
+// which calls `onRun` just before the action runs, if it does.
 export interface Controls {
   armed: string | undefined;
   busy: boolean;
-  press: (button: string, action: Action, target: Target) => void;
+  press: (button: string, action: Action, target: Target, onRun?: () => void) => void;
 }
+
+// Over the hunk whose lines are selected.
+export const lineActions: Record<GroupName, Action[]> = {
+  modified: [discardLines, { operation: "stage", label: "Stage Lines" }],
+  untracked: [{ operation: "stage", label: "Stage Lines" }],
+  staged: [{ operation: "unstage", label: "Unstage Lines" }],
+};
 
 export function buttonText({ label, confirmation }: Action, armed: boolean): string {
   return (armed ? confirmation : undefined) ?? label;

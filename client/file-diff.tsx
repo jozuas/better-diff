@@ -1,6 +1,6 @@
 import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import { useRpc } from "@getpaseo/plugin/client";
-import { ScrollView, useToast } from "@getpaseo/plugin/client/ui";
+import { useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -8,15 +8,14 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
-import { fileActions, hunkActions, hunkLines } from "./actions";
+import { fileActions } from "./actions";
 import type { Controls, Target } from "./actions";
 import { confirmation } from "./confirmation";
+import { DiffBody } from "./diff-body";
 import { groups } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
-import { labelOf } from "./labels";
-import { numberLines } from "./lines";
-import type { NumberedLine } from "./lines";
 import { Queried } from "./queried";
+import { clearSelection } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -24,10 +23,6 @@ type Request = Target & Pick<RpcInput<typeof applyFileRpc>, "operation">;
 
 const staleMessage =
   "The diff changed after it was shown, so nothing was done. It's been reloaded.";
-
-// Paseo's own monospace fonts.
-const monospace =
-  "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 
 function useStyles(theme: PluginTheme) {
   return useMemo(
@@ -45,42 +40,6 @@ function useStyles(theme: PluginTheme) {
         },
         status: { fontSize: 11, fontWeight: "700", color: theme.colors.accentForeground },
         barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.accentForeground },
-        label: { padding: 16, color: theme.colors.foregroundMuted },
-        hunkBar: { flexDirection: "row", marginTop: 8, paddingHorizontal: 12, paddingVertical: 3 },
-        hunkTint: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: theme.colors.accent,
-          opacity: 0.25,
-        },
-        line: { flexDirection: "row" },
-        // Under a line, tinting it as removed or added.
-        tint: { ...StyleSheet.absoluteFillObject, opacity: 0.15 },
-        context: { backgroundColor: "transparent" },
-        removed: { backgroundColor: theme.colors.statusDanger },
-        added: { backgroundColor: theme.colors.statusSuccess },
-        number: {
-          width: 44,
-          paddingRight: 8,
-          textAlign: "right",
-          fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
-          color: theme.colors.foregroundMuted,
-        },
-        text: {
-          flex: 1,
-          paddingHorizontal: 8,
-          fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
-          color: theme.colors.foreground,
-        },
-        noNewline: {
-          paddingLeft: 96,
-          fontSize: 11,
-          lineHeight: 18,
-          color: theme.colors.foregroundMuted,
-        },
       }),
     [theme],
   );
@@ -89,7 +48,8 @@ function useStyles(theme: PluginTheme) {
 type Styles = ReturnType<typeof useStyles>;
 
 // Runs the actions the diff's buttons ask for, once confirmed where they ask for it, one at a time.
-// After each, `onApplied` hears of it, and a refused one says why.
+// After each, the page's selection is cleared, since what it selected may be gone, `onApplied`
+// hears of it, and a refused one says why.
 function useControls(
   directory: string,
   file: OpenFile,
@@ -120,6 +80,7 @@ function useControls(
       toast.error(error.message);
     },
     onSettled: async () => {
+      clearSelection();
       await onApplied(file);
     },
   });
@@ -129,106 +90,13 @@ function useControls(
   return {
     armed,
     busy: apply.isPending,
-    press: (button, action, target) => {
+    press: (button, action, target, onRun) => {
       confirm.press(button, action.confirmation !== undefined, () => {
+        onRun?.();
         apply.mutate({ operation: action.operation, ...target });
       });
     },
   };
-}
-
-interface DiffLineProps {
-  line: NumberedLine;
-  styles: Styles;
-}
-
-// Only the line's text can be selected, so copying a selection copies what the lines say.
-function DiffLine({ line, styles }: DiffLineProps): ReactElement {
-  return (
-    <View>
-      <View style={styles.line}>
-        <View style={[styles.tint, styles[line.kind]]} />
-        <Text selectable={false} style={styles.number}>
-          {line.oldNumber}
-        </Text>
-        <Text selectable={false} style={styles.number}>
-          {line.newNumber}
-        </Text>
-        <Text selectable style={styles.text}>
-          {line.text}
-        </Text>
-      </View>
-      {line.newline ? null : (
-        <Text selectable={false} style={styles.noNewline}>
-          No newline at end of file
-        </Text>
-      )}
-    </View>
-  );
-}
-
-interface HunkProps {
-  hunk: Diff["hunks"][number];
-  index: number;
-  version: string;
-  group: GroupName;
-  controls: Controls;
-  styles: Styles;
-  theme: PluginTheme;
-}
-
-function Hunk({ hunk, index, version, group, controls, styles, theme }: HunkProps): ReactElement {
-  return (
-    <View>
-      <View style={styles.hunkBar}>
-        <View style={styles.hunkTint} />
-        <ActionButtons
-          actions={hunkActions[group]}
-          bar={`${version}:hunk ${index}`}
-          target={{ version, lines: hunkLines(hunk.lines, index) }}
-          controls={controls}
-          color={theme.colors.foreground}
-          theme={theme}
-        />
-      </View>
-      {numberLines(hunk).map((line) => (
-        <DiffLine key={`${line.oldNumber},${line.newNumber}`} line={line} styles={styles} />
-      ))}
-    </View>
-  );
-}
-
-interface DiffBodyProps {
-  diff: Diff;
-  group: GroupName;
-  controls: Controls;
-  styles: Styles;
-  theme: PluginTheme;
-}
-
-function DiffBody({ diff, group, controls, styles, theme }: DiffBodyProps): ReactElement {
-  const label = labelOf(diff);
-
-  if (label !== undefined) {
-    return <Text style={styles.label}>{label}</Text>;
-  }
-
-  return (
-    <ScrollView>
-      {diff.hunks.map((hunk, index) => (
-        <Hunk
-          key={`${hunk.oldStart},${hunk.newStart}`}
-          hunk={hunk}
-          index={index}
-          version={diff.version}
-          group={group}
-          controls={controls}
-          styles={styles}
-          theme={theme}
-        />
-      ))}
-    </ScrollView>
-  );
 }
 
 interface FileActionsProps {
@@ -306,9 +174,7 @@ export function FileDiff({ directory, file, theme, onApplied }: FileDiffProps): 
         <FileActions diff={diff.data} group={group} controls={controls} theme={theme} />
       </FileBar>
       <Queried query={diff} theme={theme}>
-        {(data) => (
-          <DiffBody diff={data} group={group} controls={controls} styles={styles} theme={theme} />
-        )}
+        {(data) => <DiffBody diff={data} group={group} controls={controls} theme={theme} />}
       </Queried>
     </View>
   );

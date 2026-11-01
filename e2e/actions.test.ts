@@ -1,6 +1,6 @@
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, group, line, openFile } from "./panel";
+import { box, button, group, line, openFile } from "./panel";
 
 function staged(repository: string): string {
   return runGit(repository, ["diff", "--cached"]);
@@ -15,6 +15,31 @@ function changeTwoHunks(repository: string): void {
   writeFile(repository, "a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n");
   commitAll(repository);
   writeFile(repository, "a.txt", "first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
+}
+
+// Commits `a.txt` as 200 lines, then adds 40 after line 10 and 40 after line 60, changes line 110
+// to "third" and adds 40 after line 160. That makes four hunks, the first two taller than the view,
+// and the last tall enough not to leave a view of the third the bottom of the diff.
+function changeFourHunks(repository: string): void {
+  const lines = numbered("line", 200);
+
+  writeFile(repository, "a.txt", `${lines.join("\n")}\n`);
+  commitAll(repository);
+  writeFile(
+    repository,
+    "a.txt",
+    `${[
+      ...lines.slice(0, 10),
+      ...numbered("first", 40),
+      ...lines.slice(10, 60),
+      ...numbered("second", 40),
+      ...lines.slice(60, 109),
+      "third",
+      ...lines.slice(110, 160),
+      ...numbered("fourth", 40),
+      ...lines.slice(160),
+    ].join("\n")}\n`,
+  );
 }
 
 test("staging a file stages all its changes, and the view moves to the next file", async ({
@@ -118,27 +143,7 @@ test("staging a hunk stages only it, and the view moves to the next hunk", async
   page,
   repository,
 }) => {
-  // Four hunks, the first two taller than the view, and the last tall enough to leave the view
-  // where it is.
-  const lines = numbered("line", 200);
-
-  writeFile(repository, "a.txt", `${lines.join("\n")}\n`);
-  commitAll(repository);
-  writeFile(
-    repository,
-    "a.txt",
-    `${[
-      ...lines.slice(0, 10),
-      ...numbered("first", 40),
-      ...lines.slice(10, 60),
-      ...numbered("second", 40),
-      ...lines.slice(60, 109),
-      "third",
-      ...lines.slice(110, 160),
-      ...numbered("fourth", 40),
-      ...lines.slice(160),
-    ].join("\n")}\n`,
-  );
+  changeFourHunks(repository);
 
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
@@ -158,6 +163,46 @@ test("staging a hunk stages only it, and the view moves to the next hunk", async
   expect(after?.y).toBe(before?.y);
   expect(staged(repository)).toContain("+second 40\n");
   expect(staged(repository)).not.toMatch(/^\+(?:first|third|fourth)/mu);
+});
+
+test("a hunk's bar stays at the top of the view while its lines scroll under it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeFourHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await line(page, "first 40").scrollIntoViewIfNeeded();
+
+  const bar = await box(button(page, "Stage Hunk").first());
+  const fileBar = await box(page.getByRole("heading", { name: "MODIFIED a.txt" }));
+
+  await expect(line(page, "first 1")).not.toBeInViewport();
+  expect(bar.y).toBeGreaterThanOrEqual(fileBar.y + fileBar.height);
+  expect(bar.y).toBeLessThan(fileBar.y + fileBar.height + 10);
+});
+
+test("staging a hunk from its bar at the top of the view moves the view to the start of the next hunk", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeFourHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await line(page, "second 40").scrollIntoViewIfNeeded();
+  await button(page, "Stage Hunk").nth(1).click();
+  await expect(line(page, "second 1")).toBeHidden();
+
+  const first = await box(line(page, "line 107"));
+  const bar = await box(button(page, "Stage Hunk").nth(1));
+
+  await expect(line(page, "third")).toBeInViewport();
+  expect(first.y).toBeGreaterThan(bar.y);
+  expect(staged(repository)).toContain("+second 40\n");
 });
 
 test("unstaging a hunk unstages only it", async ({ app, page, repository }) => {

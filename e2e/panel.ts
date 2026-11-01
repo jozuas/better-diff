@@ -18,3 +18,48 @@ export function line(page: Page, text: string): Locator {
 export function button(page: Page, name: string): Locator {
   return page.getByRole("button", { name, exact: true });
 }
+
+// Drags across the lines' text, from the start of the first to the end of the last, as selecting
+// them does.
+export async function selectLines(page: Page, first: string, last = first): Promise<void> {
+  const from = await line(page, first).boundingBox();
+  const to = await line(page, last).boundingBox();
+
+  if (from === null || to === null) {
+    throw new Error(`The lines ${first} and ${last} aren't shown.`);
+  }
+
+  await page.mouse.move(from.x + 1, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width - 1, to.y + to.height / 2, { steps: 5 });
+  await page.mouse.up();
+}
+
+// Drags from the start of the first line's text to the start of the next's, as selecting whole
+// lines from their left edge does.
+export async function selectUpTo(page: Page, first: string, next: string): Promise<void> {
+  const from = await line(page, first).boundingBox();
+  const to = await line(page, next).boundingBox();
+
+  if (from === null || to === null) {
+    throw new Error(`The lines ${first} and ${next} aren't shown.`);
+  }
+
+  await page.mouse.move(from.x + 1, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + 1, to.y + to.height / 2, { steps: 5 });
+  await page.mouse.up();
+}
+
+// Where the element is on the page.
+export async function box(
+  locator: Locator,
+): Promise<{ x: number; y: number; width: number; height: number }> {
+  const shown = await locator.boundingBox();
+
+  if (shown === null) {
+    throw new Error(`${locator.toString()} isn't shown.`);
+  }
+
+  return shown;
+}

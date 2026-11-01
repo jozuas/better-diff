@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { buttonText, fileActions, hunkActions, hunkLines } from "./actions";
+import { buttonText, fileActions, hunkActions, hunkLines, lineActions } from "./actions";
 
 test("offers discarding and staging a modified file, deleting and staging an untracked one, and unstaging a staged one, asking before discarding or deleting", () => {
   expect(fileActions).toStrictEqual({
@@ -24,6 +24,17 @@ test("offers discarding and staging a modified file's hunk, staging an untracked
     ],
     untracked: [{ operation: "stage", label: "Stage Hunk" }],
     staged: [{ operation: "unstage", label: "Unstage Hunk" }],
+  });
+});
+
+test("offers discarding and staging a modified file's selected lines, staging an untracked one's, and unstaging a staged one's, asking before discarding", () => {
+  expect(lineActions).toStrictEqual({
+    modified: [
+      { operation: "discard", label: "Discard Lines", confirmation: "Confirm discard?" },
+      { operation: "stage", label: "Stage Lines" },
+    ],
+    untracked: [{ operation: "stage", label: "Stage Lines" }],
+    staged: [{ operation: "unstage", label: "Unstage Lines" }],
   });
 });
 

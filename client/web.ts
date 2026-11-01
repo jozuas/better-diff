@@ -2,10 +2,52 @@
 import { Platform } from "react-native";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
+interface PageNode {
+  readonly nodeType: number;
+}
+
+interface PageElement extends PageNode {
+  readonly id: string;
+  scrollTop: number;
+  getBoundingClientRect: () => { readonly top: number };
+  contains: (node: PageNode | null) => boolean;
+  querySelectorAll: (selectors: string) => Iterable<PageElement>;
+}
+
+interface PageRange {
+  readonly startContainer: PageNode;
+  readonly startOffset: number;
+  readonly endContainer: PageNode;
+  readonly endOffset: number;
+  selectNodeContents: (node: PageNode) => void;
+  setStart: (node: PageNode, offset: number) => void;
+  setEnd: (node: PageNode, offset: number) => void;
+  toString: () => string;
+}
+
+interface PageSelection {
+  readonly isCollapsed: boolean;
+  readonly rangeCount: number;
+  readonly anchorNode: PageNode | null;
+  getRangeAt: (index: number) => PageRange;
+  containsNode: (node: PageNode, partly: boolean) => boolean;
+  removeAllRanges: () => void;
+}
+
 declare const window: {
   addEventListener: (type: "focus", listener: () => void) => void;
   removeEventListener: (type: "focus", listener: () => void) => void;
 };
+
+declare const document: {
+  addEventListener: (type: "selectionchange", listener: () => void) => void;
+  removeEventListener: (type: "selectionchange", listener: () => void) => void;
+  getSelection: () => PageSelection | null;
+  querySelector: (selectors: string) => PageElement | null;
+  createRange: () => PageRange;
+};
+
+declare const CSS: { escape: (identifier: string) => string };
 
 // Calls the listener whenever the app's window gains focus, as on switching back to it from
 // another app, until the returned function is called. Only on the web, where the desktop app runs.
@@ -19,4 +61,102 @@ export function onWindowFocus(listener: () => void): () => void {
   return () => {
     window.removeEventListener("focus", listener);
   };
+}
+
+// Whether the selection has some of the element's text, or all of it, as it has of an empty
+// element it spans. A selection can end at the start of an element, as a triple click's does at
+// the start of the next line's, or start at its end, and then has none of its text.
+function touches(selection: PageSelection, element: PageElement): boolean {
+  if (selection.containsNode(element, false)) {
+    return true;
+  }
+
+  if (!selection.containsNode(element, true)) {
+    return false;
+  }
+
+  const range = selection.getRangeAt(0);
+  const part = document.createRange();
+
+  part.selectNodeContents(element);
+
+  if (element.contains(range.startContainer)) {
+    part.setStart(range.startContainer, range.startOffset);
+  }
+
+  if (element.contains(range.endContainer)) {
+    part.setEnd(range.endContainer, range.endOffset);
+  }
+
+  return part.toString() !== "";
+}
+
+// Calls the listener whenever the page's text selection changes, until the returned function is
+// called, with the ids of the elements inside the element with the id `container` that have one and
+// whose text the selection touches, in the page's order, and of the one it starts in, or "" if it
+// starts in none.
+export function onSelection(
+  container: string,
+  listener: (touched: string[], anchor: string) => void,
+): () => void {
+  if (Platform.OS !== "web") {
+    return () => {};
+  }
+
+  function read(): void {
+    const selection = document.getSelection();
+    const root = document.querySelector(`#${CSS.escape(container)}`);
+
+    if (
+      selection === null ||
+      root === null ||
+      selection.isCollapsed ||
+      selection.rangeCount === 0
+    ) {
+      listener([], "");
+
+      return;
+    }
+
+    const elements = [...root.querySelectorAll("[id]")];
+
+    listener(
+      elements.flatMap((element) => (touches(selection, element) ? [element.id] : [])),
+      elements.find((element) => element.contains(selection.anchorNode))?.id ?? "",
+    );
+  }
+
+  document.addEventListener("selectionchange", read);
+
+  return () => {
+    document.removeEventListener("selectionchange", read);
+  };
+}
+
+export function clearSelection(): void {
+  if (Platform.OS === "web") {
+    document.getSelection()?.removeAllRanges();
+  }
+}
+
+// Scrolls the element with the id `container` up, if it has to, to show the top of the element with
+// the id `target` just below the `margin` at its top, which a bar stuck there takes.
+export function scrollUpTo(container: string, target: string, margin: number): void {
+  if (Platform.OS !== "web") {
+    return;
+  }
+
+  const scroller = document.querySelector(`#${CSS.escape(container)}`);
+  const element = document.querySelector(`#${CSS.escape(target)}`);
+
+  if (scroller === null || element === null) {
+    return;
+  }
+
+  const hidden =
+    scroller.getBoundingClientRect().top + margin - element.getBoundingClientRect().top;
+
+  if (hidden > 0) {
+    scroller.scrollTop -= hidden;
+  }
 }
