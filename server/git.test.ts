@@ -145,3 +145,34 @@ test("ignores input a command doesn't read", async () => {
     expect(status.toString()).toBe("");
   });
 });
+
+test("returns git diff --no-index's diff, which exits with 1 when the files differ", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+
+    const diff = await git(repository, "diff", ["--no-index"], ["/dev/null", "a"]);
+
+    expect(diff.toString()).toContain("\n@@ -0,0 +1 @@\n+a\n");
+  });
+});
+
+test("returns an empty diff from git diff --no-index for a file that's gone", async () => {
+  await inRepository(async (repository) => {
+    const diff = await git(repository, "diff", ["--no-index"], ["/dev/null", "a"]);
+
+    expect(diff.toString()).toBe("");
+  });
+});
+
+test.each([
+  ["with --exit-code, which exits with 1 for differences", ["--exit-code"], []],
+  ["with --no-index, for too many paths", ["--no-index"], ["/dev/null", "a", "b"]],
+])("rejects git diff exiting with other than 0 %s", async (_, options, paths) => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    runGit(repository, ["add", "--all"]);
+    writeFile(repository, "a", "b\n");
+
+    await expect(git(repository, "diff", options, paths)).rejects.toThrow("git diff failed");
+  });
+});

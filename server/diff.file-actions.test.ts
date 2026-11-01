@@ -1,8 +1,19 @@
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { FileVersions } from "../test/file-contents";
-import { inRepository, runGit, timeout, writeFile } from "../test/repository";
+import {
+  deleteFile,
+  inRepository,
+  runGit,
+  timeout,
+  worktreeFile,
+  writeFile,
+  writeSymlink,
+} from "../test/repository";
 import { diffCommands, file, fileState, operations, setUp, sides, targets } from "../test/staging";
 import type { File, Operation, Side } from "../test/staging";
 import { applyFile, readDiff } from "./diff";
@@ -52,10 +63,10 @@ test.each(operations)(
 );
 
 test.each(operations)(
-  "%s file leaves alone a file whose diff has no changes, such as an untracked one",
+  "%s file leaves alone a file whose diff has no changes, such as an ignored one",
   async (operation) => {
     await inRepository(async (repository) => {
-      runGit(repository, ["commit", "--quiet", "--allow-empty", "--message", "Commit"]);
+      writeFileSync(join(repository, ".git", "info", "exclude"), "a\n");
       writeFile(repository, "a", "a\n");
 
       const { version } = await readDiff({
@@ -117,5 +128,49 @@ test("unstage file: a new file before the first commit", async () => {
     await applyFile({ directory: repository, path: "a", operation: "unstage", version });
 
     expect(fileState(repository, "a").index).toBeUndefined();
+  });
+});
+
+test("discard file deletes an untracked file, though the user's config says git clean needs --force", async () => {
+  await inRepository(async (repository) => {
+    runGit(repository, ["config", "clean.requireForce", "true"]);
+    writeFile(repository, "a", "a\n");
+
+    const { version } = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await applyFile({ directory: repository, path: "a", operation: "discard", version });
+
+    expect(worktreeFile(repository, "a")).toBeUndefined();
+  });
+});
+
+// Each side's diff, by the status git gives it, once each operation acts on a file that became a
+// symlink in the index only.
+const typeChanges: Record<Operation, Record<Side, string>> = {
+  stage: { staged: "", unstaged: "" },
+  unstage: { staged: "", unstaged: "" },
+  discard: { staged: "T\ta\n", unstaged: "" },
+};
+
+test.each(operations)("%s file: a file that became a symlink", async (operation) => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    runGit(repository, ["add", "--all"]);
+    runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+    deleteFile(repository, "a");
+    writeSymlink(repository, "a", "b");
+    runGit(repository, ["add", "--all"]);
+    deleteFile(repository, "a");
+    writeFile(repository, "a", "a\n");
+
+    const diff = await readDiff({ directory: repository, path: "a", side: sides[operation] });
+
+    await applyFile({ directory: repository, path: "a", operation, version: diff.version });
+
+    expect(diff.kind).toBe("symlink");
+    expect({
+      staged: runGit(repository, [...diffCommands.staged, "--name-status", "--", "a"]),
+      unstaged: runGit(repository, [...diffCommands.unstaged, "--name-status", "--", "a"]),
+    }).toStrictEqual(typeChanges[operation]);
   });
 });

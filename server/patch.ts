@@ -62,12 +62,61 @@ function headerOf(lines: readonly string[]): Header {
   };
 }
 
+type Kind = "text" | "unchanged" | "symlink" | "binary" | "mode" | "unmerged";
+
+function hasLine(lines: readonly string[], start: string): boolean {
+  return lines.some((line) => line.startsWith(start));
+}
+
+// Whether a version is a symlink, by the mode git prints for a new or deleted file, or after the
+// blobs a changed one goes between.
+function isSymlink(lines: readonly string[]): boolean {
+  return (
+    hasLine(lines, "new file mode 120000") ||
+    hasLine(lines, "deleted file mode 120000") ||
+    lines.some((line) => line.startsWith("index ") && line.endsWith(" 120000"))
+  );
+}
+
+// What a file's diff is, from the lines git prints instead of hunks. For a file with merge
+// conflicts, git prints a diff against each side of the merge, or only names the file.
+export function kindOf(diff: Buffer): Kind {
+  const lines = diff.toString("latin1").split("\n");
+
+  if (diff.length === 0) {
+    return "unchanged";
+  }
+
+  if (hasLine(lines, "diff --cc ") || hasLine(lines, "* Unmerged path ")) {
+    return "unmerged";
+  }
+
+  if (isSymlink(lines)) {
+    return "symlink";
+  }
+
+  if (hasLine(lines, "Binary files ")) {
+    return "binary";
+  }
+
+  return hasLine(lines, "old mode ") && !lines.some((line) => hunkStart.test(line))
+    ? "mode"
+    : "text";
+}
+
 // A hunk ends where its start says, after as many lines of each version as it counts, as
 // `git apply` reads it. A line after the last hunk is the start of another diff, as git prints for
-// a file that changed type or for a directory.
+// a directory.
 export function parseDiff(diff: Buffer): FileDiff {
   const hunks: Hunk[] = [];
   const lines = diff.toString("latin1").split("\n").slice(0, -1);
+
+  // The plugin shows other kinds of diff without their lines. A file that changed type, as to a
+  // symlink, has a diff for each version.
+  if (kindOf(diff) !== "text") {
+    return { header: headerOf(lines), hunks };
+  }
+
   // The hunk being read, and how many of each version's lines it has yet to show.
   let reading: { lines: Line[]; oldLeft: number; newLeft: number } | undefined;
 
@@ -111,34 +160,6 @@ export function parseDiff(diff: Buffer): FileDiff {
   }
 
   return { header: headerOf(lines), hunks };
-}
-
-type Kind = "text" | "unchanged" | "binary" | "mode" | "unmerged";
-
-function hasLine(lines: readonly string[], start: string): boolean {
-  return lines.some((line) => line.startsWith(start));
-}
-
-// What a file's diff is, from the lines git prints instead of hunks. For a file with merge
-// conflicts, git prints a diff against each side of the merge, or only names the file.
-export function kindOf(diff: Buffer): Kind {
-  const lines = diff.toString("latin1").split("\n");
-
-  if (diff.length === 0) {
-    return "unchanged";
-  }
-
-  if (hasLine(lines, "diff --cc ") || hasLine(lines, "* Unmerged path ")) {
-    return "unmerged";
-  }
-
-  if (hasLine(lines, "Binary files ")) {
-    return "binary";
-  }
-
-  return hasLine(lines, "old mode ") && !lines.some((line) => hunkStart.test(line))
-    ? "mode"
-    : "text";
 }
 
 // The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.

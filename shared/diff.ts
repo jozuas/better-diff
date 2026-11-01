@@ -8,16 +8,18 @@ export const diffRpc = defineRpc({
   input: z.object({
     directory: z.string(),
     path: z.string(),
-    // Unstaged: from the index to the worktree. Staged: from HEAD to the index.
+    // Unstaged: from the index to the worktree, where an untracked file is new. Staged: from HEAD
+    // to the index.
     side: z.enum(["unstaged", "staged"]),
   }),
   output: z.object({
     // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
     // date.
     version: z.string(),
-    // Text, which has hunks unless the file is new or deleted and empty, or a change git shows no
-    // lines for: none, a binary file's, a mode change on its own, or a file with merge conflicts.
-    kind: z.enum(["text", "unchanged", "binary", "mode", "unmerged"]),
+    // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
+    // lines: none, a symlink's, a binary file's, a mode change on its own, or a file with merge
+    // conflicts. A file that became a symlink, or stopped being one, is a symlink's.
+    kind: z.enum(["text", "unchanged", "symlink", "binary", "mode", "unmerged"]),
     hunks: z.array(
       z.object({
         oldStart: index,

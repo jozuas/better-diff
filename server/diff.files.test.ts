@@ -29,14 +29,15 @@ function diffOf(repository: string, side: Side): string {
   return runGit(repository, [...diffCommands[side], "--", "a"]);
 }
 
-test("refuses a path whose diff has more than one part, as a file that became a symlink has", async () => {
+test("refuses a path whose diff has more than one part, as a directory's has", async () => {
   await inRepository(async (repository) => {
-    writeFile(repository, "a", "a\n");
+    writeFile(repository, "d/a", "a\n");
+    writeFile(repository, "d/b", "a\n");
     runGit(repository, ["add", "--all"]);
-    deleteFile(repository, "a");
-    writeSymlink(repository, "a", "b");
+    writeFile(repository, "d/a", "b\n");
+    writeFile(repository, "d/b", "b\n");
 
-    await expect(readDiff({ directory: repository, path: "a", side: "unstaged" })).rejects.toThrow(
+    await expect(readDiff({ directory: repository, path: "d", side: "unstaged" })).rejects.toThrow(
       "git printed more than one diff for the path.",
     );
   });
@@ -118,6 +119,12 @@ test.each([
   ["text", "a file whose lines changed", "a\n", "b\n"],
   ["text", "a new empty file", undefined, ""],
   ["binary", "a binary file", "a\0", "b\0"],
+  [
+    "text",
+    "a file whose lines look like a symlink's",
+    "a\n",
+    "new file mode 120000\nindex 1..2 120000\n",
+  ],
 ] as const)("reads as %s the diff of %s", async (kind, _, head, index) => {
   await inRepository(async (repository) => {
     setUp(
@@ -157,10 +164,14 @@ test.each([
   });
 });
 
-function commit(repository: string, content: string): void {
-  writeFile(repository, "a", content);
+function commitAll(repository: string): void {
   runGit(repository, ["add", "--all"]);
   runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+}
+
+function commit(repository: string, content: string): void {
+  writeFile(repository, "a", content);
+  commitAll(repository);
 }
 
 // git compares the unstaged side of a file with conflicts with each side of the merge, and only
@@ -184,3 +195,91 @@ test.each<Side>(["unstaged", "staged"])(
     });
   },
 );
+
+// Each leaves a symlink in at least one of the versions the unstaged diff goes between.
+const symlinks: [string, (repository: string) => void][] = [
+  [
+    "an untracked one",
+    (repository) => {
+      writeSymlink(repository, "a", "b");
+    },
+  ],
+  [
+    "one whose target changed",
+    (repository) => {
+      writeSymlink(repository, "a", "b");
+      commitAll(repository);
+      deleteFile(repository, "a");
+      writeSymlink(repository, "a", "c");
+    },
+  ],
+  [
+    "a deleted one",
+    (repository) => {
+      writeSymlink(repository, "a", "b");
+      commitAll(repository);
+      deleteFile(repository, "a");
+    },
+  ],
+  [
+    "a file that became one",
+    (repository) => {
+      commit(repository, "a\n");
+      deleteFile(repository, "a");
+      writeSymlink(repository, "a", "b");
+    },
+  ],
+  [
+    "one that became a file",
+    (repository) => {
+      writeSymlink(repository, "a", "b");
+      commitAll(repository);
+      deleteFile(repository, "a");
+      writeFile(repository, "a", "a\n");
+    },
+  ],
+];
+
+test.each(symlinks)("reads as a symlink's, without lines, the diff of %s", async (_, setUpFile) => {
+  await inRepository(async (repository) => {
+    setUpFile(repository);
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    expect(diff).toMatchObject({ kind: "symlink", hunks: [] });
+    expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
+  });
+});
+
+test("reads an untracked file's unstaged diff as all of its lines added, beside another one", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\nb");
+    writeFile(repository, "b", "c\n");
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    expect(diff).toMatchObject({
+      kind: "text",
+      hunks: [
+        {
+          oldStart: 0,
+          newStart: 1,
+          lines: [
+            { kind: "added", text: "a", newline: true },
+            { kind: "added", text: "b", newline: false },
+          ],
+        },
+      ],
+    });
+  });
+});
+
+test("reads as unchanged an untracked file's staged diff", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+
+    const diff = await readDiff({ directory: repository, path: "a", side: "staged" });
+
+    expect(diff.kind).toBe("unchanged");
+  });
+});

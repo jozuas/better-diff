@@ -24,9 +24,32 @@ interface DiffLine {
   newline: boolean;
 }
 
+// Each of the file's lines, added, as a diff of an untracked file has them.
+function addedLines(content: Buffer | undefined): DiffLine[] {
+  // Latin-1 reads each byte as one character, so bytes that aren't UTF-8 survive. What follows the
+  // last newline is a last line without one, unless it's empty.
+  const lines = (content ?? Buffer.alloc(0)).toString("latin1").split("\n");
+
+  return lines.flatMap((line, index) =>
+    index < lines.length - 1 || line !== ""
+      ? [{ prefix: "+", bytes: Buffer.from(line, "latin1"), newline: index < lines.length - 1 }]
+      : [],
+  );
+}
+
 // Every line of the file's diff, unchanged ones included, as git prints them with more lines of
-// context than the file has.
-function fullDiff(repository: string, path: string, side: Side): DiffLine[] {
+// context than the file has. git diff leaves out an untracked file, whose unstaged diff adds all
+// of its lines.
+function fullDiff(
+  repository: string,
+  path: string,
+  side: Side,
+  versions: FileVersions,
+): DiffLine[] {
+  if (side === "unstaged" && versions.index === undefined) {
+    return addedLines(versions.worktree);
+  }
+
   const diff = runGitBytes(repository, [...diffCommands[side], "--unified=1000000", "--", path]);
 
   // Latin-1 reads each byte as one character, so bytes that aren't UTF-8 survive.
@@ -133,7 +156,8 @@ const abcd = Buffer.from("a\nb\nc\nd\n");
 
 // Cases a fixed seed can miss. Staging a line added after one that had no newline, without that
 // line's removal, in a file whose name looks like a hunk's start. A hunk that ends with lines
-// removed after one added.
+// removed after one added. An untracked file whose last line has no newline, which the index has
+// deleted, with a name git quotes.
 const examples: [File, "myers", (hunk: number, line: number) => boolean][] = [
   [
     {
@@ -152,6 +176,14 @@ const examples: [File, "myers", (hunk: number, line: number) => boolean][] = [
     "myers",
     () => true,
   ],
+  [
+    {
+      path: 'a "b"',
+      versions: { head: abcd, index: undefined, worktree: Buffer.from("a\nX\nb") },
+    },
+    "myers",
+    (_, line) => line !== 1,
+  ],
 ];
 
 test.each(operations)(
@@ -168,7 +200,7 @@ test.each(operations)(
 
             const side = sides[operation];
             const diff = await readDiff({ directory: repository, path, side });
-            const changes = fullDiff(repository, path, side);
+            const changes = fullDiff(repository, path, side, versions);
 
             // With nothing changed, git prints no diff to work out the file from. The hunk
             // property covers that case.

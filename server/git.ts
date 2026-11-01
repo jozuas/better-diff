@@ -2,10 +2,12 @@ import { once } from "node:events";
 
 import { spawnProcess } from "@getpaseo/plugin/server";
 
-// Options without which the user's config could change output the plugin parses.
+// Options without which the user's config could change output the plugin parses, or what a
+// command does.
 const commandOptions = {
   // Paths NUL-terminated and never quoted.
   status: ["-z"],
+  "ls-files": ["-z"],
   // Git's own patch, which `git apply` takes back: not an external tool's or a textconv filter's,
   // without colour codes, with the a/ and b/ prefixes whatever diff.noprefix and
   // diff.mnemonicPrefix say, and with the context lines `git apply` needs to place each hunk
@@ -24,6 +26,8 @@ const commandOptions = {
   add: [],
   reset: [],
   restore: [],
+  // Deletes whatever clean.requireForce says.
+  clean: ["--force"],
 };
 
 // Runs a git command and returns what it prints, as bytes: files, and so diffs, needn't be UTF-8.
@@ -74,7 +78,11 @@ export async function git(
   child.stdin.end(input);
   await once(child, "close");
 
-  if (child.exitCode !== 0) {
+  // `git diff --no-index` exits with 1 when the files differ, as --exit-code makes `git diff`, and
+  // when a file is gone, which leaves the diff empty.
+  const differs = options.includes("--no-index") && child.exitCode === 1;
+
+  if (child.exitCode !== 0 && !differs) {
     throw new Error(`git ${command} failed: ${Buffer.concat(stderr).toString()}`);
   }
 

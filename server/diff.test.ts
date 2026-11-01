@@ -54,6 +54,29 @@ test.each(operations)(
   timeout,
 );
 
+test.each(["stage", "discard"] as const)(
+  "%s nothing when an untracked file has changed since its diff was read",
+  async (operation) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, "a", "a\n");
+
+      const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+      writeFile(repository, "a", "b\n");
+
+      const before = fileState(repository, "a");
+      const action = { directory: repository, path: "a", operation, version: diff.version };
+
+      await expect(
+        applyLines({ ...action, lines: linesOf(diff, () => true) }),
+      ).resolves.toStrictEqual({ status: "stale" });
+      await expect(applyFile(action)).resolves.toStrictEqual({ status: "stale" });
+
+      expect(fileState(repository, "a")).toStrictEqual(before);
+    });
+  },
+);
+
 type Line = Diff["hunks"][number]["lines"][number];
 
 function line(kind: Line["kind"], text: string, newline = true): Line {

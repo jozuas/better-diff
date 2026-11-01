@@ -19,14 +19,38 @@ const sides: Record<Action["operation"], Side> = {
   discard: "unstaged",
 };
 
-// The command that makes or undoes all of a file's changes. `git reset` unstages them where
+// The command that makes or undoes all of a tracked file's changes. `git reset` unstages them where
 // `git restore --staged` can't, before the first commit.
 const fileCommands = { stage: "add", unstage: "reset", discard: "restore" } as const;
 
 const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"] };
 
+interface Changes {
+  diff: Buffer;
+  untracked: boolean;
+}
+
 function versionOf(diff: Buffer): string {
   return createHash("sha256").update(diff).digest("hex");
+}
+
+// Not in the index, nor ignored, as `git status` lists it. A directory's path lists its files.
+async function isUntracked(directory: string, path: string): Promise<boolean> {
+  const listed = await git(directory, "ls-files", ["--others", "--exclude-standard"], [path]);
+
+  return listed.equals(Buffer.from(`${path}\0`));
+}
+
+// The file's changes on the side. `git diff` leaves out an untracked file, whose unstaged changes
+// are all of its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add.
+async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
+  const untracked = side === "unstaged" && (await isUntracked(directory, path));
+
+  const diff = untracked
+    ? await git(directory, "diff", ["--no-index"], ["/dev/null", path])
+    : await git(directory, "diff", diffOptions[side], [path]);
+
+  return { diff, untracked };
 }
 
 export async function readDiff({
@@ -34,7 +58,7 @@ export async function readDiff({
   path,
   side,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
-  const diff = await git(directory, "diff", diffOptions[side], [path]);
+  const { diff } = await changesOf(directory, path, side);
 
   return {
     version: versionOf(diff),
@@ -59,24 +83,27 @@ let applying: Promise<unknown> = Promise.resolve();
 async function applyAfter(
   previous: Promise<unknown>,
   { directory, path, operation, version }: Action,
-  act: (diff: Buffer) => Promise<void>,
+  act: (changes: Changes) => Promise<void>,
 ): Promise<Status> {
   await Promise.allSettled([previous]);
 
-  const diff = await git(directory, "diff", diffOptions[sides[operation]], [path]);
+  const changes = await changesOf(directory, path, sides[operation]);
 
-  if (versionOf(diff) !== version) {
+  if (versionOf(changes.diff) !== version) {
     return { status: "stale" };
   }
 
-  await act(diff);
+  await act(changes);
 
   return { status: "applied" };
 }
 
 // One apply at a time. Two at once could both find the diff unchanged, and the second would then
 // apply to what the first left, where `git apply` can find a patch's lines in another place.
-async function applyInTurn(action: Action, act: (diff: Buffer) => Promise<void>): Promise<Status> {
+async function applyInTurn(
+  action: Action,
+  act: (changes: Changes) => Promise<void>,
+): Promise<Status> {
   const applied = applyAfter(applying, action, act);
 
   applying = applied;
@@ -93,7 +120,7 @@ export async function applyLines({
 }: RpcInput<typeof applyLinesRpc>): Promise<Status> {
   const { directory, operation } = action;
 
-  const status = await applyInTurn(action, async (diff) => {
+  const status = await applyInTurn(action, async ({ diff }) => {
     const parsed = parseDiff(diff);
 
     for (const { hunk, line } of lines) {
@@ -117,14 +144,16 @@ export async function applyLines({
 }
 
 // Stages, unstages or discards all of the file's changes, including those a patch can't make, such
-// as a binary file's or a mode change. A diff with none leaves the file alone, as git's diff of an
-// untracked file does.
+// as a binary file's or a mode change. Discarding an untracked file deletes it, which `git clean`
+// does without ever touching a tracked one. A diff with no changes leaves the file alone.
 export async function applyFile(action: Action): Promise<Status> {
   const { directory, path, operation } = action;
 
-  const status = await applyInTurn(action, async (diff) => {
+  const status = await applyInTurn(action, async ({ diff, untracked }) => {
+    const command = untracked && operation === "discard" ? "clean" : fileCommands[operation];
+
     if (diff.length > 0) {
-      await git(directory, fileCommands[operation], [], [path]);
+      await git(directory, command, [], [path]);
     }
   });
 

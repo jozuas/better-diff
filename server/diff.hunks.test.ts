@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { canCoexist } from "../test/file-names";
 import { inRepository, runGit, timeout, worktreeFile } from "../test/repository";
 import { diffAlgorithm, file, linesOf, operations, setUp, sides } from "../test/staging";
-import type { Diff, File, Operation } from "../test/staging";
+import type { Diff, File, Operation, Side } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
 
 // Git's own commands that ask about each hunk in turn whether to stage, unstage or discard it.
@@ -31,6 +31,14 @@ function state(repository: string, all: readonly File[]): RepositoryState {
   };
 }
 
+// git's interactive commands leave out an untracked file, which the plugin's unstaged diff has as
+// new, unless it's added with --intent-to-add.
+function intendToAdd(repository: string, { path, versions }: File, side: Side): void {
+  if (side === "unstaged" && versions.index === undefined && versions.worktree !== undefined) {
+    runGit(repository, ["add", "--intent-to-add", "--", path]);
+  }
+}
+
 // Answers to the interactive command: yes to each picked hunk, no to the others.
 function answers(diff: Diff, isPicked: (hunk: number) => boolean): string {
   return diff.hunks.map((_, hunk) => (isPicked(hunk) ? "y\n" : "n\n")).join("");
@@ -51,6 +59,7 @@ test.each(operations)(
             await inRepository(async (gits) => {
               setUp(ours, all, algorithm);
               setUp(gits, all, algorithm);
+              intendToAdd(gits, acted, sides[operation]);
 
               const diff = await readDiff({
                 directory: ours,
