@@ -10,7 +10,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { changesRpc } from "../shared/changes";
 import { FileDiff } from "./file-diff";
 import { FileList } from "./file-list";
-import { openAfter, sidebarGroups } from "./groups";
+import { openAfter, placeholder, sidebarGroups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { onWindowFocus } from "./web";
@@ -80,7 +80,7 @@ function Changes({ directory, theme }: ChangesProps): ReactElement {
       </View>
       <View style={styles.diff}>
         {open === undefined ? (
-          <Text style={styles.hint}>Select a file to see its changes.</Text>
+          <Text style={styles.hint}>{placeholder(changes.data)}</Text>
         ) : (
           <FileDiff
             key={`${open.group}:${open.path}`}

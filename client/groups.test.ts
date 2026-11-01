@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { filePath } from "../test/file-names";
-import { groups, isOpen, openAfter, sidebarGroups } from "./groups";
+import { groups, isOpen, openAfter, placeholder, sidebarGroups } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 
 test("heads each group with its title and number of files: modified, then untracked, then staged", () => {
@@ -19,6 +19,23 @@ test("opens a file from modified or untracked files on its unstaged diff, and fr
     untracked: { title: "UNTRACKED FILES", status: "UNTRACKED", side: "unstaged" },
     staged: { title: "STAGED FILES", status: "STAGED", side: "staged" },
   });
+});
+
+test('says "No changes" in place of a diff once no group lists a file', () => {
+  expect(placeholder({ modified: [], untracked: [], staged: [] })).toBe("No changes");
+});
+
+test.each(["modified", "untracked", "staged"] as const)(
+  "asks to open a file while %s files has one",
+  (name) => {
+    expect(placeholder({ modified: [], untracked: [], staged: [], [name]: ["a"] })).toBe(
+      "Select a file to see its changes.",
+    );
+  },
+);
+
+test("says nothing in place of a diff until the changes are listed", () => {
+  expect(placeholder()).toBe("");
 });
 
 test("a file is open only in the group it was opened from, under its own path", () => {

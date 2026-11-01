@@ -38,6 +38,18 @@ export function sidebarGroups(changes: Changes): SidebarGroup[] {
   }));
 }
 
+// What shows in place of a diff while no file is open: nothing until the changes are listed, then
+// that there are none, or else to open a file.
+export function placeholder(changes?: Changes): string {
+  if (changes === undefined) {
+    return "";
+  }
+
+  return order.every((name) => changes[name].length === 0)
+    ? "No changes"
+    : "Select a file to see its changes.";
+}
+
 // A file as opened from a group. A partly staged file is in two, and shows a different diff in each.
 export interface OpenFile {
   group: GroupName;

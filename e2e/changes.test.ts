@@ -65,6 +65,22 @@ test("a partly staged file is in modified and staged files, and shows the unstag
   await expect(line(page, "unstaged")).toBeHidden();
 });
 
+test('with no changes and no file open, the view says "No changes"', async ({
+  app,
+  page,
+  repository,
+}) => {
+  await app.openPanel();
+
+  await expect(page.getByText("No changes", { exact: true })).toBeVisible();
+
+  writeFile(repository, "new.txt", "a\n");
+  await app.focus();
+
+  await expect(page.getByText("Select a file to see its changes.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No changes", { exact: true })).toBeHidden();
+});
+
 test("changes made while the window was in the background show once it regains focus", async ({
   app,
   page,
