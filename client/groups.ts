@@ -25,17 +25,25 @@ const order: GroupName[] = ["modified", "untracked", "staged"];
 
 export interface SidebarGroup {
   name: GroupName;
-  // The group's title and its number of files.
+  // The group's title and its number of files, and how many of them it lists if that's fewer.
   heading: string;
+  // Those that match the filter.
   paths: string[];
 }
 
-export function sidebarGroups(changes: Changes): SidebarGroup[] {
-  return order.map((name) => ({
-    name,
-    heading: `${groups[name].title} (${changes[name].length})`,
-    paths: changes[name],
-  }));
+// Whether the path has the filter in it, whatever their case. Every path has an empty filter.
+function matches(path: string, filter: string): boolean {
+  return path.toLowerCase().includes(filter.toLowerCase());
+}
+
+export function sidebarGroups(changes: Changes, filter = ""): SidebarGroup[] {
+  return order.map((name) => {
+    const all = changes[name];
+    const paths = all.filter((path) => matches(path, filter));
+    const count = paths.length < all.length ? `${paths.length} of ${all.length}` : all.length;
+
+    return { name, heading: `${groups[name].title} (${count})`, paths };
+  });
 }
 
 // What shows in place of a diff while no file is open: nothing until the changes are listed, then

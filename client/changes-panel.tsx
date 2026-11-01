@@ -69,6 +69,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
   const [open, setOpen] = useState<OpenFile>();
+  const [filter, setFilter] = useState("");
 
   const changesQuery = queryOptions({
     queryKey: [directory, "changes"],
@@ -112,7 +113,14 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
       <View nativeID={fileList} style={{ width }}>
         <Queried query={changes} theme={theme}>
           {(data) => (
-            <FileList groups={sidebarGroups(data)} open={open} onOpen={setOpen} theme={theme} />
+            <FileList
+              groups={sidebarGroups(data, filter)}
+              open={open}
+              onOpen={setOpen}
+              filter={filter}
+              onFilter={setFilter}
+              theme={theme}
+            />
           )}
         </Queried>
       </View>

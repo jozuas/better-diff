@@ -13,6 +13,57 @@ test("heads each group with its title and number of files: modified, then untrac
   ]);
 });
 
+test("lists only the files that match the filter, and heads a group that lists fewer with how many of its files it lists", () => {
+  expect(
+    sidebarGroups({ modified: ["src/a", "docs/b"], untracked: ["SRC/c"], staged: ["d"] }, "src"),
+  ).toStrictEqual([
+    { name: "modified", heading: "MODIFIED FILES (1 of 2)", paths: ["src/a"] },
+    { name: "untracked", heading: "UNTRACKED FILES (1)", paths: ["SRC/c"] },
+    { name: "staged", heading: "STAGED FILES (0 of 1)", paths: [] },
+  ]);
+});
+
+// A path, and a part of it with the case of each letter changed or not.
+const pathAndPart = fc
+  .tuple(filePath, fc.nat(), fc.nat(), fc.array(fc.boolean()))
+  .map(([path, start, length, raised]) => {
+    const from = start % (path.length + 1);
+
+    const part = path
+      .slice(from, from + length)
+      .split("")
+      .map((unit, index) => (raised[index] === true ? unit.toUpperCase() : unit.toLowerCase()))
+      .join("");
+
+    return { path, part };
+  });
+
+// The files a group lists of its only file, filtered by the filter.
+function listedOf(path: string, filter: string): string[] {
+  return sidebarGroups({ modified: [path], untracked: [], staged: [] }, filter)[0]?.paths ?? [];
+}
+
+test("lists a file when filtered by any part of its path, whatever the case of its letters", () => {
+  fc.assert(
+    fc.property(pathAndPart, ({ path, part }) => {
+      expect(listedOf(path, part)).toStrictEqual([path]);
+    }),
+  );
+});
+
+test("hides a file when filtered by something with a character its path hasn't", () => {
+  fc.assert(
+    fc.property(
+      filePath,
+      fc.string({ unit: "binary" }),
+      fc.string({ unit: "binary" }),
+      (path, before, after) => {
+        expect(listedOf(path.replaceAll("x", ""), `${before}x${after}`)).toStrictEqual([]);
+      },
+    ),
+  );
+});
+
 test("opens a file from modified or untracked files on its unstaged diff, and from staged files on its staged one", () => {
   expect(groups).toStrictEqual({
     modified: { title: "MODIFIED FILES", status: "MODIFIED", side: "unstaged" },
