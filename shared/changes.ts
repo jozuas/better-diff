@@ -12,3 +12,18 @@ export const changesRpc = defineRpc({
     staged: z.array(z.string()),
   }),
 });
+
+// Answers once the files changes.list lists, or their diffs, may have changed, so a view of them
+// can refresh. It can answer when they haven't, as when a file is saved unchanged.
+export const waitRpc = defineRpc({
+  name: "changes.wait",
+  input: z.object({
+    directory: z.string(),
+    // The version it last answered with. Any other, such as an empty one, has it answer at once.
+    version: z.string(),
+    // How many milliseconds to wait before answering, with the same version, if nothing changes.
+    // It can take a second more. The app gives up on an answer after a minute.
+    timeout: z.int().nonnegative().max(50_000),
+  }),
+  output: z.object({ version: z.string() }),
+});

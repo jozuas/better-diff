@@ -1,10 +1,13 @@
+import { createHash } from "node:crypto";
 import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout } from "node:timers/promises";
 
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { changesRpc } from "../shared/changes";
+import type { waitRpc } from "../shared/changes";
 import { git } from "./git";
 
 // A file git status lists.
@@ -168,14 +171,18 @@ async function pairsOf(directory: string, entries: readonly Entry[]): Promise<Ma
   return renames;
 }
 
-// What the renames found in a repository depend on: what git status says, and the size and times of
-// each file new in the worktree, which change with its content.
-async function sourcesOf(directory: string, { output, entries }: Status): Promise<string> {
+// What git status says, and the inode, size and times of each file it lists that `isStated` picks,
+// which change with the file's content. A file gone from the worktree has none.
+async function sourcesOf(
+  directory: string,
+  { output, entries }: Status,
+  isStated: (entry: Entry) => boolean,
+): Promise<string> {
   const files = await Promise.all(
-    pathsOf(entries, (entry) => entry.untracked || entry.intentToAdd).map(async (path) => {
-      const { ino, size, mtimeMs, ctimeMs } = await lstat(join(directory, path));
+    pathsOf(entries, isStated).map(async (path) => {
+      const stats = await lstat(join(directory, path)).catch(() => null);
 
-      return [ino, size, mtimeMs, ctimeMs];
+      return stats === null ? null : [stats.ino, stats.size, stats.mtimeMs, stats.ctimeMs];
     }),
   );
 
@@ -187,9 +194,14 @@ const found = new Map<string, { sources: string; renames: Map<string, string> }>
 
 // The renames git status finds with the untracked files intent-to-add, found again only once what
 // they depend on changes: finding them hashes each untracked file, and runs a filter such as Git
-// LFS's on it.
+// LFS's on it. What they depend on is what git status says, and each file new in the worktree.
 async function renamesOf(directory: string, status: Status): Promise<Map<string, string>> {
-  const sources = await sourcesOf(directory, status);
+  const sources = await sourcesOf(
+    directory,
+    status,
+    (entry) => entry.untracked || entry.intentToAdd,
+  );
+
   const last = found.get(directory);
 
   if (last?.sources === sources) {
@@ -241,6 +253,45 @@ export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc
     untracked: pathsOf(entries, ({ untracked, modified }) => untracked && !modified),
     staged: pathsOf(entries, ({ staged }) => staged),
   };
+}
+
+// Changes whenever the files listed, or their diffs, could have: with what git status says, or a
+// listed file's content. Not with the config, such as diff.algorithm.
+async function versionOf(directory: string): Promise<string> {
+  const status = await statusOf(directory);
+  const sources = await sourcesOf(directory, status, () => true);
+
+  return createHash("sha256").update(sources).digest("hex");
+}
+
+// The version once it differs from the one given, checked every second, or once the wait has
+// expired.
+async function changedFrom(
+  directory: string,
+  version: string,
+  expired: AbortSignal,
+): Promise<string> {
+  const current = await versionOf(directory);
+
+  if (current !== version || expired.aborted) {
+    return current;
+  }
+
+  await setTimeout(1000);
+
+  const changed = await changedFrom(directory, version, expired);
+
+  return changed;
+}
+
+export async function waitForChanges({
+  directory,
+  version,
+  timeout,
+}: RpcInput<typeof waitRpc>): Promise<RpcOutput<typeof waitRpc>> {
+  const current = await changedFrom(directory, version, AbortSignal.timeout(timeout));
+
+  return { version: current };
 }
 
 export async function listChanges({

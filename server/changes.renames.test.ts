@@ -222,6 +222,22 @@ test("pairs the same files without cleaning them again, while they don't change"
   });
 });
 
+test("pairs the same files without cleaning them again, when only a tracked file changes", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    writeFile(repository, "c", "c\n");
+    commitAll(repository);
+    noteCleaned(repository);
+    move(repository);
+    writeFile(repository, "c", "d\n");
+    await listChanges({ directory: repository });
+    writeFile(repository, "c", "e\n");
+    await listChanges({ directory: repository });
+
+    expect(worktreeFile(repository, ".git/cleaned")?.toString()).toBe("b\n");
+  });
+});
+
 test("pairs files again once a new one changes", async () => {
   await inRepository(async (repository) => {
     commitTenLines(repository);
