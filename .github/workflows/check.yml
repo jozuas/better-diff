@@ -40,8 +40,8 @@ jobs:
           FROM: ${{ github.event.pull_request.base.sha || github.event.before }}
           TO: ${{ github.event.pull_request.head.sha || github.sha }}
         run: devenv shell -- gitlint --commits "$FROM..$TO"
+      - run: devenv test
+      - run: devenv shell -- npm run check
+      - run: devenv shell -- npm run mutate:rules
       # The end-to-end tests are off in CI for now: on Linux, the greeting screen's button never
       # shows up.
-      - run: devenv test
-        env:
-          SKIP: e2e

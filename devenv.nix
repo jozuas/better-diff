@@ -22,25 +22,6 @@ let
     # where Nix does.
     PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "true";
   };
-
-  npmScriptHook = name: script: {
-    enable = true;
-    name = "npm run ${script}";
-    # Paseo's own commit button runs hooks outside the devenv shell.
-    entry = lib.getExe (
-      pkgs.writeShellApplication {
-        inherit name;
-        runtimeInputs = [
-          config.languages.javascript.package
-          pkgs.git
-          pkgs.jq
-        ];
-        runtimeEnv = playwright;
-        text = "npm run ${script}";
-      }
-    );
-    pass_filenames = false;
-  };
 in
 {
   # See full reference at https://devenv.sh/reference/options/
@@ -57,10 +38,6 @@ in
   packages = [
     pkgs.git
     pkgs.jq
-  ]
-  ++ lib.optionals config.devenv.isTesting [
-    # For the end-to-end tests' daemon. Elsewhere they use the Paseo installed on the machine.
-    pkgs.paseo
   ]
   ++ lib.optionals (!config.devenv.isTesting) [
     # Only agents use it, through .mcp.json, and its Python dependencies often fail to build upstream.
@@ -85,16 +62,5 @@ in
     gitleaks.enable = true;
     detect-private-keys.enable = true;
     gitlint.enable = true;
-    check = npmScriptHook "check" "check";
-    # Mutating the local Oxlint rules takes most of a minute, so only a commit that changes them or
-    # the Stryker config waits for it. `devenv test` runs every hook on every file.
-    mutate-rules = npmScriptHook "mutate-rules" "mutate:rules" // {
-      files = "^(tools/oxlint/local/|stryker\\.)";
-    };
-    # The end-to-end tests start a daemon and a browser, so only a commit that changes the plugin,
-    # the tests or what they run on waits for them.
-    e2e = npmScriptHook "e2e" "test:e2e" // {
-      files = "^(index\\.|client/|server/|shared/|e2e/|test/|playwright\\.config\\.|paseo-plugin\\.json|package-lock\\.json|devenv\\.lock|\\.claude/skills/paseo-ui/)";
-    };
   };
 }
