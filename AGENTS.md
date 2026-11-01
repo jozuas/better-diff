@@ -33,7 +33,9 @@ Paseo plugin: a Sublime Merge-style diff and staging view for a workspace's work
 
 ## Commands
 
-- `npm run check`: typecheck, lint, format check, tests, Knip and mutation tests of the plugin's code, stopping at the first failure. CI runs it on pushes to main and on pull requests. The pre-commit hook only runs secret scanners and quick linters.
+- `npm run check:fast`: typecheck, lint, format check, tests and Knip, stopping at the first failure. Run it after each change.
+- `npm run mutate:changed`: mutation tests of the plugin's lines changed since `origin/main`, committed or not, and of its new files. Run it before committing a change to the plugin's code. It leaves out mutants that reach past the changed lines, and mutants in unchanged code that a changed test or test helper no longer kills.
+- `npm run check`: `check:fast`, then mutation tests of all the plugin's code. CI runs it on pushes to main and on pull requests and has the last word on what `mutate:changed` leaves out, so fix whatever it finds. The pre-commit hook only runs secret scanners and quick linters.
 - `npm run mutate:rules`: mutation tests of the local Oxlint rules in `tools/oxlint/local/`. CI runs it too.
 - `npm run test:e2e`: the end-to-end tests. Nothing runs them for you, CI included, so run them after changing the plugin, the tests or their dependencies. A failure prints the paths of a screenshot, the page's accessibility tree (`error-context.md`), a trace and the plugin's logs.
 - On their own: `npm run typecheck`, `npm run lint`, `npm run format` (also sorts imports), `npm test`, `npm run knip`, `npm run mutate` (prints surviving mutants as diffs, report in `reports/mutation/mutation.html`).
