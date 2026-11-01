@@ -3,6 +3,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { applyGroupRpc, diffRpc, groupRpc } from "../shared/diff";
 import { groupsOf, readStatus } from "./changes";
 import type { Entry } from "./changes";
+import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
 import type { ChangedFile } from "./diff";
 import { versionOf } from "./version";
@@ -88,7 +89,17 @@ export async function readGroup({
 }: RpcInput<typeof groupRpc>): Promise<RpcOutput<typeof groupRpc>> {
   const files = await filesOf(directory, group);
 
-  return { version: groupVersionOf(files), files: files.map(({ shown }) => shown) };
+  const generated = await generatedPaths(
+    directory,
+    files.map(({ shown }) => shown.path),
+  );
+
+  return {
+    version: groupVersionOf(files),
+    files: files.map(({ shown }) =>
+      "error" in shown ? shown : collapsed(shown, generated.has(shown.path)),
+    ),
+  };
 }
 
 export async function applyGroup({

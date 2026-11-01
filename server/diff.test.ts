@@ -328,7 +328,12 @@ test("discards a hunk of 50,000 lines, as changing a long file's line endings ma
       worktree: numbers.map((number) => `${number}\r\n`).join(""),
     });
 
-    const diff = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+    const diff = await readDiff({
+      directory: repository,
+      path: "a",
+      side: "unstaged",
+      expand: true,
+    });
 
     await applyLines({
       directory: repository,

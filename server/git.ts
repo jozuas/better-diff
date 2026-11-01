@@ -32,6 +32,9 @@ const commandOptions = {
   rm: [],
   // Deletes whatever clean.requireForce says.
   clean: ["--force"],
+  // Paths, attributes and values NUL-terminated and never quoted, and with --stdin, paths read
+  // NUL-terminated.
+  "check-attr": ["-z"],
 };
 
 // Commands that read their paths from their input: as arguments, as many as a group of files can

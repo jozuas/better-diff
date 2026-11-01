@@ -2,7 +2,7 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
@@ -26,7 +26,16 @@ function useStyles(theme: PluginTheme) {
   return useMemo(
     () =>
       StyleSheet.create({
-        label: { padding: 16, color: theme.colors.foregroundMuted },
+        labelRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
+        label: { color: theme.colors.foregroundMuted },
+        expand: {
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          borderRadius: 4,
+          borderWidth: 1,
+          borderColor: theme.colors.foreground,
+        },
+        expandText: { fontSize: 12, color: theme.colors.foreground },
         // Opaque, since it stays over the hunk's lines as they scroll under it.
         hunkBar: {
           flexDirection: "row",
@@ -219,14 +228,17 @@ interface DiffBodyProps {
   diff: Diff;
   group: GroupName;
   controls: Controls;
+  // Asks for a collapsed diff's lines.
+  onExpand: () => void;
   theme: PluginTheme;
 }
 
-// The diff's hunks, or what's shown instead of a diff without lines. Each hunk's bar is followed by
-// its lines, and stays at the top while they scroll under it, until the next hunk's bar covers it.
-// Just before an action on a hunk runs, the view scrolls up to the hunk's start if it's above, so
-// the next hunk, which then takes its place, shows from its start.
-export function DiffBody({ diff, group, controls, theme }: DiffBodyProps): ReactElement {
+// The diff's hunks, or what's shown instead of a diff without lines, with a button that shows a
+// collapsed one's. Each hunk's bar is followed by its lines, and stays at the top while they scroll
+// under it, until the next hunk's bar covers it. Just before an action on a hunk runs, the view
+// scrolls up to the hunk's start if it's above, so the next hunk, which then takes its place, shows
+// from its start.
+export function DiffBody({ diff, group, controls, onExpand, theme }: DiffBodyProps): ReactElement {
   const styles = useStyles(theme);
   const container = useId();
   const selection = useSelectedLines(container);
@@ -234,7 +246,23 @@ export function DiffBody({ diff, group, controls, theme }: DiffBodyProps): React
   const label = labelOf(diff);
 
   if (label !== undefined) {
-    return <Text style={styles.label}>{label}</Text>;
+    return (
+      <View style={styles.labelRow}>
+        <Text style={styles.label}>{label}</Text>
+        {diff.collapsed === undefined ? null : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show diff"
+            style={styles.expand}
+            onPress={onExpand}
+          >
+            <Text selectable={false} style={styles.expandText}>
+              Show diff
+            </Text>
+          </Pressable>
+        )}
+      </View>
+    );
   }
 
   return (

@@ -17,6 +17,13 @@ test("labels a new or deleted empty file's diff, which has no lines, as an empty
   expect(labelOf({ kind: "text", hunks: [] })).toBe("Empty file");
 });
 
+test.each([
+  ["generated", "Generated file"],
+  ["large", "Large diff"],
+] as const)("labels a diff collapsed as %s %j", (collapsed, label) => {
+  expect(labelOf({ kind: "text", hunks: [], collapsed })).toBe(label);
+});
+
 test("shows a diff with lines", () => {
   expect(
     labelOf({

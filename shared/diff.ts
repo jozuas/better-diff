@@ -15,6 +15,9 @@ const diff = z.object({
   // The path the file had before the side's changes, if they rename it. On the unstaged side,
   // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
   renamedFrom: z.string().optional(),
+  // Why a text diff's hunks and contents are left out, as GitHub leaves them out: the file is
+  // generated, such as a lockfile, or the diff changes more lines than a view shows quickly.
+  collapsed: z.enum(["generated", "large"]).optional(),
   hunks: z.array(
     z.object({
       oldStart: index,
@@ -43,6 +46,8 @@ export const diffRpc = defineRpc({
     // Unstaged: from the index to the worktree, where an untracked file is new. Staged: from HEAD
     // to the index.
     side: z.enum(["unstaged", "staged"]),
+    // Whether to send a diff's hunks and contents though it would be collapsed.
+    expand: z.boolean().optional(),
   }),
   output: diff,
 });
@@ -57,9 +62,9 @@ export const groupRpc = defineRpc({
     // Changes whenever a file joins or leaves the group, or its diff, or why it can't be read,
     // changes.
     version: z.string(),
-    // The group's files, in the order changes.list lists them, each with its diff: the staged one
-    // for a staged file, the unstaged one for the others. A file whose diff can't be read, such as
-    // one git can't open, has why in its place.
+    // The group's files, in the order changes.list lists them, each with its diff, collapsed as
+    // diff.read collapses it: the staged one for a staged file, the unstaged one for the others. A
+    // file whose diff can't be read, such as one git can't open, has why in its place.
     files: z.array(
       z.union([
         diff.extend({ path: z.string() }),

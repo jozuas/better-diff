@@ -147,18 +147,20 @@ interface FileDiffProps {
   onApplied: () => Promise<void>;
 }
 
-// The file's diff, as opened from its group, under a bar that says which file it is.
+// The file's diff, as opened from its group, under a bar that says which file it is. A collapsed
+// diff shows its lines once asked to, until another file is opened.
 export function FileDiff({ directory, file, theme, onApplied }: FileDiffProps): ReactElement {
   const { group, path } = file;
   const { status, side } = groups[group];
   const readDiff = useRpc(diffRpc);
   const styles = useStyles(theme);
   const controls = useControls(directory, file, onApplied);
+  const [expand, setExpand] = useState(false);
 
   const diff = useQuery({
-    queryKey: [directory, "diff", side, path],
+    queryKey: [directory, "diff", side, path, expand],
     queryFn: async () => {
-      const read = await readDiff({ directory, path, side });
+      const read = await readDiff({ directory, path, side, expand });
 
       return read;
     },
@@ -170,7 +172,17 @@ export function FileDiff({ directory, file, theme, onApplied }: FileDiffProps): 
         <FileActions diff={diff.data} group={group} controls={controls} theme={theme} />
       </FileBar>
       <Queried query={diff} theme={theme}>
-        {(data) => <DiffBody diff={data} group={group} controls={controls} theme={theme} />}
+        {(data) => (
+          <DiffBody
+            diff={data}
+            group={group}
+            controls={controls}
+            onExpand={() => {
+              setExpand(true);
+            }}
+            theme={theme}
+          />
+        )}
       </Queried>
     </View>
   );

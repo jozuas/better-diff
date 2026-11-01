@@ -3,6 +3,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import { readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
+import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
 import { buildPatch, isRename, kindOf, parseDiff, reverse } from "./patch";
 import { versionOf } from "./version";
@@ -144,10 +145,18 @@ export async function readDiff({
   directory,
   path,
   side,
+  expand,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
   const changes = await changesOf(directory, path, side);
+  const diff = diffOf(changes);
 
-  return diffOf(changes);
+  if (expand === true) {
+    return diff;
+  }
+
+  const generated = await generatedPaths(directory, [path]);
+
+  return collapsed(diff, generated.has(path));
 }
 
 // The last apply to start.
