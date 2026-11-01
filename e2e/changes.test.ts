@@ -1,23 +1,7 @@
-import type { Locator, Page } from "@playwright/test";
-
 import { commitTenLines, move, tenLines } from "../test/renames";
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
-
-// A group's files in the sidebar, by the group's heading.
-function group(page: Page, heading: string): Locator {
-  return page.getByRole("list", { name: heading }).getByRole("button");
-}
-
-async function openFile(page: Page, heading: string, path: string): Promise<void> {
-  await group(page, heading)
-    .and(page.getByRole("button", { name: path, exact: true }))
-    .click();
-}
-
-function line(page: Page, text: string): Locator {
-  return page.getByText(text, { exact: true });
-}
+import { group, line, openFile } from "./panel";
 
 test("changed files are grouped as modified, untracked and staged files, with how many each has", async ({
   app,

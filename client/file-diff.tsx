@@ -1,20 +1,29 @@
-import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
+import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import { useRpc } from "@getpaseo/plugin/client";
-import { ScrollView } from "@getpaseo/plugin/client/ui";
-import { useQuery } from "@tanstack/react-query";
-import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { ScrollView, useToast } from "@getpaseo/plugin/client/ui";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import type { ReactElement, ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { diffRpc } from "../shared/diff";
+import { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
+import { ActionButtons } from "./action-buttons";
+import { fileActions, hunkActions, hunkLines } from "./actions";
+import type { Controls, Target } from "./actions";
+import { confirmation } from "./confirmation";
 import { groups } from "./groups";
-import type { OpenFile } from "./groups";
+import type { GroupName, OpenFile } from "./groups";
 import { labelOf } from "./labels";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { Queried } from "./queried";
 
 type Diff = RpcOutput<typeof diffRpc>;
+
+type Request = Target & Pick<RpcInput<typeof applyFileRpc>, "operation">;
+
+const staleMessage =
+  "The diff changed after it was shown, so nothing was done. It's been reloaded.";
 
 // Paseo's own monospace fonts.
 const monospace =
@@ -28,7 +37,7 @@ function useStyles(theme: PluginTheme) {
         fileBar: {
           flexDirection: "row",
           flexWrap: "wrap",
-          alignItems: "baseline",
+          alignItems: "center",
           gap: 8,
           paddingHorizontal: 12,
           paddingVertical: 6,
@@ -37,7 +46,12 @@ function useStyles(theme: PluginTheme) {
         status: { fontSize: 11, fontWeight: "700", color: theme.colors.accentForeground },
         barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.accentForeground },
         label: { padding: 16, color: theme.colors.foregroundMuted },
-        hunkBar: { height: 6, marginTop: 8, backgroundColor: theme.colors.accent, opacity: 0.4 },
+        hunkBar: { flexDirection: "row", marginTop: 8, paddingHorizontal: 12, paddingVertical: 3 },
+        hunkTint: {
+          ...StyleSheet.absoluteFillObject,
+          backgroundColor: theme.colors.accent,
+          opacity: 0.25,
+        },
         line: { flexDirection: "row" },
         // Under a line, tinting it as removed or added.
         tint: { ...StyleSheet.absoluteFillObject, opacity: 0.15 },
@@ -74,6 +88,55 @@ function useStyles(theme: PluginTheme) {
 
 type Styles = ReturnType<typeof useStyles>;
 
+// Runs the actions the diff's buttons ask for, once confirmed where they ask for it, one at a time.
+// After each, `onApplied` hears of it, and a refused one says why.
+function useControls(
+  directory: string,
+  file: OpenFile,
+  onApplied: (file: OpenFile) => Promise<void>,
+): Controls {
+  const applyFile = useRpc(applyFileRpc);
+  const applyLines = useRpc(applyLinesRpc);
+  const toast = useToast();
+  const [armed, setArmed] = useState<string>();
+  const confirm = useMemo(() => confirmation(setArmed), []);
+
+  const apply = useMutation({
+    mutationFn: async ({ lines, ...action }: Request) => {
+      const { path } = file;
+
+      const { status } = await (lines === undefined
+        ? applyFile({ directory, path, ...action })
+        : applyLines({ directory, path, ...action, lines }));
+
+      return status;
+    },
+    onSuccess: (status) => {
+      if (status === "stale") {
+        toast.show(staleMessage, { variant: "warning" });
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+    onSettled: async () => {
+      await onApplied(file);
+    },
+  });
+
+  useEffect(() => confirm.dispose, [confirm]);
+
+  return {
+    armed,
+    busy: apply.isPending,
+    press: (button, action, target) => {
+      confirm.press(button, action.confirmation !== undefined, () => {
+        apply.mutate({ operation: action.operation, ...target });
+      });
+    },
+  };
+}
+
 interface DiffLineProps {
   line: NumberedLine;
   styles: Styles;
@@ -106,13 +169,28 @@ function DiffLine({ line, styles }: DiffLineProps): ReactElement {
 
 interface HunkProps {
   hunk: Diff["hunks"][number];
+  index: number;
+  version: string;
+  group: GroupName;
+  controls: Controls;
   styles: Styles;
+  theme: PluginTheme;
 }
 
-function Hunk({ hunk, styles }: HunkProps): ReactElement {
+function Hunk({ hunk, index, version, group, controls, styles, theme }: HunkProps): ReactElement {
   return (
     <View>
-      <View style={styles.hunkBar} />
+      <View style={styles.hunkBar}>
+        <View style={styles.hunkTint} />
+        <ActionButtons
+          actions={hunkActions[group]}
+          bar={`${version}:hunk ${index}`}
+          target={{ version, lines: hunkLines(hunk.lines, index) }}
+          controls={controls}
+          color={theme.colors.foreground}
+          theme={theme}
+        />
+      </View>
       {numberLines(hunk).map((line) => (
         <DiffLine key={`${line.oldNumber},${line.newNumber}`} line={line} styles={styles} />
       ))}
@@ -122,10 +200,13 @@ function Hunk({ hunk, styles }: HunkProps): ReactElement {
 
 interface DiffBodyProps {
   diff: Diff;
+  group: GroupName;
+  controls: Controls;
   styles: Styles;
+  theme: PluginTheme;
 }
 
-function DiffBody({ diff, styles }: DiffBodyProps): ReactElement {
+function DiffBody({ diff, group, controls, styles, theme }: DiffBodyProps): ReactElement {
   const label = labelOf(diff);
 
   if (label !== undefined) {
@@ -134,10 +215,44 @@ function DiffBody({ diff, styles }: DiffBodyProps): ReactElement {
 
   return (
     <ScrollView>
-      {diff.hunks.map((hunk) => (
-        <Hunk key={`${hunk.oldStart},${hunk.newStart}`} hunk={hunk} styles={styles} />
+      {diff.hunks.map((hunk, index) => (
+        <Hunk
+          key={`${hunk.oldStart},${hunk.newStart}`}
+          hunk={hunk}
+          index={index}
+          version={diff.version}
+          group={group}
+          controls={controls}
+          styles={styles}
+          theme={theme}
+        />
       ))}
     </ScrollView>
+  );
+}
+
+interface FileActionsProps {
+  // Undefined until it's read.
+  diff: Diff | undefined;
+  group: GroupName;
+  controls: Controls;
+  theme: PluginTheme;
+}
+
+function FileActions({ diff, group, controls, theme }: FileActionsProps): ReactElement | null {
+  if (diff === undefined) {
+    return null;
+  }
+
+  return (
+    <ActionButtons
+      actions={fileActions[group]}
+      bar={`${diff.version}:file`}
+      target={{ version: diff.version }}
+      controls={controls}
+      color={theme.colors.accentForeground}
+      theme={theme}
+    />
   );
 }
 
@@ -146,14 +261,16 @@ interface FileBarProps {
   path: string;
   renamedFrom: string | undefined;
   styles: Styles;
+  children: ReactNode;
 }
 
-function FileBar({ status, path, renamedFrom, styles }: FileBarProps): ReactElement {
+function FileBar({ status, path, renamedFrom, styles, children }: FileBarProps): ReactElement {
   return (
     <View accessibilityRole="header" style={styles.fileBar}>
       <Text style={styles.status}>{status}</Text>
       {renamedFrom === undefined ? null : <Text style={styles.barPath}>{renamedFrom} →</Text>}
       <Text style={styles.barPath}>{path}</Text>
+      {children}
     </View>
   );
 }
@@ -162,13 +279,17 @@ interface FileDiffProps {
   directory: string;
   file: OpenFile;
   theme: PluginTheme;
+  // Hears of each action on the file, once it's done, refused or failed.
+  onApplied: (file: OpenFile) => Promise<void>;
 }
 
 // The file's diff, as opened from its group, under a bar that says which file it is.
-export function FileDiff({ directory, file: { group, path }, theme }: FileDiffProps): ReactElement {
+export function FileDiff({ directory, file, theme, onApplied }: FileDiffProps): ReactElement {
+  const { group, path } = file;
   const { status, side } = groups[group];
   const readDiff = useRpc(diffRpc);
   const styles = useStyles(theme);
+  const controls = useControls(directory, file, onApplied);
 
   const diff = useQuery({
     queryKey: [directory, "diff", side, path],
@@ -181,9 +302,13 @@ export function FileDiff({ directory, file: { group, path }, theme }: FileDiffPr
 
   return (
     <View style={styles.file}>
-      <FileBar status={status} path={path} renamedFrom={diff.data?.renamedFrom} styles={styles} />
+      <FileBar status={status} path={path} renamedFrom={diff.data?.renamedFrom} styles={styles}>
+        <FileActions diff={diff.data} group={group} controls={controls} theme={theme} />
+      </FileBar>
       <Queried query={diff} theme={theme}>
-        {(data) => <DiffBody diff={data} styles={styles} />}
+        {(data) => (
+          <DiffBody diff={data} group={group} controls={controls} styles={styles} theme={theme} />
+        )}
       </Queried>
     </View>
   );

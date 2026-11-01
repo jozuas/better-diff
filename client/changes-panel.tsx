@@ -2,7 +2,7 @@ import type { PluginTheme } from "@getpaseo/plugin";
 import type { PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useRpc, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading } from "@getpaseo/plugin/client/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -10,7 +10,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { changesRpc } from "../shared/changes";
 import { FileDiff } from "./file-diff";
 import { FileList } from "./file-list";
-import { sidebarGroups } from "./groups";
+import { openAfter, sidebarGroups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { onWindowFocus } from "./web";
@@ -33,9 +33,10 @@ interface ChangesProps {
 
 function Changes({ directory, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState<OpenFile>();
 
-  const changes = useQuery({
+  const changesQuery = queryOptions({
     queryKey: [directory, "changes"],
     queryFn: async () => {
       const listed = await listChanges({ directory });
@@ -43,6 +44,17 @@ function Changes({ directory, theme }: ChangesProps): ReactElement {
       return listed;
     },
   });
+
+  const changes = useQuery(changesQuery);
+
+  // Reads everything again after an action on the file, and moves on from it once it's left its
+  // group: past the hunk acted on, the next one is where it was.
+  async function moveOn(file: OpenFile): Promise<void> {
+    const before = queryClient.getQueryData(changesQuery.queryKey);
+
+    await queryClient.invalidateQueries({ queryKey: [directory] });
+    setOpen(openAfter(file, before, queryClient.getQueryData(changesQuery.queryKey)));
+  }
 
   const styles = useMemo(
     () =>
@@ -70,7 +82,13 @@ function Changes({ directory, theme }: ChangesProps): ReactElement {
         {open === undefined ? (
           <Text style={styles.hint}>Select a file to see its changes.</Text>
         ) : (
-          <FileDiff directory={directory} file={open} theme={theme} />
+          <FileDiff
+            key={`${open.group}:${open.path}`}
+            directory={directory}
+            file={open}
+            theme={theme}
+            onApplied={moveOn}
+          />
         )}
       </View>
     </View>
