@@ -1,3 +1,6 @@
+import { appendFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
@@ -50,7 +53,8 @@ export function writeVersion(repository: string, path: string, version: Buffer |
 
 // Commits each file's HEAD version, stages its index version and leaves its worktree version.
 export function setUp(repository: string, files: readonly File[], algorithm: string): void {
-  runGit(repository, ["config", "diff.algorithm", algorithm]);
+  // As `git config diff.algorithm` would, in a fraction of the time.
+  appendFileSync(join(repository, ".git", "config"), `[diff]\n\talgorithm = ${algorithm}\n`);
 
   for (const { path, versions } of files) {
     writeVersion(repository, path, versions.head);

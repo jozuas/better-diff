@@ -1,6 +1,3 @@
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
-
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
@@ -66,7 +63,7 @@ test.each(operations)(
   "%s file leaves alone a file whose diff has no changes, such as an ignored one",
   async (operation) => {
     await inRepository(async (repository) => {
-      writeFileSync(join(repository, ".git", "info", "exclude"), "a\n");
+      writeFile(repository, ".git/info/exclude", "a\n");
       writeFile(repository, "a", "a\n");
 
       const { version } = await readDiff({

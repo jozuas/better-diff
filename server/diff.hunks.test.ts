@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { canCoexist } from "../test/file-names";
-import { inRepository, runGit, timeout, worktreeFile } from "../test/repository";
+import { inCopyOf, inRepository, runGit, timeout, worktreeFile } from "../test/repository";
 import { diffAlgorithm, file, linesOf, operations, setUp, sides } from "../test/staging";
 import type { Diff, File, Operation, Side } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
@@ -56,9 +56,9 @@ test.each(operations)(
           const all = [acted, ...others];
 
           await inRepository(async (ours) => {
-            await inRepository(async (gits) => {
-              setUp(ours, all, algorithm);
-              setUp(gits, all, algorithm);
+            setUp(ours, all, algorithm);
+
+            await inCopyOf(ours, async (gits) => {
               intendToAdd(gits, acted, sides[operation]);
 
               const diff = await readDiff({

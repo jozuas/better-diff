@@ -1,4 +1,4 @@
-import { readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { readFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 
 import * as fc from "fast-check";
@@ -58,7 +58,7 @@ test.each([
 ])("diffs as git does by default, though the user's config asks for %s", async (_, key, value) => {
   await inRepository(async (repository) => {
     // Gives every file the diff driver whose textconv filter one case sets.
-    writeFileSync(join(repository, ".git", "info", "attributes"), "* diff=upper\n");
+    writeFile(repository, ".git/info/attributes", "* diff=upper\n");
     writeFile(repository, "é", "\nx\n");
     runGit(repository, ["add", "--all"]);
     writeFile(repository, "é", "\ny\n");
