@@ -11,8 +11,10 @@ const commandOptions = {
   // Git's own patch, which `git apply` takes back: not an external tool's or a textconv filter's,
   // without colour codes, with the a/ and b/ prefixes whatever diff.noprefix and
   // diff.mnemonicPrefix say, and with the context lines `git apply` needs to place each hunk
-  // whatever diff.context says.
+  // whatever diff.context says. A renamed file's two paths make one diff whatever diff.renames
+  // says, since git status, which finds the rename, follows status.renames first.
   diff: [
+    "--find-renames",
     "--no-ext-diff",
     "--no-textconv",
     "--no-color",

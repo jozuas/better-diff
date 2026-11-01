@@ -174,3 +174,40 @@ test.each(operations)("%s file: a file that became a symlink", async (operation)
     }).toStrictEqual(typeChanges[operation]);
   });
 });
+
+function commitRenamed(repository: string): void {
+  writeFile(repository, "a", "a\n");
+  runGit(repository, ["add", "--all"]);
+  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+  runGit(repository, ["mv", "a", "b"]);
+}
+
+test("unstage file: a staged rename, both of whose paths it unstages, and nothing else", async () => {
+  await inRepository(async (repository) => {
+    commitRenamed(repository);
+    writeFile(repository, "c", "c\n");
+    runGit(repository, ["add", "--all"]);
+
+    const { version } = await readDiff({ directory: repository, path: "b", side: "staged" });
+
+    await applyFile({ directory: repository, path: "b", operation: "unstage", version });
+
+    expect(runGit(repository, ["status", "--porcelain"])).toBe(" D a\nA  c\n?? b\n");
+  });
+});
+
+test.each(["stage", "discard"] as const)(
+  "%s file: the changes made to a file after its rename was staged",
+  async (operation) => {
+    await inRepository(async (repository) => {
+      commitRenamed(repository);
+      writeFile(repository, "b", "b\n");
+
+      const { version } = await readDiff({ directory: repository, path: "b", side: "unstaged" });
+
+      await applyFile({ directory: repository, path: "b", operation, version });
+
+      expect(runGit(repository, [...diffCommands.unstaged, "--", "b"])).toBe("");
+    });
+  },
+);

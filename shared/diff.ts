@@ -17,9 +17,9 @@ export const diffRpc = defineRpc({
     // date.
     version: z.string(),
     // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
-    // lines: none, a symlink's, a binary file's, a mode change on its own, or a file with merge
-    // conflicts. A file that became a symlink, or stopped being one, is a symlink's.
-    kind: z.enum(["text", "unchanged", "symlink", "binary", "mode", "unmerged"]),
+    // lines: none, a staged rename, a symlink's, a binary file's, a mode change on its own, or a
+    // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
+    kind: z.enum(["text", "unchanged", "renamed", "symlink", "binary", "mode", "unmerged"]),
     hunks: z.array(
       z.object({
         oldStart: index,

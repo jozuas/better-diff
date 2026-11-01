@@ -62,7 +62,7 @@ function headerOf(lines: readonly string[]): Header {
   };
 }
 
-type Kind = "text" | "unchanged" | "symlink" | "binary" | "mode" | "unmerged";
+type Kind = "text" | "unchanged" | "renamed" | "symlink" | "binary" | "mode" | "unmerged";
 
 function hasLine(lines: readonly string[], start: string): boolean {
   return lines.some((line) => line.startsWith(start));
@@ -89,6 +89,10 @@ export function kindOf(diff: Buffer): Kind {
 
   if (hasLine(lines, "diff --cc ") || hasLine(lines, "* Unmerged path ")) {
     return "unmerged";
+  }
+
+  if (hasLine(lines, "rename from ")) {
+    return "renamed";
   }
 
   if (isSymlink(lines)) {

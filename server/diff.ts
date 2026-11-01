@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
+import { readStatus } from "./changes";
 import { git } from "./git";
 import { buildPatch, kindOf, parseDiff, reverse } from "./patch";
 
@@ -27,6 +28,8 @@ const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"]
 
 interface Changes {
   diff: Buffer;
+  // What the diff covers: the file, and a renamed one's original path.
+  paths: string[];
   untracked: boolean;
 }
 
@@ -41,16 +44,27 @@ async function isUntracked(directory: string, path: string): Promise<boolean> {
   return listed.equals(Buffer.from(`${path}\0`));
 }
 
+// Where the file was renamed from in the index, if git status says it was.
+async function renamedFrom(directory: string, path: string): Promise<string | undefined> {
+  const entries = await readStatus(directory);
+
+  return entries.find((entry) => entry.path === path)?.renamedFrom;
+}
+
 // The file's changes on the side. `git diff` leaves out an untracked file, whose unstaged changes
 // are all of its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add.
+// A diff of a renamed file's two paths shows the rename, where one of either path shows a deletion
+// or a new file.
 async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
   const untracked = side === "unstaged" && (await isUntracked(directory, path));
+  const original = side === "staged" ? await renamedFrom(directory, path) : undefined;
+  const paths = original === undefined ? [path] : [original, path];
 
   const diff = untracked
     ? await git(directory, "diff", ["--no-index"], ["/dev/null", path])
-    : await git(directory, "diff", diffOptions[side], [path]);
+    : await git(directory, "diff", diffOptions[side], paths);
 
-  return { diff, untracked };
+  return { diff, paths, untracked };
 }
 
 export async function readDiff({
@@ -144,16 +158,17 @@ export async function applyLines({
 }
 
 // Stages, unstages or discards all of the file's changes, including those a patch can't make, such
-// as a binary file's or a mode change. Discarding an untracked file deletes it, which `git clean`
-// does without ever touching a tracked one. A diff with no changes leaves the file alone.
+// as a binary file's or a mode change, and a rename, both of whose paths it unstages. Discarding an
+// untracked file deletes it, which `git clean` does without ever touching a tracked one. A diff with
+// no changes leaves the file alone.
 export async function applyFile(action: Action): Promise<Status> {
-  const { directory, path, operation } = action;
+  const { directory, operation } = action;
 
-  const status = await applyInTurn(action, async ({ diff, untracked }) => {
+  const status = await applyInTurn(action, async ({ diff, paths, untracked }) => {
     const command = untracked && operation === "discard" ? "clean" : fileCommands[operation];
 
     if (diff.length > 0) {
-      await git(directory, command, [], [path]);
+      await git(directory, command, [], paths);
     }
   });
 
