@@ -20,24 +20,26 @@ function checkBrowsers(version: string): void {
 
 // A daemon of the tests' own, started fresh for each run, so nothing carries over from an earlier
 // run or from checks with the paseo-ui skill. Its home stays after the run, for its logs.
-export default function globalSetup(config: FullConfig): () => void {
+export default async function globalSetup(config: FullConfig): Promise<() => Promise<void>> {
   checkBrowsers(config.version);
 
   const home = join(gitDirectory, "paseo-e2e");
 
   process.env["PASEO_UI_HOME"] = home;
   // A run that was killed leaves its daemon running.
-  paseoUi(["stop"]);
+  await paseoUi(["stop"]);
   rmSync(home, { recursive: true, force: true });
+
+  const started = await paseoUi(["start"]);
 
   const { url, server } = z
     .object({ url: z.string(), server: z.string() })
-    .parse(/^url: (?<url>.+)\nserver: (?<server>.+)$/u.exec(paseoUi(["start"]).trim())?.groups);
+    .parse(/^url: (?<url>.+)\nserver: (?<server>.+)$/u.exec(started)?.groups);
 
   process.env["PASEO_UI_URL"] = url;
   process.env["PASEO_UI_SERVER"] = server;
 
-  return () => {
-    paseoUi(["stop"]);
+  return async () => {
+    await paseoUi(["stop"]);
   };
 }

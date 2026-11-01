@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 
+import type { Page } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import { z } from "zod";
 
@@ -9,15 +10,22 @@ import { paseoUi, pluginId, setting } from "./paseo";
 interface App {
   // One of the plugin's screens.
   openScreen: (id: string) => Promise<void>;
-  // Opens a directory as a workspace, shows it and returns its ID.
-  openWorkspace: (directory: string) => Promise<string>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
 interface Fixtures extends Record<"pageErrors" | "pluginLogs", void> {
   // A git repository in a temporary directory, removed after the test.
   repository: string;
+  // The ID of repository's workspace, which the page shows. Archived after the test, before
+  // repository is removed, so the daemon isn't left watching a directory that's gone.
+  workspace: string;
   app: App;
+}
+
+async function show(page: Page, path: string): Promise<void> {
+  // A fresh browser sent straight to a deep link lands on /open-project.
+  await page.goto("/");
+  await page.goto(`/h/${setting("PASEO_UI_SERVER")}/${path}`);
 }
 
 export const test = base.extend<Fixtures>({
@@ -29,34 +37,32 @@ export const test = base.extend<Fixtures>({
     await inRepository(provide);
   },
 
-  app: async ({ page }, provide) => {
-    async function open(path: string): Promise<void> {
-      // A fresh browser sent straight to a deep link lands on /open-project.
-      await page.goto("/");
-      await page.goto(`/h/${setting("PASEO_UI_SERVER")}/${path}`);
-    }
+  workspace: async ({ page, repository }, provide) => {
+    const created = await paseoUi([
+      "paseo",
+      "workspace",
+      "create",
+      "--isolation",
+      "local",
+      "--path",
+      repository,
+      "--json",
+    ]);
 
+    const { workspaceId } = z.object({ workspaceId: z.string() }).parse(JSON.parse(created));
+
+    try {
+      await show(page, `workspace/${workspaceId}`);
+      await provide(workspaceId);
+    } finally {
+      await paseoUi(["paseo", "workspace", "archive", workspaceId]);
+    }
+  },
+
+  app: async ({ page }, provide) => {
     await provide({
       openScreen: async (id) => {
-        await open(`plugin/${pluginId}/surface/${id}`);
-      },
-      openWorkspace: async (directory) => {
-        const created = paseoUi([
-          "paseo",
-          "workspace",
-          "create",
-          "--isolation",
-          "local",
-          "--path",
-          directory,
-          "--json",
-        ]);
-
-        const { workspaceId } = z.object({ workspaceId: z.string() }).parse(JSON.parse(created));
-
-        await open(`workspace/${workspaceId}`);
-
-        return workspaceId;
+        await show(page, `plugin/${pluginId}/surface/${id}`);
       },
     });
   },
@@ -71,7 +77,7 @@ export const test = base.extend<Fixtures>({
         // A file, since the report cuts text attachments short.
         const path = testInfo.outputPath("plugin-logs.txt");
 
-        writeFileSync(path, paseoUi(["paseo", "plugin", "logs", pluginId]));
+        writeFileSync(path, await paseoUi(["paseo", "plugin", "logs", pluginId]));
         await testInfo.attach("plugin logs", { path, contentType: "text/plain" });
       }
     },

@@ -8,7 +8,7 @@ test("the greeting screen asks the daemon for a greeting", async ({ app, page })
   await expect(page.getByText("Hello, Paseo!")).toBeVisible();
 });
 
-test("a repository opens as a workspace", async ({ app, page, repository }) => {
-  await app.openWorkspace(repository);
+test("a repository opens as a workspace", async ({ page, repository, workspace }) => {
+  await expect(page).toHaveURL((url) => url.pathname.endsWith(`/workspace/${workspace}`));
   await expect(page.getByRole("button", { name: basename(repository), exact: true })).toBeVisible();
 });
