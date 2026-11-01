@@ -221,6 +221,7 @@
         "index.{client,server}.{ts,tsx}",
         "*.config.*",
         "e2e/global-setup.ts",
+        "test/stryker-runner.ts",
         "tools/oxlint/local/index.ts"
       ],
       "rules": { "import/no-default-export": "off" }
