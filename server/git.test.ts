@@ -6,6 +6,8 @@ import { expect, test } from "vitest";
 
 import { canCoexist, filePath } from "../test/file-names";
 import {
+  commitAll,
+  deleteFile,
   inRepository,
   makeExecutable,
   runGit,
@@ -235,3 +237,43 @@ test.each<[string, (repository: string) => { index?: string }, string | undefine
     });
   },
 );
+
+test("selects a file, and none of the files in a directory that replaced it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    commitAll(repository);
+    deleteFile(repository, "a");
+    writeFile(repository, "a/x", "x\n");
+
+    const status = await git(repository, "status", ["--porcelain", "--untracked-files=all"], ["a"]);
+
+    expect(status.toString()).toBe(" D a\0");
+  });
+});
+
+test("adds a repository inside the repository, which git status names with a `/`", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "inner/a", "a\n");
+    runGit(join(repository, "inner"), ["init", "--quiet"]);
+    commitAll(join(repository, "inner"));
+
+    await git(repository, "add", [], ["inner/"]);
+
+    expect(runGit(repository, ["ls-files", "--stage"])).toMatch(/^160000 \w+ 0\tinner\n$/u);
+  });
+});
+
+test("selects exactly the files its paths name, though the user's environment says pathspecs are literal", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "");
+    process.env["GIT_LITERAL_PATHSPECS"] = "1";
+
+    try {
+      const status = await git(repository, "status", ["--porcelain"], ["a"]);
+
+      expect(status.toString()).toBe("?? a\0");
+    } finally {
+      delete process.env["GIT_LITERAL_PATHSPECS"];
+    }
+  });
+});

@@ -147,6 +147,10 @@ export function makeExecutable(repository: string, path: string): void {
   chmodSync(join(repository, path), 0o755);
 }
 
+export function makeUnreadable(repository: string, path: string): void {
+  chmodSync(join(repository, path), 0);
+}
+
 // Undefined if the worktree doesn't have the file.
 export function worktreeFile(repository: string, path: string): Buffer | undefined {
   const file = join(repository, path);

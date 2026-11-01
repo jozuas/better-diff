@@ -122,7 +122,7 @@ export function kindOf(diff: Buffer): Kind {
 }
 
 // Whether git printed one diff, which renames a file. Of a renamed file's two paths, it prints one
-// for each where it no longer pairs them, and one for each file in a directory a path names too.
+// for each where it no longer pairs them.
 export function isRename(diff: Buffer): boolean {
   const lines = diff.toString("latin1").split("\n");
 
@@ -139,8 +139,8 @@ interface Counts {
 }
 
 // The lines of a diff's hunks. A hunk ends where its start says, after as many lines of each version
-// as it counts, as `git apply` reads it. A line after the last hunk is the start of another diff, as
-// git prints for a directory.
+// as it counts, as `git apply` reads it. A line after the last hunk would be the start of another
+// diff, which git doesn't print for one file's path.
 function linesOf(diff: Buffer): Line[] {
   const read: Line[] = [];
   const lines = diff.toString("latin1").split("\n").slice(0, -1);

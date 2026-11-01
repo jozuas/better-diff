@@ -4,7 +4,7 @@ import * as fc from "fast-check";
 import type { applyGroupRpc } from "../shared/diff";
 import { fileVersions } from "./file-contents";
 import { canCoexist, filePath } from "./file-names";
-import { commitAll, deleteFile, runGit, worktreeFile, writeFile } from "./repository";
+import { makeUnreadable, runGit, worktreeFile, writeFile } from "./repository";
 import { file, writeVersion } from "./staging";
 import type { File } from "./staging";
 
@@ -78,16 +78,11 @@ export function writeLater(repository: string, { path, versions }: File): void {
   writeVersion(repository, path, versions.worktree);
 }
 
-// A staged file `a`, replaced by a staged directory, whose diff git reads together with the
-// directory's file `a/x`, beside another staged file `b`.
-export function replaceFileWithDirectory(repository: string): void {
+// An untracked file `a` git can't read, without permission to, beside an untracked file `b`.
+export function addUnreadableFile(repository: string): void {
   writeFile(repository, "a", "a\n");
+  makeUnreadable(repository, "a");
   writeFile(repository, "b", "b\n");
-  commitAll(repository);
-  deleteFile(repository, "a");
-  writeFile(repository, "a/x", "x\n");
-  writeFile(repository, "b", "c\n");
-  runGit(repository, ["add", "--all"]);
 }
 
 export interface RepositoryState {

@@ -3,7 +3,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { applyGroupRpc } from "../shared/diff";
-import { files, groupActions, replaceFileWithDirectory, repositoryState } from "../test/groups";
+import { files, groupActions, addUnreadableFile, repositoryState } from "../test/groups";
 import type { GroupAction, RepositoryState } from "../test/groups";
 import { commitTenLines, move } from "../test/renames";
 import { inCopyOf, inRepository, runGit, timeout, writeFile } from "../test/repository";
@@ -142,18 +142,18 @@ test.each(
   });
 });
 
-test("unstage all staged files: leaves one whose diff can't be read as it is", async () => {
+test("stage all untracked files: leaves one whose diff can't be read as it is", async () => {
   await inRepository(async (repository) => {
-    replaceFileWithDirectory(repository);
+    addUnreadableFile(repository);
 
-    const { version } = await readGroup({ directory: repository, group: "staged" });
+    const { version } = await readGroup({ directory: repository, group: "untracked" });
 
     await expect(
-      applyGroup({ directory: repository, group: "staged", operation: "unstage", version }),
+      applyGroup({ directory: repository, group: "untracked", operation: "stage", version }),
     ).resolves.toStrictEqual({ status: "applied" });
 
     expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all", "-z"])).toBe(
-      "D  a\0 M b\0?? a/x\0",
+      "A  b\0?? a\0",
     );
   });
 });

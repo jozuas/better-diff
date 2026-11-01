@@ -38,6 +38,16 @@ const commandOptions = {
 // have would be more than a process can start with.
 const readsPaths = new Set<keyof typeof commandOptions>(["add", "reset", "restore", "rm"]);
 
+// The pathspecs that name exactly the file at the path: never a pattern, such as `*` or `:!x`, and
+// never the files in a directory of the same name, which git takes the path to name too, as where a
+// directory has replaced the file. A path ending in `/`, as git status names a repository inside
+// the repository, names the directory.
+function pathspecsOf(path: string): string[] {
+  return path.endsWith("/")
+    ? [`:(literal)${path}`]
+    : [`:(literal)${path}`, `:(exclude,literal)${path}/`];
+}
+
 interface Extras {
   // What the command reads, such as the patch `git apply` applies. A command that reads its paths
   // reads them in its place.
@@ -55,6 +65,9 @@ export async function git(
   { input = new Uint8Array(), index }: Extras = {},
 ): Promise<Buffer> {
   const pathsOnInput = readsPaths.has(command);
+  // `git diff --no-index` diffs files, which its paths name as they are.
+  const noIndex = options.includes("--no-index");
+  const pathspecs = noIndex ? paths : paths.flatMap(pathspecsOf);
 
   const child = spawnProcess(
     "git",
@@ -66,8 +79,6 @@ export async function git(
       "diff.suppressBlankEmpty=false",
       // The repository's hooks, such as post-index-change, are for its own index.
       ...(index === undefined ? [] : ["-c", "core.hooksPath=/dev/null"]),
-      // A path names a file, never a pattern such as `*` or `:!x`.
-      "--literal-pathspecs",
       // Reading doesn't refresh the index, so it never holds the index lock while an agent's own
       // git command needs it.
       "--no-optional-locks",
@@ -76,15 +87,16 @@ export async function git(
       ...options,
       ...(pathsOnInput
         ? ["--pathspec-from-file=-", "--pathspec-file-nul", "--"]
-        : ["--", ...paths]),
+        : ["--", ...pathspecs]),
     ],
     {
       cwd: directory,
       // Stryker disable next-line StringLiteral: spawn pipes the streams anyway. "pipe" picks the overload whose type says so.
       stdio: "pipe",
       // Node leaves out a variable that's undefined: without an index of its own, git uses the
-      // repository's.
-      env: { ...process.env, GIT_INDEX_FILE: index },
+      // repository's, and it reads the pathspecs' `:(literal)` and `:(exclude)` whatever the user's
+      // environment says.
+      env: { ...process.env, GIT_INDEX_FILE: index, GIT_LITERAL_PATHSPECS: undefined },
     },
   );
 
@@ -101,12 +113,14 @@ export async function git(
 
   // A command that fails before reading all its input closes it, and its exit code says it failed.
   child.stdin.on("error", () => {});
-  child.stdin.end(pathsOnInput ? Buffer.from(paths.map((path) => `${path}\0`).join("")) : input);
+  child.stdin.end(
+    pathsOnInput ? Buffer.from(pathspecs.map((pathspec) => `${pathspec}\0`).join("")) : input,
+  );
   await once(child, "close");
 
   // `git diff --no-index` exits with 1 when the files differ, as --exit-code makes `git diff`, and
   // when a file is gone, which leaves the diff empty.
-  const differs = options.includes("--no-index") && child.exitCode === 1;
+  const differs = noIndex && child.exitCode === 1;
 
   if (child.exitCode !== 0 && !differs) {
     throw new Error(`git ${command} failed: ${Buffer.concat(stderr).toString()}`);

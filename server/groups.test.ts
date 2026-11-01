@@ -8,7 +8,7 @@ import {
   files,
   filesAndLater,
   groupActions,
-  replaceFileWithDirectory,
+  addUnreadableFile,
   repositoryState,
   writeLater,
 } from "../test/groups";
@@ -82,19 +82,19 @@ test("reads a group of more files than it reads at once", async () => {
 
 test("reads the other files of a group with one whose diff can't be read, which has why", async () => {
   await inRepository(async (repository) => {
-    replaceFileWithDirectory(repository);
+    addUnreadableFile(repository);
 
-    const answer = await readGroup({ directory: repository, group: "staged" });
+    const answer = await readGroup({ directory: repository, group: "untracked" });
     const { files: read } = answer;
 
     expect(groupRpc.output.parse(answer)).toStrictEqual(answer);
-    expect(read).toStrictEqual(await eachFile(repository, "staged"));
+    expect(read).toStrictEqual(await eachFile(repository, "untracked"));
 
-    expect(read.map(({ path }) => path)).toStrictEqual(["a", "a/x", "b"]);
+    expect(read.map(({ path }) => path)).toStrictEqual(["a", "b"]);
 
     expect(read[0]).toStrictEqual({
       path: "a",
-      error: "Error: git printed more than one diff for the path.",
+      error: 'Error: git diff failed: error: open("a"): Permission denied\nfatal: cannot hash a\n',
     });
   });
 });

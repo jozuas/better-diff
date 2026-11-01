@@ -224,3 +224,22 @@ test.each(operations)("%s file: a file that became a symlink", async (operation)
     }).toStrictEqual(typeChanges[operation]);
   });
 });
+
+test("stage file: stages a deleted file, without the files of a directory that replaced it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    commitAll(repository);
+    deleteFile(repository, "a");
+    writeFile(repository, "a/x", "x\n");
+
+    const { version } = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await expect(
+      applyFile({ directory: repository, path: "a", operation: "stage", version }),
+    ).resolves.toStrictEqual({ status: "applied" });
+
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all", "-z"])).toBe(
+      "D  a\0?? a/x\0",
+    );
+  });
+});

@@ -10,7 +10,7 @@ test("rejects a hunk line with no prefix, as git prints a blank one with diff.su
   );
 });
 
-test("rejects a diff that goes on past where its hunk's counts end, as git prints for each file in a directory", () => {
+test("rejects a diff that goes on past where its hunk's counts end, as another diff after it would", () => {
   const diff = Buffer.from(
     "diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,2 +1 @@\n-a\n-b\n+c\ndiff --git a/b b/b\n",
   );

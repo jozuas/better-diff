@@ -246,8 +246,7 @@ test("reads a moved file as new, where git won't add it to diff it as renamed", 
   });
 });
 
-// A path names the files in a directory too, so git diffs `a/b` along with the rename.
-test("reads a staged rename as a new file, where a directory takes the path it was renamed from", async () => {
+test("reads a staged rename, where a directory takes the path it was renamed from, without the directory's file", async () => {
   await inRepository(async (repository) => {
     commitTenLines(repository);
     runGit(repository, ["mv", "a", "b"]);
@@ -256,6 +255,6 @@ test("reads a staged rename as a new file, where a directory takes the path it w
 
     const diff = await readDiff({ directory: repository, path: "b", side: "staged" });
 
-    expect(diff).toMatchObject({ kind: "text", renamedFrom: undefined, hunks: [{ oldStart: 0 }] });
+    expect(diff).toMatchObject({ kind: "renamed", renamedFrom: "a", hunks: [] });
   });
 });

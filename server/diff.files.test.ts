@@ -28,16 +28,20 @@ function diffOf(repository: string, side: Side): string {
   return runGit(repository, [...diffCommands[side], "--", "a"]);
 }
 
-test("refuses a path whose diff has more than one part, as a directory's has", async () => {
+test("reads a staged file replaced by a staged directory as deleted, without the directory's file", async () => {
   await inRepository(async (repository) => {
-    writeFile(repository, "d/a", "a\n");
-    writeFile(repository, "d/b", "a\n");
+    writeFile(repository, "a", "a\n");
+    commitAll(repository);
+    deleteFile(repository, "a");
+    writeFile(repository, "a/x", "x\n");
     runGit(repository, ["add", "--all"]);
-    writeFile(repository, "d/a", "b\n");
-    writeFile(repository, "d/b", "b\n");
 
-    await expect(readDiff({ directory: repository, path: "d", side: "unstaged" })).rejects.toThrow(
-      "git printed more than one diff for the path.",
+    const replaced = await readDiff({ directory: repository, path: "a", side: "staged" });
+
+    runGit(repository, ["rm", "--cached", "--quiet", "--", "a/x"]);
+
+    expect(replaced).toStrictEqual(
+      await readDiff({ directory: repository, path: "a", side: "staged" }),
     );
   });
 });
