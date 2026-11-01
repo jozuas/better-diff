@@ -4,7 +4,7 @@ import { useRpc, useTabState, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
@@ -22,15 +22,16 @@ import { fittingWidth, onWindowFocus } from "./web";
 // What the panel keeps of each tab across reloads.
 const tabState = z.object({ fileListWidth: z.number() });
 
-// Reads again all the panel shows of the directory whenever the window regains focus, as on
-// switching back from an editor.
-function useRefreshOnFocus(directory: string): void {
-  const queryClient = useQueryClient();
+// Calls the latest `refresh` whenever the window regains focus, as on switching back from an
+// editor.
+function useRefreshOnFocus(refresh: () => Promise<void>): void {
+  const latest = useRef(refresh);
 
-  useEffect(
-    () => onWindowFocus(() => void queryClient.invalidateQueries({ queryKey: [directory] })),
-    [queryClient, directory],
-  );
+  useEffect(() => {
+    latest.current = refresh;
+  });
+
+  useEffect(() => onWindowFocus(() => void latest.current()), []);
 }
 
 // The file list's width, as its separator is dragged, or fit to what the list with the id shows,
@@ -82,13 +83,16 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   const fileList = useId();
   const { width, onLayout, onResize, onResized, onFit } = useFileListWidth(tab, fileList);
 
-  // Reads everything again after an action on the file, and moves on from it once it's left its
-  // group: past the hunk acted on, the next one is where it was.
-  async function moveOn(file: OpenFile): Promise<void> {
+  // Reads everything again, and moves on from the open file once its group no longer lists it, as
+  // after an action on it: past a hunk acted on, the next one is where it was.
+  async function refresh(): Promise<void> {
     const before = queryClient.getQueryData(changesQuery.queryKey);
 
     await queryClient.invalidateQueries({ queryKey: [directory] });
-    setOpen(openAfter(file, before, queryClient.getQueryData(changesQuery.queryKey)));
+
+    const after = queryClient.getQueryData(changesQuery.queryKey);
+
+    setOpen((shown) => openAfter(shown, before, after));
   }
 
   const styles = useMemo(
@@ -101,7 +105,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     [theme],
   );
 
-  useRefreshOnFocus(directory);
+  useRefreshOnFocus(refresh);
 
   return (
     <View style={styles.panel} onLayout={onLayout}>
@@ -128,7 +132,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
             directory={directory}
             file={open}
             theme={theme}
-            onApplied={moveOn}
+            onApplied={refresh}
           />
         )}
       </View>

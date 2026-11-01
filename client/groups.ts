@@ -60,16 +60,21 @@ export function isOpen(open: OpenFile | undefined, group: GroupName, path: strin
   return open?.group === group && open.path === path;
 }
 
-// The file to show after an action on the open one, from the lists of changes before and after it:
-// the open file while its group still lists it. Otherwise the next file in the group's list before
-// the action that it still lists, or else the closest one before it, or else the first one it lists
-// now. None if it lists none, and the open file without both lists.
+// The file to show once the changes are listed again, as after an action, from the lists before
+// and after: the open file while its group still lists it. Otherwise the next file in the group's
+// list before that it still lists, or else the closest one before it, or else the first one it lists
+// now. None if it lists none, or none was open, and the open file without both lists.
 export function openAfter(
-  open: OpenFile,
+  open: OpenFile | undefined,
   before: Changes | undefined,
   after?: Changes,
 ): OpenFile | undefined {
-  if (before === undefined || after === undefined || after[open.group].includes(open.path)) {
+  if (
+    open === undefined ||
+    before === undefined ||
+    after === undefined ||
+    after[open.group].includes(open.path)
+  ) {
     return open;
   }
 

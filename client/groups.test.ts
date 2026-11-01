@@ -95,6 +95,10 @@ test("opens no file once the group lists none, whatever the others list", () => 
   ).toBeUndefined();
 });
 
+test("opens no file when none was open", () => {
+  expect(openAfter(undefined, modified("a"), modified("a", "b"))).toBeUndefined();
+});
+
 test("stays on the open file without the list of changes from before or after the action", () => {
   const open: OpenFile = { group: "modified", path: "a" };
 

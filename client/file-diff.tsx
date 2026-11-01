@@ -50,11 +50,7 @@ type Styles = ReturnType<typeof useStyles>;
 // Runs the actions the diff's buttons ask for, once confirmed where they ask for it, one at a time.
 // After each, the page's selection is cleared, since what it selected may be gone, `onApplied`
 // hears of it, and a refused one says why.
-function useControls(
-  directory: string,
-  file: OpenFile,
-  onApplied: (file: OpenFile) => Promise<void>,
-): Controls {
+function useControls(directory: string, file: OpenFile, onApplied: () => Promise<void>): Controls {
   const applyFile = useRpc(applyFileRpc);
   const applyLines = useRpc(applyLinesRpc);
   const toast = useToast();
@@ -81,7 +77,7 @@ function useControls(
     },
     onSettled: async () => {
       clearSelection();
-      await onApplied(file);
+      await onApplied();
     },
   });
 
@@ -148,7 +144,7 @@ interface FileDiffProps {
   file: OpenFile;
   theme: PluginTheme;
   // Hears of each action on the file, once it's done, refused or failed.
-  onApplied: (file: OpenFile) => Promise<void>;
+  onApplied: () => Promise<void>;
 }
 
 // The file's diff, as opened from its group, under a bar that says which file it is.

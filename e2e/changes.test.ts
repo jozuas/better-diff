@@ -99,7 +99,11 @@ test("changes made while the window was in the background show once it regains f
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["new.txt"]);
 });
 
-test('a file with no changes shows "No changes"', async ({ app, page, repository }) => {
+test('once the open file\'s changes are gone and no file has any, the view closes it and says "No changes"', async ({
+  app,
+  page,
+  repository,
+}) => {
   writeFile(repository, "a.txt", "one\n");
   commitAll(repository);
   writeFile(repository, "a.txt", "two\n");
@@ -109,10 +113,34 @@ test('a file with no changes shows "No changes"', async ({ app, page, repository
 
   await expect(line(page, "two")).toBeVisible();
 
-  runGit(repository, ["add", "a.txt"]);
+  commitAll(repository);
   await app.focus();
 
   await expect(page.getByText("No changes", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "MODIFIED a.txt" })).toBeHidden();
+});
+
+test("once the open file leaves its group, the view moves on to the next file in it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "one\n");
+  writeFile(repository, "b.txt", "one\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "two\n");
+  writeFile(repository, "b.txt", "next\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+
+  await expect(line(page, "two")).toBeVisible();
+
+  runGit(repository, ["checkout", "--", "a.txt"]);
+  await app.focus();
+
+  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
+  await expect(line(page, "next")).toBeVisible();
 });
 
 test('a binary file shows "Binary file" instead of its diff', async ({ app, page, repository }) => {
