@@ -108,6 +108,11 @@ export async function inCopyOf(
   });
 }
 
+export function commitAll(repository: string): void {
+  runGit(repository, ["add", "--all"]);
+  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+}
+
 export function writeFile(repository: string, path: string, content: string | Uint8Array): void {
   const file = join(repository, path);
 

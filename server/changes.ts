@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto";
-import { copyFile, stat, unlink, utimes } from "node:fs/promises";
-import { resolve } from "node:path";
+import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
@@ -72,9 +72,10 @@ function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
 
 // Runs `act` with a copy of the index in which the files are intent-to-add, as `git add -N` would
 // make them in the index itself: git then diffs them as new files, and pairs one with a deleted
-// file as a rename. The copy sits beside the index, and goes once `act` is done. It keeps the
-// index's modification time, by which git tells that a file changed as the index was written may
-// look unchanged.
+// file as a rename. The copy sits in a temporary directory, not the repository, where one left by a
+// process that was stopped would stay, and goes once `act` is done. It keeps the index's
+// modification time, by which git tells that a file changed as the index was written may look
+// unchanged. A file outside a sparse checkout is added too.
 export async function withIntentToAdd<T>(
   directory: string,
   paths: readonly string[],
@@ -84,18 +85,20 @@ export async function withIntentToAdd<T>(
   const output = await git(directory, "rev-parse", ["--git-path", "index"]);
   const printed = output.toString();
   const index = resolve(directory, printed.slice(0, printed.indexOf("\n")));
-  const copy = `${index}.better-diff-${randomUUID()}`;
-
-  const { atime, mtime } = await stat(index);
-
-  await copyFile(index, copy);
-  await utimes(copy, atime, mtime);
+  // Stryker disable next-line StringLiteral: the name only tells a person what the directory is for.
+  const copies = await mkdtemp(join(tmpdir(), "better-diff-index-"));
+  const copy = join(copies, "index");
 
   try {
+    const { atime, mtime } = await stat(index);
+
+    await copyFile(index, copy);
+    await utimes(copy, atime, mtime);
+
     await git(
       directory,
       "add",
-      ["--intent-to-add", "--pathspec-from-file=-", "--pathspec-file-nul"],
+      ["--intent-to-add", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
       [],
       { input: Buffer.from(paths.map((path) => `${path}\0`).join("")), index: copy },
     );
@@ -104,16 +107,24 @@ export async function withIntentToAdd<T>(
 
     return result;
   } finally {
-    await unlink(copy);
+    await rm(copies, { recursive: true });
   }
 }
 
-async function statusOf(directory: string, index?: string): Promise<Entry[]> {
+interface Status {
+  // What git status prints.
+  output: string;
+  entries: Entry[];
+}
+
+async function statusOf(directory: string, index?: string): Promise<Status> {
   const status = await git(directory, "status", ["--porcelain=v2", "--untracked-files=all"], [], {
     index,
   });
 
-  return [...entriesOf(status.toString().split("\0").values())];
+  const output = status.toString();
+
+  return { output, entries: [...entriesOf(output.split("\0").values())] };
 }
 
 function pathsOf(entries: readonly Entry[], isListed: (entry: Entry) => boolean): string[] {
@@ -126,10 +137,7 @@ function pathsOf(entries: readonly Entry[], isListed: (entry: Entry) => boolean)
 // submodule, and a file added intent-to-add before can be paired with another deleted file. A file
 // deleted from the index but not the worktree, which git lists twice, as deleted and as untracked,
 // is left out and stays untracked, though git would pair it too.
-async function renamesOf(
-  directory: string,
-  entries: readonly Entry[],
-): Promise<Map<string, string>> {
+async function pairsOf(directory: string, entries: readonly Entry[]): Promise<Map<string, string>> {
   const tracked = new Set(pathsOf(entries, (entry) => !entry.untracked));
 
   const untracked = new Set(
@@ -137,7 +145,7 @@ async function renamesOf(
   );
 
   const paired = await withIntentToAdd(directory, [...untracked], async (index) => {
-    const status = await statusOf(directory, index);
+    const { entries: status } = await statusOf(directory, index);
 
     return status;
   });
@@ -163,15 +171,52 @@ async function renamesOf(
   return renames;
 }
 
+// What the renames found in a repository depend on: what git status says, and the size and times of
+// each file new in the worktree, which change with its content.
+async function sourcesOf(directory: string, { output, entries }: Status): Promise<string> {
+  const files = await Promise.all(
+    pathsOf(entries, (entry) => entry.untracked || entry.intentToAdd).map(async (path) => {
+      const { ino, size, mtimeMs, ctimeMs } = await lstat(join(directory, path));
+
+      return [ino, size, mtimeMs, ctimeMs];
+    }),
+  );
+
+  return JSON.stringify([output, files]);
+}
+
+// The renames last found in each repository, and what they were found from.
+const found = new Map<string, { sources: string; renames: Map<string, string> }>();
+
+// The renames git status finds with the untracked files intent-to-add, found again only once what
+// they depend on changes: finding them hashes each untracked file, and runs a filter such as Git
+// LFS's on it.
+async function renamesOf(directory: string, status: Status): Promise<Map<string, string>> {
+  const sources = await sourcesOf(directory, status);
+  const last = found.get(directory);
+
+  if (last?.sources === sources) {
+    return last.renames;
+  }
+
+  const renames = await pairsOf(directory, status.entries);
+
+  found.set(directory, { sources, renames });
+
+  return renames;
+}
+
 // git status pairs a file deleted from the worktree with a new one as a rename, as it does in the
 // index, but only where the new one is in the index. So with a file deleted, it's asked again with
 // the untracked files intent-to-add: those it pairs are modified, as renamed, and the files they're
-// paired with no longer are.
+// paired with no longer are. Where that fails, as where a file is gone by then, or git won't have
+// its path in the index, what git status said first stands.
 export async function readStatus(directory: string): Promise<Entry[]> {
-  const entries = await statusOf(directory);
+  const status = await statusOf(directory);
+  const { entries } = status;
 
   const renames = entries.some(({ deleted }) => deleted)
-    ? await renamesOf(directory, entries)
+    ? await renamesOf(directory, status).catch(() => new Map<string, string>())
     : new Map<string, string>();
 
   const originals = new Set(renames.values());

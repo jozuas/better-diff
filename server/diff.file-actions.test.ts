@@ -1,7 +1,9 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import { commitTenLines, move, tenLines } from "../test/renames";
 import {
+  commitAll,
   deleteFile,
   inRepository,
   runGit,
@@ -142,9 +144,6 @@ test("discard file deletes an untracked file, though the user's config says git 
   });
 });
 
-// Ten lines, so changing one leaves the file similar enough to its original for a rename or copy.
-const tenLines = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n";
-
 // Each writes a file `b` the worktree adds, renames or copies, beside a committed file `a`, with
 // what git status says once `b` is added intent-to-add and discarded: `git restore` leaves such a
 // file, and `git clean` won't delete it.
@@ -160,21 +159,13 @@ const intentToAdd: [string, (repository: string) => void, string][] = [
     "a file deleted from the index",
     (repository) => {
       writeFile(repository, "b", "b\n");
-      runGit(repository, ["add", "--all"]);
-      runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+      commitAll(repository);
       runGit(repository, ["rm", "--cached", "--quiet", "--", "b"]);
       writeFile(repository, "b", "c\n");
     },
     "D  b\n",
   ],
-  [
-    "a file moved",
-    (repository) => {
-      deleteFile(repository, "a");
-      writeFile(repository, "b", tenLines);
-    },
-    "",
-  ],
+  ["a file moved", move, ""],
   [
     "a copy",
     (repository) => {
@@ -190,9 +181,7 @@ test.each(intentToAdd)(
   "discard file deletes a file added intent-to-add: %s",
   async (_, write, status) => {
     await inRepository(async (repository) => {
-      writeFile(repository, "a", tenLines);
-      runGit(repository, ["add", "--all"]);
-      runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+      commitTenLines(repository);
       write(repository);
       runGit(repository, ["add", "--intent-to-add", "--", "b"]);
 
@@ -217,8 +206,7 @@ const typeChanges: Record<Operation, Record<Side, string>> = {
 test.each(operations)("%s file: a file that became a symlink", async (operation) => {
   await inRepository(async (repository) => {
     writeFile(repository, "a", "a\n");
-    runGit(repository, ["add", "--all"]);
-    runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+    commitAll(repository);
     deleteFile(repository, "a");
     writeSymlink(repository, "a", "b");
     runGit(repository, ["add", "--all"]);

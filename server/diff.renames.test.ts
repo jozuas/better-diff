@@ -1,27 +1,10 @@
 import { expect, test } from "vitest";
 
 import { diffRpc } from "../shared/diff";
-import { deleteFile, inRepository, runGit, writeFile } from "../test/repository";
+import { commitTenLines, move, tenLines } from "../test/renames";
+import { commitAll, inRepository, runGit, writeFile } from "../test/repository";
 import type { Side } from "../test/staging";
 import { readDiff } from "./diff";
-
-function commitAll(repository: string): void {
-  runGit(repository, ["add", "--all"]);
-  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
-}
-
-// Ten lines, so changing one leaves the file similar enough to its original for a rename.
-const tenLines = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n";
-
-function commitTenLines(repository: string): void {
-  writeFile(repository, "a", tenLines);
-  commitAll(repository);
-}
-
-function move(repository: string): void {
-  deleteFile(repository, "a");
-  writeFile(repository, "b", tenLines);
-}
 
 // Each renames `a` to `b` on the side, with no other change.
 const unchangedRenames: [Side, string, (repository: string) => void][] = [

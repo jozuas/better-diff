@@ -1,6 +1,13 @@
 import { expect, test } from "vitest";
 
-import { deleteFile, inRepository, makeExecutable, runGit, writeFile } from "../test/repository";
+import {
+  commitAll,
+  deleteFile,
+  inRepository,
+  makeExecutable,
+  runGit,
+  writeFile,
+} from "../test/repository";
 import { diffCommands, linesOf, operations, setUp, sides } from "../test/staging";
 import type { Operation, Side } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
@@ -91,8 +98,7 @@ test.each(deletions)(
     await inRepository(async (repository) => {
       writeFile(repository, "a", "a\n");
       makeExecutable(repository, "a");
-      runGit(repository, ["add", "--all"]);
-      runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+      commitAll(repository);
       deleteIt(repository);
 
       await applyAll(repository, operation);

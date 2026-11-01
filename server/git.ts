@@ -56,6 +56,8 @@ export async function git(
       // An empty unchanged line in a diff keeps its leading space.
       "-c",
       "diff.suppressBlankEmpty=false",
+      // The repository's hooks, such as post-index-change, are for its own index.
+      ...(index === undefined ? [] : ["-c", "core.hooksPath=/dev/null"]),
       // A path names a file, never a pattern such as `*` or `:!x`.
       "--literal-pathspecs",
       // Reading doesn't refresh the index, so it never holds the index lock while an agent's own

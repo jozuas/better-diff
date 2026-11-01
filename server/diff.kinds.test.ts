@@ -1,7 +1,14 @@
 import { expect, test } from "vitest";
 
 import { diffRpc } from "../shared/diff";
-import { deleteFile, inRepository, runGit, writeFile, writeSymlink } from "../test/repository";
+import {
+  commitAll,
+  deleteFile,
+  inRepository,
+  runGit,
+  writeFile,
+  writeSymlink,
+} from "../test/repository";
 import { setUp } from "../test/staging";
 import type { Side } from "../test/staging";
 import { readDiff } from "./diff";
@@ -59,11 +66,6 @@ test.each([
     expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
   });
 });
-
-function commitAll(repository: string): void {
-  runGit(repository, ["add", "--all"]);
-  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
-}
 
 function commit(repository: string, content: string): void {
   writeFile(repository, "a", content);

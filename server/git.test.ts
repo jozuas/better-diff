@@ -5,7 +5,14 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { canCoexist, filePath } from "../test/file-names";
-import { inRepository, runGit, timeout, writeFile } from "../test/repository";
+import {
+  inRepository,
+  makeExecutable,
+  runGit,
+  timeout,
+  worktreeFile,
+  writeFile,
+} from "../test/repository";
 import { git } from "./git";
 
 // With no paths, a command covers every file, so at least one is selected.
@@ -201,3 +208,30 @@ test("runs a command with the index file it's given, in place of the repository'
     expect(status.toString()).toBe("?? a\0");
   });
 });
+
+// git runs post-index-change whenever a command writes an index.
+test.each<[string, (repository: string) => { index?: string }, string | undefined]>([
+  ["its own index", () => ({}), "hook\n"],
+  [
+    "another index file",
+    (repository) => ({ index: join(repository, ".git", "other-index") }),
+    undefined,
+  ],
+])(
+  "runs the repository's hooks only for a command on its own index: %s",
+  async (_, extrasIn, hooked) => {
+    await inRepository(async (repository) => {
+      writeFile(
+        repository,
+        ".git/hooks/post-index-change",
+        "#!/bin/sh\necho hook >> .git/hooked\n",
+      );
+      makeExecutable(repository, ".git/hooks/post-index-change");
+      writeFile(repository, "a", "a\n");
+
+      await git(repository, "add", [], ["a"], extrasIn(repository));
+
+      expect(worktreeFile(repository, ".git/hooked")?.toString()).toBe(hooked);
+    });
+  },
+);

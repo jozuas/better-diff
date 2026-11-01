@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import type { FileVersions } from "../test/file-contents";
 import { fileVersions } from "../test/file-contents";
 import { canCoexist, filePath } from "../test/file-names";
-import { inRepository, runGit, timeout, writeFile } from "../test/repository";
+import { commitAll, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import {
   diffAlgorithm,
   diffCommands,
@@ -201,8 +201,7 @@ test.each(operations)(
 
 function commitRenamed(repository: string): void {
   writeFile(repository, "a", "a\n");
-  runGit(repository, ["add", "--all"]);
-  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+  commitAll(repository);
   runGit(repository, ["mv", "a", "b"]);
 }
 
