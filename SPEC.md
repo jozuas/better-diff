@@ -37,7 +37,10 @@ Replicates Sublime Merge as much as possible:
 ### Special file states
 
 - No changes: show "No changes".
-- Binary file, symlink, renamed file: show "Binary file", "Symlink" or "Renamed" instead of the diff.
+- Binary file, symlink: show "Binary file" or "Symlink" instead of the diff.
+- Renamed file: the file bar shows the path it was renamed from, and the diff shows its other changes, or "Renamed" if it has none. Its lines can be staged, unstaged and discarded like any file's; staging one stages the rename too.
+- A file moved without git (a plain `mv`) is a renamed file in MODIFIED, as `git status` shows it once the new file is added with `--intent-to-add`, not a deleted file plus an untracked one. Discarding it deletes the new file and restores the old one.
+- A file added with `git add --intent-to-add` is in MODIFIED. Discarding it deletes it, as deleting an untracked file does, and restores the file it was renamed from, if any.
 - Deleted file: show the whole old file as removed lines.
 
 ### File sidebar (left)
@@ -74,7 +77,6 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - Refreshing: the agent edits the worktree while you stage. When does the view refresh, does it keep scroll position and selection, and what happens when an action targets a diff that has changed since it was shown? (Suggestion: fail and refresh, never apply a stale patch.)
 - Right-click: plugins can't use DOM events directly. If right-click can't be caught, use a "⋯" button on each file and group instead?
 - Untracked files: can hunks and lines also be discarded, or only staged?
-- Renamed files with edits: show "Renamed" only, or the diff as well? Also, a plain `mv` shows up as a deleted file plus an untracked one until both are staged.
 - Mode-only changes (e.g. `chmod +x`) and huge or generated files such as lockfiles: a plain label like "Binary file", or collapsed?
 - Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)

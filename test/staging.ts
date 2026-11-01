@@ -88,8 +88,24 @@ export const targets: Record<Operation, keyof FileState> = {
   discard: "worktree",
 };
 
+// The version whose file each operation puts in its target.
+export const sources: Record<Operation, keyof FileVersions> = {
+  stage: "worktree",
+  unstage: "head",
+  discard: "index",
+};
+
 export function fileState(repository: string, path: string): FileState {
   return { index: indexFile(repository, path), worktree: worktreeFile(repository, path) };
+}
+
+export function selectedLines(
+  diff: Diff,
+  isSelected: (hunk: number, line: number) => boolean,
+): Selection {
+  return diff.hunks.flatMap(({ lines }, hunk) =>
+    lines.flatMap((_, line) => (isSelected(hunk, line) ? [{ hunk, line }] : [])),
+  );
 }
 
 // Every line of the hunks `isPicked` picks, by its index.

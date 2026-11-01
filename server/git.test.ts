@@ -117,13 +117,9 @@ test.each(["fix", "error"])(
       runGit(repository, ["add", "--all"]);
       runGit(repository, ["config", "apply.whitespace", action]);
 
-      await git(
-        repository,
-        "apply",
-        ["--cached"],
-        [],
-        Buffer.from("diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1,2 @@\n a\n+b \r\n"),
-      );
+      await git(repository, "apply", ["--cached"], [], {
+        input: Buffer.from("diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1 +1,2 @@\n a\n+b \r\n"),
+      });
 
       expect(runGit(repository, ["show", ":a"])).toBe("a\nb \r\n");
     });
@@ -133,7 +129,7 @@ test.each(["fix", "error"])(
 test("rejects with what git says when it fails", async () => {
   await inRepository(async (repository) => {
     await expect(
-      git(repository, "apply", ["--cached"], [], Buffer.from("not a patch\n")),
+      git(repository, "apply", ["--cached"], [], { input: Buffer.from("not a patch\n") }),
     ).rejects.toThrow("git apply failed: error: No valid patches in input");
   });
 });
@@ -151,7 +147,7 @@ test("ignores input a command doesn't read", async () => {
     process.on("uncaughtException", record);
 
     try {
-      const status = await git(repository, "status", [], [], Buffer.alloc(2 ** 24));
+      const status = await git(repository, "status", [], [], { input: Buffer.alloc(2 ** 24) });
 
       expect(status.toString()).toBe("");
     } finally {
@@ -190,5 +186,18 @@ test.each([
     writeFile(repository, "a", "b\n");
 
     await expect(git(repository, "diff", options, paths)).rejects.toThrow("git diff failed");
+  });
+});
+
+test("runs a command with the index file it's given, in place of the repository's own", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    runGit(repository, ["add", "--all"]);
+
+    const status = await git(repository, "status", ["--porcelain"], [], {
+      index: join(repository, "other-index"),
+    });
+
+    expect(status.toString()).toBe("?? a\0");
   });
 });

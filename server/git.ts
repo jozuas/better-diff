@@ -7,7 +7,6 @@ import { spawnProcess } from "@getpaseo/plugin/server";
 const commandOptions = {
   // Paths NUL-terminated and never quoted.
   status: ["-z"],
-  "ls-files": ["-z"],
   // Git's own patch, which `git apply` takes back: not an external tool's or a textconv filter's,
   // without colour codes, with the a/ and b/ prefixes whatever diff.noprefix and
   // diff.mnemonicPrefix say, and with the context lines `git apply` needs to place each hunk
@@ -26,20 +25,28 @@ const commandOptions = {
   // such as each line of a CRLF file.
   apply: ["--whitespace=nowarn"],
   add: [],
+  "rev-parse": [],
   reset: [],
   restore: [],
+  rm: [],
   // Deletes whatever clean.requireForce says.
   clean: ["--force"],
 };
 
+interface Extras {
+  // What the command reads, such as the patch `git apply` applies.
+  input?: Uint8Array;
+  // An index file the command uses in place of the repository's own.
+  index?: string | undefined;
+}
+
 // Runs a git command and returns what it prints, as bytes: files, and so diffs, needn't be UTF-8.
-// `input` is what the command reads, such as the patch `git apply` applies.
 export async function git(
   directory: string,
   command: keyof typeof commandOptions,
   options: readonly string[],
   paths: readonly string[] = [],
-  input: Uint8Array = new Uint8Array(),
+  { input = new Uint8Array(), index }: Extras = {},
 ): Promise<Buffer> {
   const child = spawnProcess(
     "git",
@@ -60,8 +67,14 @@ export async function git(
       "--",
       ...paths,
     ],
-    // Stryker disable next-line StringLiteral: spawn pipes the streams anyway. "pipe" picks the overload whose type says so.
-    { cwd: directory, stdio: "pipe" },
+    {
+      cwd: directory,
+      // Stryker disable next-line StringLiteral: spawn pipes the streams anyway. "pipe" picks the overload whose type says so.
+      stdio: "pipe",
+      // Node leaves out a variable that's undefined: without an index of its own, git uses the
+      // repository's.
+      env: { ...process.env, GIT_INDEX_FILE: index },
+    },
   );
 
   const stdout: Buffer[] = [];

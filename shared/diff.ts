@@ -17,9 +17,13 @@ export const diffRpc = defineRpc({
     // date.
     version: z.string(),
     // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
-    // lines: none, a staged rename, a symlink's, a binary file's, a mode change on its own, or a
+    // lines: none, a rename on its own, a symlink's, a binary file's, a mode change on its own, or a
     // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
+    // A renamed file with other changes is what they are.
     kind: z.enum(["text", "unchanged", "renamed", "symlink", "binary", "mode", "unmerged"]),
+    // The path the file had before the side's changes, if they rename it. On the unstaged side,
+    // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
+    renamedFrom: z.string().optional(),
     hunks: z.array(
       z.object({
         oldStart: index,

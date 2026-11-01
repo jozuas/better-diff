@@ -13,9 +13,17 @@ interface Hunk {
 }
 
 // The lines of git's header a patch needs, which name the file in each version and say whether the
-// patch creates or deletes it. A patch leaves out the others, such as a mode change: like Magit and
-// `git add -p`, line and hunk actions leave that alone.
-const fields = ["diff --git", "new file mode", "deleted file mode", "---", "+++"] as const;
+// patch creates, deletes or renames it. A patch leaves out the others, such as a mode change: like
+// Magit and `git add -p`, line and hunk actions leave that alone.
+const fields = [
+  "diff --git",
+  "new file mode",
+  "deleted file mode",
+  "rename from",
+  "rename to",
+  "---",
+  "+++",
+] as const;
 
 type Field = (typeof fields)[number];
 
@@ -57,6 +65,8 @@ function headerOf(lines: readonly string[]): Header {
     "diff --git": field(lines, "diff --git"),
     "new file mode": field(lines, "new file mode"),
     "deleted file mode": field(lines, "deleted file mode"),
+    "rename from": field(lines, "rename from"),
+    "rename to": field(lines, "rename to"),
     "---": field(lines, "---"),
     "+++": field(lines, "+++"),
   };
@@ -79,7 +89,8 @@ function isSymlink(lines: readonly string[]): boolean {
 }
 
 // What a file's diff is, from the lines git prints instead of hunks. For a file with merge
-// conflicts, git prints a diff against each side of the merge, or only names the file.
+// conflicts, git prints a diff against each side of the merge, or only names the file. A renamed
+// file is whatever its other changes are, and renamed only without any.
 export function kindOf(diff: Buffer): Kind {
   const lines = diff.toString("latin1").split("\n");
 
@@ -91,10 +102,6 @@ export function kindOf(diff: Buffer): Kind {
     return "unmerged";
   }
 
-  if (hasLine(lines, "rename from ")) {
-    return "renamed";
-  }
-
   if (isSymlink(lines)) {
     return "symlink";
   }
@@ -103,9 +110,15 @@ export function kindOf(diff: Buffer): Kind {
     return "binary";
   }
 
-  return hasLine(lines, "old mode ") && !lines.some((line) => hunkStart.test(line))
-    ? "mode"
-    : "text";
+  if (lines.some((line) => hunkStart.test(line))) {
+    return "text";
+  }
+
+  if (hasLine(lines, "old mode ")) {
+    return "mode";
+  }
+
+  return hasLine(lines, "rename from ") ? "renamed" : "text";
 }
 
 // A hunk ends where its start says, after as many lines of each version as it counts, as
@@ -167,14 +180,19 @@ export function parseDiff(diff: Buffer): FileDiff {
 }
 
 // The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.
+// A file it renames keeps its new path, where the reverse undoes its other changes: for a diff
+// whose `diff --git` line names two paths without saying it renames, `git apply` takes them from
+// the --- and +++ lines.
 export function reverse({ header, hunks }: FileDiff): FileDiff {
   return {
     header: {
       "diff --git": header["diff --git"],
       "new file mode": header["deleted file mode"],
       "deleted file mode": header["new file mode"],
+      "rename from": undefined,
+      "rename to": undefined,
       "---": header["+++"],
-      "+++": header["---"],
+      "+++": header["rename to"] === undefined ? header["---"] : header["+++"],
     },
     hunks: hunks.map(({ oldStart, newStart, lines }) => ({
       oldStart: newStart,

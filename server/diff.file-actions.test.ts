@@ -1,7 +1,6 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import type { FileVersions } from "../test/file-contents";
 import {
   deleteFile,
   inRepository,
@@ -11,16 +10,18 @@ import {
   writeFile,
   writeSymlink,
 } from "../test/repository";
-import { diffCommands, file, fileState, operations, setUp, sides, targets } from "../test/staging";
+import {
+  diffCommands,
+  file,
+  fileState,
+  operations,
+  setUp,
+  sides,
+  sources,
+  targets,
+} from "../test/staging";
 import type { File, Operation, Side } from "../test/staging";
 import { applyFile, readDiff } from "./diff";
-
-// The version whose file each operation puts in its target.
-const sources: Record<Operation, keyof FileVersions> = {
-  stage: "worktree",
-  unstage: "head",
-  discard: "index",
-};
 
 // A binary file, which git shows no lines for.
 const binary: File = {
@@ -141,6 +142,70 @@ test("discard file deletes an untracked file, though the user's config says git 
   });
 });
 
+// Ten lines, so changing one leaves the file similar enough to its original for a rename or copy.
+const tenLines = "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n";
+
+// Each writes a file `b` the worktree adds, renames or copies, beside a committed file `a`, with
+// what git status says once `b` is added intent-to-add and discarded: `git restore` leaves such a
+// file, and `git clean` won't delete it.
+const intentToAdd: [string, (repository: string) => void, string][] = [
+  [
+    "a new file",
+    (repository) => {
+      writeFile(repository, "b", "b\n");
+    },
+    "",
+  ],
+  [
+    "a file deleted from the index",
+    (repository) => {
+      writeFile(repository, "b", "b\n");
+      runGit(repository, ["add", "--all"]);
+      runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+      runGit(repository, ["rm", "--cached", "--quiet", "--", "b"]);
+      writeFile(repository, "b", "c\n");
+    },
+    "D  b\n",
+  ],
+  [
+    "a file moved",
+    (repository) => {
+      deleteFile(repository, "a");
+      writeFile(repository, "b", tenLines);
+    },
+    "",
+  ],
+  [
+    "a copy",
+    (repository) => {
+      runGit(repository, ["config", "status.renames", "copies"]);
+      writeFile(repository, "b", tenLines);
+      writeFile(repository, "a", tenLines.replace("5", "five"));
+    },
+    " M a\n",
+  ],
+];
+
+test.each(intentToAdd)(
+  "discard file deletes a file added intent-to-add: %s",
+  async (_, write, status) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, "a", tenLines);
+      runGit(repository, ["add", "--all"]);
+      runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
+      write(repository);
+      runGit(repository, ["add", "--intent-to-add", "--", "b"]);
+
+      const { version } = await readDiff({ directory: repository, path: "b", side: "unstaged" });
+
+      await expect(
+        applyFile({ directory: repository, path: "b", operation: "discard", version }),
+      ).resolves.toStrictEqual({ status: "applied" });
+      expect(runGit(repository, ["status", "--porcelain"])).toBe(status);
+    });
+  },
+);
+
 // Each side's diff, by the status git gives it, once each operation acts on a file that became a
 // symlink in the index only.
 const typeChanges: Record<Operation, Record<Side, string>> = {
@@ -171,40 +236,3 @@ test.each(operations)("%s file: a file that became a symlink", async (operation)
     }).toStrictEqual(typeChanges[operation]);
   });
 });
-
-function commitRenamed(repository: string): void {
-  writeFile(repository, "a", "a\n");
-  runGit(repository, ["add", "--all"]);
-  runGit(repository, ["commit", "--quiet", "--message", "Commit"]);
-  runGit(repository, ["mv", "a", "b"]);
-}
-
-test("unstage file: a staged rename, both of whose paths it unstages, and nothing else", async () => {
-  await inRepository(async (repository) => {
-    commitRenamed(repository);
-    writeFile(repository, "c", "c\n");
-    runGit(repository, ["add", "--all"]);
-
-    const { version } = await readDiff({ directory: repository, path: "b", side: "staged" });
-
-    await applyFile({ directory: repository, path: "b", operation: "unstage", version });
-
-    expect(runGit(repository, ["status", "--porcelain"])).toBe(" D a\nA  c\n?? b\n");
-  });
-});
-
-test.each(["stage", "discard"] as const)(
-  "%s file: the changes made to a file after its rename was staged",
-  async (operation) => {
-    await inRepository(async (repository) => {
-      commitRenamed(repository);
-      writeFile(repository, "b", "b\n");
-
-      const { version } = await readDiff({ directory: repository, path: "b", side: "unstaged" });
-
-      await applyFile({ directory: repository, path: "b", operation, version });
-
-      expect(runGit(repository, [...diffCommands.unstaged, "--", "b"])).toBe("");
-    });
-  },
-);

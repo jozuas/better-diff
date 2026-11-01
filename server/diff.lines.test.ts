@@ -9,11 +9,12 @@ import {
   file,
   fileState,
   operations,
+  selectedLines,
   setUp,
   sides,
   targets,
 } from "../test/staging";
-import type { Diff, File, Operation, Selection, Side } from "../test/staging";
+import type { Diff, File, Operation, Side } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
 
 type Line = Diff["hunks"][number]["lines"][number];
@@ -134,12 +135,6 @@ function asShown(lines: readonly DiffLine[]): Line[] {
 
 function changedLines(diff: Diff): Line[] {
   return diff.hunks.flatMap(({ lines }) => lines.filter(({ kind }) => kind !== "context"));
-}
-
-function selectedLines(diff: Diff, isSelected: (hunk: number, line: number) => boolean): Selection {
-  return diff.hunks.flatMap(({ lines }, hunk) =>
-    lines.flatMap((_, line) => (isSelected(hunk, line) ? [{ hunk, line }] : [])),
-  );
 }
 
 // Whether each changed line, in order, is selected.

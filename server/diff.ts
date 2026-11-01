@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
-import { readStatus } from "./changes";
+import { readStatus, withIntentToAdd } from "./changes";
 import { git } from "./git";
 import { buildPatch, kindOf, parseDiff, reverse } from "./patch";
 
@@ -28,43 +28,57 @@ const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"]
 
 interface Changes {
   diff: Buffer;
+  renamedFrom: string | undefined;
   // What the diff covers: the file, and a renamed one's original path.
   paths: string[];
+  // Whether the file isn't in the index, or is there intent-to-add.
   untracked: boolean;
+  intentToAdd: boolean;
 }
 
 function versionOf(diff: Buffer): string {
   return createHash("sha256").update(diff).digest("hex");
 }
 
-// Not in the index, nor ignored, as `git status` lists it. A directory's path lists its files.
-async function isUntracked(directory: string, path: string): Promise<boolean> {
-  const listed = await git(directory, "ls-files", ["--others", "--exclude-standard"], [path]);
+// An untracked file's unstaged diff. `git diff` leaves the file out, though its changes are all of
+// its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add. One git
+// status pairs with a deleted file is diffed intent-to-add, as git status found the rename.
+async function untrackedDiff(
+  directory: string,
+  path: string,
+  renamedFrom: string | undefined,
+): Promise<Buffer> {
+  if (renamedFrom === undefined) {
+    const diff = await git(directory, "diff", ["--no-index"], ["/dev/null", path]);
 
-  return listed.equals(Buffer.from(`${path}\0`));
+    return diff;
+  }
+
+  const renamed = await withIntentToAdd(directory, [path], async (index) => {
+    const diff = await git(directory, "diff", [], [renamedFrom, path], { index });
+
+    return diff;
+  });
+
+  return renamed;
 }
 
-// Where the file was renamed from in the index, if git status says it was.
-async function renamedFrom(directory: string, path: string): Promise<string | undefined> {
-  const entries = await readStatus(directory);
-
-  return entries.find((entry) => entry.path === path)?.renamedFrom;
-}
-
-// The file's changes on the side. `git diff` leaves out an untracked file, whose unstaged changes
-// are all of its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add.
-// A diff of a renamed file's two paths shows the rename, where one of either path shows a deletion
-// or a new file.
+// The file's changes on the side, as git status lists the file. A diff of a renamed file's two
+// paths shows the rename, where one of either path shows a deletion or a new file. A file listed
+// twice, as deleted from the index and untracked, isn't renamed.
 async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
-  const untracked = side === "unstaged" && (await isUntracked(directory, path));
-  const original = side === "staged" ? await renamedFrom(directory, path) : undefined;
-  const paths = original === undefined ? [path] : [original, path];
+  const entries = await readStatus(directory);
+  const listed = entries.filter((entry) => entry.path === path);
+  const renamedFrom = listed[0]?.renamedFrom[side];
+  const paths = renamedFrom === undefined ? [path] : [renamedFrom, path];
+  const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
+  const intentToAdd = listed[0]?.intentToAdd === true;
 
   const diff = untracked
-    ? await git(directory, "diff", ["--no-index"], ["/dev/null", path])
+    ? await untrackedDiff(directory, path, renamedFrom)
     : await git(directory, "diff", diffOptions[side], paths);
 
-  return { diff, paths, untracked };
+  return { diff, renamedFrom, paths, untracked, intentToAdd };
 }
 
 export async function readDiff({
@@ -72,11 +86,12 @@ export async function readDiff({
   path,
   side,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
-  const { diff } = await changesOf(directory, path, side);
+  const { diff, renamedFrom } = await changesOf(directory, path, side);
 
   return {
     version: versionOf(diff),
     kind: kindOf(diff),
+    renamedFrom,
     hunks: parseDiff(diff).hunks.map(({ oldStart, newStart, lines }) => ({
       oldStart,
       newStart,
@@ -150,25 +165,48 @@ export async function applyLines({
     );
 
     if (patch.length > 0) {
-      await git(directory, "apply", operation === "discard" ? [] : ["--cached"], [], patch);
+      await git(directory, "apply", operation === "discard" ? [] : ["--cached"], [], {
+        input: patch,
+      });
     }
   });
 
   return status;
 }
 
-// Stages, unstages or discards all of the file's changes, including those a patch can't make, such
-// as a binary file's or a mode change, and a rename, both of whose paths it unstages. Discarding an
-// untracked file deletes it, which `git clean` does without ever touching a tracked one. A diff with
-// no changes leaves the file alone.
-export async function applyFile(action: Action): Promise<Status> {
-  const { directory, operation } = action;
+// Readies a file new in the worktree for `git clean`, which deletes it without ever touching a
+// tracked file: brings back the file it was renamed from, and takes it out of the index if it's
+// there intent-to-add.
+async function readyToDelete(
+  directory: string,
+  path: string,
+  { renamedFrom, intentToAdd }: Changes,
+): Promise<void> {
+  if (renamedFrom !== undefined) {
+    await git(directory, "restore", [], [renamedFrom]);
+  }
 
-  const status = await applyInTurn(action, async ({ diff, paths, untracked }) => {
-    const command = untracked && operation === "discard" ? "clean" : fileCommands[operation];
+  if (intentToAdd) {
+    await git(directory, "rm", ["--cached"], [path]);
+  }
+}
+
+// Stages, unstages or discards all of the file's changes, including those a patch can't make, such
+// as a binary file's or a mode change, and a rename, both of whose paths it acts on. Discarding an
+// untracked file, or one intent-to-add, deletes it. A diff with no changes leaves the file alone.
+export async function applyFile(action: Action): Promise<Status> {
+  const { directory, path, operation } = action;
+
+  const status = await applyInTurn(action, async (changes) => {
+    const { diff, paths, untracked, intentToAdd } = changes;
+    const deletes = (untracked || intentToAdd) && operation === "discard";
 
     if (diff.length > 0) {
-      await git(directory, command, [], paths);
+      if (deletes) {
+        await readyToDelete(directory, path, changes);
+      }
+
+      await git(directory, deletes ? "clean" : fileCommands[operation], [], paths);
     }
   });
 
