@@ -33,20 +33,17 @@ const test = base.extend<Record<"defaultSizes", void>>({
 
 changesSettings();
 
-test("Better Diff's page in Paseo's settings names its font sizes as Better Diff's, and says Paseo's own sizes don't change Better Diff, while its zoom does", async ({
+test("Better Diff's page in Paseo's settings says, by its font sizes' heading, that Paseo's own sizes don't change Better Diff, while zooming Paseo does", async ({
   app,
   page,
 }) => {
   await app.openSettings();
+  await page.getByRole("button", { name: "About Font sizes", exact: true }).hover();
 
-  await expect(page.getByText("Better Diff font sizes", { exact: true })).toBeVisible();
-  await expect(page.getByText("The lines of Better Diff's diffs, and their numbers")).toBeVisible();
-  await expect(
-    page.getByText("The rest of Better Diff's panel: its file list, bars and buttons"),
-  ).toBeVisible();
   await expect(
     page.getByText(
-      "Better Diff only. Paseo's own sizes, under Appearance, don't change Better Diff, and ⌘+ and ⌘− zoom all of Paseo, Better Diff included.",
+      "Paseo's own font sizes, under Appearance, don't change Better Diff. Zooming Paseo in or out scales Better Diff with it",
+      { exact: true },
     ),
   ).toBeVisible();
 });

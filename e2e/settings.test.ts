@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { commitAll, writeFile } from "../test/repository";
 import { changesSettings, expect, test as base } from "./fixtures";
-import { button, line, openFile } from "./panel";
+import { line, openFile } from "./panel";
 
 // Picks the diff font size on Better Diff's page in Paseo's settings, and waits for it to be saved.
 async function pickDiffFontSize(page: Page, size: number): Promise<void> {
@@ -118,19 +118,17 @@ function lineLength(page: Page): Locator {
 }
 
 function refusal(page: Page): Locator {
-  return page.getByText("Enter a whole number from 20 to 400.", { exact: true });
+  return page.getByText("Enter a whole number from 20 to 400", { exact: true });
 }
 
-// Types the line length on Better Diff's page in Paseo's settings, which says it isn't one it takes
-// and doesn't let it be saved.
+// Types the line length on Better Diff's page in Paseo's settings, which says it isn't one it takes.
 async function refuses(page: Page, typed: string): Promise<void> {
   await lineLength(page).fill(typed);
 
   await expect(refusal(page)).toBeVisible();
-  await expect(button(page, "Save")).toBeDisabled();
 }
 
-test("a line length that isn't a whole number from 20 to 400 says so, and can't be saved", async ({
+test("a line length that isn't a whole number from 20 to 400 says so, and isn't saved", async ({
   app,
   page,
 }) => {
@@ -143,12 +141,26 @@ test("a line length that isn't a whole number from 20 to 400 says so, and can't 
   await refuses(page, "80.5");
   await refuses(page, "eighty");
   await refuses(page, "");
-  await lineLength(page).fill("100");
-
-  await expect(refusal(page)).toHaveCount(0);
-  await expect(button(page, "Save")).toBeEnabled();
-
-  await app.openSettings();
+  await app.reopenSettings();
 
   await expect(lineLength(page)).toHaveValue("80");
+});
+
+test("a line length typed is saved once typing pauses, for every client of the host", async ({
+  app,
+  page,
+}) => {
+  await app.saveLineLength(80);
+
+  const settings = page.url();
+
+  await lineLength(page).fill("100");
+
+  const other = await page.context().newPage();
+
+  await expect(async () => {
+    await other.goto(settings);
+    expect(await lineLength(other).inputValue()).toBe("100");
+  }).toPass();
+  await other.close();
 });

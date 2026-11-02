@@ -1,8 +1,6 @@
-import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
 import {
   Loading,
-  SettingsAction,
   SettingsCard,
   SettingsInput,
   SettingsSection,
@@ -10,10 +8,10 @@ import {
   useToast,
 } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useState } from "react";
-import { Text } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { fontSizeRanges, lineLengthRange, viewSettings } from "../shared/settings";
+import { debounced } from "./debounce";
 import { sizeOptions } from "./fonts";
 import { lineLengthOf, viewSettingsOf } from "./settings";
 
@@ -27,10 +25,13 @@ const diffStyles = [
 const diffSizes = sizeOptions(fontSizeRanges.diff);
 const panelSizes = sizeOptions(fontSizeRanges.panel);
 
+// How long typing pauses before the line length typed is saved.
+const typingPause = 500;
+
 // Paseo's own sizes, though its code size says it sizes diffs, don't reach Better Diff, and its zoom
 // reaches everything.
-const sizesNote =
-  "Better Diff only. Paseo's own sizes, under Appearance, don't change Better Diff, and ⌘+ and ⌘− zoom all of Paseo, Better Diff included.";
+const sizesInfo =
+  "Paseo's own font sizes, under Appearance, don't change Better Diff. Zooming Paseo in or out scales Better Diff with it";
 
 type Settings = NonNullable<ReturnType<typeof viewSettingsOf>>;
 
@@ -38,40 +39,51 @@ interface LineLengthProps {
   settings: Settings;
 }
 
-// The line length as it's typed, saved once it's one the settings take.
+// The line length as it's typed, saved once typing pauses on one the settings take, or at once on
+// leaving the page.
 function LineLength({ settings }: LineLengthProps): ReactElement {
   const [typed, setTyped] = useState(String(settings.values.lineLength));
-  const lineLength = lineLengthOf(typed);
+  // The settings as they are when typing pauses, which a save changes, rather than as they were
+  // when the length was typed.
+  const latest = useRef(settings);
+  const save = useMemo(() => debounced(typingPause), []);
+
+  useEffect(() => {
+    latest.current = settings;
+  });
+
+  useEffect(() => save.flush, [save]);
 
   return (
-    <>
-      <SettingsInput
-        label="Line length"
-        hint="Auto shows a diff side by side once lines this many characters long, in the diff font size, fit on each side. Set it to the length your code wraps at."
-        initialValue={typed}
-        onChangeText={setTyped}
-        error={
+    <SettingsInput
+      label="Line length"
+      hint="Characters per line Auto needs room for on each side. Set it to where your code wraps"
+      initialValue={typed}
+      onChangeText={(text) => {
+        const lineLength = lineLengthOf(text);
+
+        setTyped(text);
+        save.set(
           lineLength === undefined
-            ? `Enter a whole number from ${lineLengthRange.min} to ${lineLengthRange.max}.`
-            : null
-        }
-      />
-      <SettingsAction
-        label="Save the line length"
-        actionLabel="Save"
-        disabled={lineLength === undefined || lineLength === settings.values.lineLength}
-        onPress={() => {
-          if (lineLength !== undefined) {
-            void settings.change({ lineLength });
-          }
-        }}
-      />
-    </>
+            ? undefined
+            : () => {
+                if (lineLength !== latest.current.values.lineLength) {
+                  void latest.current.change({ lineLength });
+                }
+              },
+        );
+      }}
+      error={
+        lineLengthOf(typed) === undefined
+          ? `Enter a whole number from ${lineLengthRange.min} to ${lineLengthRange.max}`
+          : null
+      }
+    />
   );
 }
 
 // Better Diff's page in Paseo's settings.
-export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
+export function SettingsScreen(): ReactElement {
   const toast = useToast();
   const settings = viewSettingsOf(useSettings(viewSettings), toast.error);
 
@@ -81,11 +93,11 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
 
   return (
     <>
-      <SettingsSection title="Diff">
+      <SettingsSection title="Layout">
         <SettingsCard>
           <SettingsSelect
             label="Diff style"
-            hint="Removed lines above the added ones, or beside them. Auto puts them beside them where lines of the line length fit."
+            hint="Auto shows diffs side by side where lines of the line length fit, and inline where they don't"
             value={settings.values.diffStyle}
             options={diffStyles}
             onValueChange={(diffStyle) => {
@@ -95,11 +107,11 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
           <LineLength settings={settings} />
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title="Better Diff font sizes">
+      <SettingsSection title="Font sizes" info={sizesInfo}>
         <SettingsCard>
           <SettingsSelect
             label="Diff font size"
-            hint="The lines of Better Diff's diffs, and their numbers"
+            hint="Used for diff lines and line numbers"
             value={String(settings.values.diffFontSize)}
             options={diffSizes}
             onValueChange={(size) => {
@@ -108,7 +120,7 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
           />
           <SettingsSelect
             label="Panel font size"
-            hint="The rest of Better Diff's panel: its file list, bars and buttons"
+            hint="Used for the file list, bars, and buttons"
             value={String(settings.values.panelFontSize)}
             options={panelSizes}
             onValueChange={(size) => {
@@ -116,7 +128,6 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
             }}
           />
         </SettingsCard>
-        <Text style={{ fontSize: 12, color: theme.colors.foregroundMuted }}>{sizesNote}</Text>
       </SettingsSection>
     </>
   );

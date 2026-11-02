@@ -16,6 +16,9 @@ interface App {
   openPanel: () => Promise<void>;
   // Opens the plugin's page in Paseo's settings, from its menu in the list of the host's plugins.
   openSettings: () => Promise<void>;
+  // Leaves the plugin's page in Paseo's settings for the list of the host's plugins, within the app,
+  // and opens it again from there.
+  reopenSettings: () => Promise<void>;
   // Picks the style on the plugin's page in Paseo's settings, whichever an earlier test on the
   // daemon left picked.
   pickDiffStyle: (style: DiffStyle) => Promise<void>;
@@ -79,10 +82,19 @@ export const test = base.extend<Fixtures>({
   },
 
   app: async ({ daemon, page, workspace }, provide) => {
-    async function openSettings(): Promise<void> {
-      await show(page, `/settings/hosts/${addressOf(daemon).server}/plugins`);
+    async function openFromPlugins(): Promise<void> {
       await page.getByRole("button", { name: `Actions for ${pluginId}`, exact: true }).click();
       await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+    }
+
+    async function openSettings(): Promise<void> {
+      await show(page, `/settings/hosts/${addressOf(daemon).server}/plugins`);
+      await openFromPlugins();
+    }
+
+    async function reopenSettings(): Promise<void> {
+      await page.getByRole("button", { name: "Back to plugins", exact: true }).click();
+      await openFromPlugins();
     }
 
     await provide({
@@ -100,18 +112,18 @@ export const test = base.extend<Fixtures>({
         ).toBeVisible();
       },
       saveLineLength: async (length) => {
+        const lineLength = page.getByRole("textbox", { name: "Line length", exact: true });
+
         await openSettings();
-        await page.getByRole("textbox", { name: "Line length", exact: true }).fill(String(length));
-
-        const save = page.getByRole("button", { name: "Save", exact: true });
-
-        // Save is disabled while the length typed is the one saved.
-        if (await save.isEnabled()) {
-          await save.click();
-        }
-
-        await expect(save).toBeDisabled();
+        await lineLength.fill(String(length));
+        // Leaving the page saves the length typed at once, and the page opened again shows it once
+        // it's saved.
+        await expect(async () => {
+          await reopenSettings();
+          expect(await lineLength.inputValue()).toBe(String(length));
+        }).toPass();
       },
+      reopenSettings,
       focus: async () => {
         // A string, since the tests typecheck without the DOM library.
         await page.evaluate("window.dispatchEvent(new Event('focus'))");
