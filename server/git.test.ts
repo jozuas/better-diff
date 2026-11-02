@@ -143,6 +143,46 @@ test("rejects with what git says when it fails", async () => {
   });
 });
 
+test("stops a command once told to, as git status that waits on a file system monitor", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "monitor", "#!/bin/sh\nsleep 5\n");
+    makeExecutable(repository, "monitor");
+    runGit(repository, ["config", "core.fsmonitor", join(repository, "monitor")]);
+
+    const started = performance.now();
+    const status = git(repository, "status", [], [], { signal: AbortSignal.timeout(100) });
+
+    await expect(status).rejects.toThrow("aborted");
+    expect(performance.now() - started).toBeLessThan(4000);
+  });
+});
+
+test("prints the paths git ignores of those it reads, and nothing where it ignores none", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, ".gitignore", "*.log\n");
+
+    const ignored = await Promise.all(
+      [["a.log", "b"], ["b"]].map(async (paths) => {
+        const output = await git(repository, "check-ignore", [], [], {
+          input: Buffer.from(paths.map((path) => `${path}\0`).join("")),
+        });
+
+        return output.toString();
+      }),
+    );
+
+    expect(ignored).toStrictEqual(["a.log\0", ""]);
+  });
+});
+
+test("rejects git check-ignore failing, as for a path outside the repository", async () => {
+  await inRepository(async (repository) => {
+    await expect(
+      git(repository, "check-ignore", [], [], { input: Buffer.from("../a\0") }),
+    ).rejects.toThrow("git check-ignore failed");
+  });
+});
+
 test("ignores input a command doesn't read", async () => {
   await inRepository(async (repository) => {
     // Writing input to a command that has exited fails. An error event nothing listens to is

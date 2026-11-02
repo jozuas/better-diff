@@ -1,18 +1,27 @@
+import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 
 import * as fc from "fast-check";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
 
 import { waitRpc } from "../shared/changes";
 import { diffChanges, filesAndLater, writeLater } from "../test/groups";
-import { inRepository, runGit, timeout, writeFile } from "../test/repository";
+import { inDirectory, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { setUp } from "../test/staging";
 import { waitForChanges } from "./changes";
 import { readGroup } from "./groups";
+import { stopWaiting } from "./wait";
 
-// The version now, which waiting with any other answers with at once.
+afterEach(() => {
+  stopWaiting();
+});
+
+// The version now, which waiting with any other answers with once it has looked. Waiting stops,
+// so that the next wait looks at once.
 async function versionNow(directory: string): Promise<string> {
   const { version } = await waitForChanges({ directory, version: "", timeout: 0 });
+
+  stopWaiting();
 
   return version;
 }
@@ -76,6 +85,37 @@ test("answers once a modified file changes again, though git status says the sam
     expect(changed).toBe(await versionNow(repository));
   });
 }, 10_000);
+
+// Once it listens, it checks a second after it started to, and then only once told of a change, as
+// of one to the worktree, but not of one to excludes outside the repository, or as a wait is about
+// to be over, or half a minute after its last check. Were it to check every second, it would find
+// both.
+test("answers with a change made a while after its last check once told of it, and not with one nothing tells of", async () => {
+  await inRepository(async (repository) => {
+    await inDirectory(async (outside) => {
+      writeFile(outside, "exclude", "");
+      runGit(repository, ["config", "core.excludesFile", join(outside, "exclude")]);
+      writeFile(repository, "a", "a\n");
+
+      const version = await versionNow(repository);
+      const untold = waitForChanges({ directory: repository, version, timeout: 5000 });
+
+      await setTimeout(2500);
+      writeFile(outside, "exclude", "a\n");
+
+      await expect(untold).resolves.toStrictEqual({ version });
+
+      const told = waitForChanges({ directory: repository, version, timeout: 40_000 });
+
+      await setTimeout(2500);
+      writeFile(repository, "b", "b\n");
+
+      await expect(Promise.race([told, setTimeout(5000, { version })])).resolves.not.toStrictEqual({
+        version,
+      });
+    });
+  });
+}, 30_000);
 
 test(
   "the version stays the same while nothing changes, and changes whenever the files listed or their diffs do",

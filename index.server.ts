@@ -5,6 +5,7 @@ import { listChanges, waitForChanges } from "./server/changes";
 import { readContents } from "./server/contents";
 import { applyFile, applyLines, applyMode, readDiff } from "./server/diff";
 import { applyGroup, readGroup } from "./server/groups";
+import { stopWaiting } from "./server/wait";
 import { changesRpc, waitRpc } from "./shared/changes";
 import { contentsRpc } from "./shared/contents";
 import {
@@ -29,5 +30,5 @@ export default function contribute(server: PluginServerContext): PluginCleanup {
   server.handle(applyGroupRpc, applyGroup);
   server.handle(contentsRpc, readContents);
 
-  return () => {};
+  return stopWaiting;
 }

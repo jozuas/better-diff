@@ -19,7 +19,8 @@ export const waitRpc = defineRpc({
   name: "changes.wait",
   input: z.object({
     directory: z.string(),
-    // The version it last answered with. Any other, such as an empty one, has it answer at once.
+    // The version it last answered with. Any other, such as an empty one, has it answer as soon as
+    // it has looked at the files again, which it does a second at most after it last did.
     version: z.string(),
     // How many milliseconds to wait before answering, with the same version, if nothing changes.
     // It can take a second more. The app gives up on an answer after a minute.

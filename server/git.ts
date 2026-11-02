@@ -26,6 +26,8 @@ const commandOptions = {
   // such as each line of a CRLF file.
   apply: ["--whitespace=nowarn"],
   add: [],
+  // Paths NUL-terminated and never quoted.
+  "ls-files": ["-z"],
   "rev-parse": [],
   reset: [],
   restore: [],
@@ -35,6 +37,8 @@ const commandOptions = {
   // Paths, attributes and values NUL-terminated and never quoted, and with --stdin, paths read
   // NUL-terminated.
   "check-attr": ["-z"],
+  // Paths read from its input and printed NUL-terminated, and never quoted.
+  "check-ignore": ["-z", "--stdin"],
 };
 
 // Commands that read their paths from their input: as arguments, as many as a group of files can
@@ -57,6 +61,8 @@ interface Extras {
   input?: Uint8Array;
   // An index file the command uses in place of the repository's own.
   index?: string | undefined;
+  // Stops the command, which then fails.
+  signal?: AbortSignal | undefined;
 }
 
 // Runs a git command and returns what it prints, as bytes: files, and so diffs, needn't be UTF-8.
@@ -65,7 +71,7 @@ export async function git(
   command: keyof typeof commandOptions,
   options: readonly string[],
   paths: readonly string[] = [],
-  { input = new Uint8Array(), index }: Extras = {},
+  { input = new Uint8Array(), index, signal }: Extras = {},
 ): Promise<Buffer> {
   const pathsOnInput = readsPaths.has(command);
   // `git diff --no-index` diffs files, which its paths name as they are.
@@ -100,6 +106,7 @@ export async function git(
       // repository's, and it reads the pathspecs' `:(literal)` and `:(exclude)` whatever the user's
       // environment says.
       env: { ...process.env, GIT_INDEX_FILE: index, GIT_LITERAL_PATHSPECS: undefined },
+      signal,
     },
   );
 
@@ -122,10 +129,11 @@ export async function git(
   await once(child, "close");
 
   // `git diff --no-index` exits with 1 when the files differ, as --exit-code makes `git diff`, and
-  // when a file is gone, which leaves the diff empty.
-  const differs = noIndex && child.exitCode === 1;
+  // when a file is gone, which leaves the diff empty. `git check-ignore` exits with 1 when it
+  // ignores none of the paths.
+  const answered = (noIndex || command === "check-ignore") && child.exitCode === 1;
 
-  if (child.exitCode !== 0 && !differs) {
+  if (child.exitCode !== 0 && !answered) {
     throw new Error(`git ${command} failed: ${Buffer.concat(stderr).toString()}`);
   }
 

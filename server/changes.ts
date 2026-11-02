@@ -1,7 +1,6 @@
 import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { setTimeout } from "node:timers/promises";
 
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
@@ -9,6 +8,8 @@ import { changesRpc } from "../shared/changes";
 import type { waitRpc } from "../shared/changes";
 import { git } from "./git";
 import { versionOf } from "./version";
+import { changeFrom } from "./wait";
+import { watchRepository } from "./watch";
 
 // A file git status lists.
 export interface Entry {
@@ -175,9 +176,10 @@ interface Status {
   entries: Entry[];
 }
 
-async function statusOf(directory: string, index?: string): Promise<Status> {
+async function statusOf(directory: string, index?: string, signal?: AbortSignal): Promise<Status> {
   const status = await git(directory, "status", ["--porcelain=v2", "--untracked-files=all"], [], {
     index,
+    signal,
   });
 
   const output = status.toString();
@@ -314,32 +316,13 @@ export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc
 }
 
 // Changes whenever the files listed, or their diffs, could have: with what git status says, or a
-// listed file's content. Not with the config, such as diff.algorithm.
-async function worktreeVersionOf(directory: string): Promise<string> {
-  const status = await statusOf(directory);
+// listed file's content. Not with the config, such as diff.algorithm. git status stops once the
+// signal says to.
+async function worktreeVersionOf(directory: string, signal: AbortSignal): Promise<string> {
+  const status = await statusOf(directory, undefined, signal);
   const sources = await sourcesOf(directory, status, () => true);
 
   return versionOf(sources);
-}
-
-// The version once it differs from the one given, checked every second, or once the wait has
-// expired.
-async function changedFrom(
-  directory: string,
-  version: string,
-  expired: AbortSignal,
-): Promise<string> {
-  const current = await worktreeVersionOf(directory);
-
-  if (current !== version || expired.aborted) {
-    return current;
-  }
-
-  await setTimeout(1000);
-
-  const changed = await changedFrom(directory, version, expired);
-
-  return changed;
 }
 
 export async function waitForChanges({
@@ -347,7 +330,23 @@ export async function waitForChanges({
   version,
   timeout,
 }: RpcInput<typeof waitRpc>): Promise<RpcOutput<typeof waitRpc>> {
-  const current = await changedFrom(directory, version, AbortSignal.timeout(timeout));
+  const current = await changeFrom(
+    directory,
+    {
+      check: async (stop) => {
+        const now = await worktreeVersionOf(directory, stop);
+
+        return now;
+      },
+      listen: async (changed, failed) => {
+        const stop = await watchRepository(directory, process.platform, changed, failed);
+
+        return stop;
+      },
+    },
+    version,
+    timeout,
+  );
 
   return { version: current };
 }
