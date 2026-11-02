@@ -3,20 +3,30 @@ import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { buttonText, sidebarButtonName } from "./actions";
-import type { Controls, SidebarAction } from "./actions";
+import { buttonLook, buttonText, sidebarButtonName } from "./actions";
+import type { ButtonLook, Controls, SidebarAction } from "./actions";
 import type { Target } from "./apply";
+import { Hoverable, TintLayer } from "./hoverable";
 import type { Look } from "./reveal";
 
 // What hears the pointer and focus coming into a row and leaving it.
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
 
 function useStyles(theme: PluginTheme) {
-  return useMemo(
-    () =>
-      StyleSheet.create({
+  return useMemo(() => {
+    // The icon's colour, or the armed button's text's, and its tint's, by how the button looks.
+    const faces: Record<ButtonLook, string> = {
+      // As readable as the theme's danger colour is on its surface.
+      armed: theme.colors.surface0,
+      warning: theme.colors.statusDanger,
+      hovered: theme.colors.foreground,
+      plain: theme.colors.foregroundMuted,
+    };
+
+    return {
+      ...StyleSheet.create({
         // Over the end of the row, taking no room from what it shows.
         buttons: {
           position: "absolute",
@@ -28,38 +38,38 @@ function useStyles(theme: PluginTheme) {
           gap: 2,
           paddingHorizontal: 6,
         },
-        icon: { padding: 3, borderRadius: 4 },
+        icon: { padding: 3, borderRadius: 4, overflow: "hidden" },
         armed: {
           paddingHorizontal: 6,
           paddingVertical: 1,
           borderRadius: 4,
+          overflow: "hidden",
           backgroundColor: theme.colors.statusDanger,
         },
-        // As readable as the theme's danger colour is on its surface.
-        armedText: { fontSize: 12, color: theme.colors.surface0 },
+        armedText: { fontSize: 12, color: faces.armed },
         hidden: { opacity: 0 },
       }),
-    [theme],
-  );
+      faces,
+    };
+  }, [theme]);
 }
 
 type Styles = ReturnType<typeof useStyles>;
 
 interface FaceProps {
   action: SidebarAction;
-  armed: boolean;
+  look: ButtonLook;
   styles: Styles;
-  theme: PluginTheme;
 }
 
 // The action's icon, or what it asks while armed.
-function Face({ action, armed, styles, theme }: FaceProps): ReactElement {
-  return armed ? (
+function Face({ action, look, styles }: FaceProps): ReactElement {
+  return look === "armed" ? (
     <Text selectable={false} style={styles.armedText}>
-      {buttonText(action, armed)}
+      {buttonText(action, true)}
     </Text>
   ) : (
-    <Icon name={action.icon} size={14} color={theme.colors.foregroundMuted} />
+    <Icon name={action.icon} size={14} color={styles.faces[look]} />
   );
 }
 
@@ -72,7 +82,6 @@ interface SidebarButtonProps {
   controls: Controls;
   reveal: RevealHandlers;
   styles: Styles;
-  theme: PluginTheme;
 }
 
 function SidebarButton({
@@ -84,13 +93,12 @@ function SidebarButton({
   controls,
   reveal,
   styles,
-  theme,
 }: SidebarButtonProps): ReactElement {
   const button = `${row}:${action.operation}`;
   const armed = controls.armed === button;
 
   return (
-    <Pressable
+    <Hoverable
       accessibilityRole="button"
       accessibilityLabel={sidebarButtonName(action, armed, path)}
       accessibilityState={{ disabled: controls.busy }}
@@ -101,8 +109,17 @@ function SidebarButton({
       }}
       {...reveal}
     >
-      <Face action={action} armed={armed} styles={styles} theme={theme} />
-    </Pressable>
+      {({ hovered, pressed }) => {
+        const look = buttonLook(action, armed, hovered);
+
+        return (
+          <>
+            <TintLayer color={styles.faces[look]} hovered={hovered} pressed={pressed} />
+            <Face action={action} look={look} styles={styles} />
+          </>
+        );
+      }}
+    </Hoverable>
   );
 }
 
@@ -151,7 +168,6 @@ export function SidebarButtons({
           controls={controls}
           reveal={reveal}
           styles={styles}
-          theme={theme}
         />
       ))}
     </View>

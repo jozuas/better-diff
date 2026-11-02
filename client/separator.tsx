@@ -82,6 +82,7 @@ export function Separator({
 }: SeparatorProps): ReactElement {
   const id = useId();
   const { dragging, handlers } = useDrag({ width, onResize, onResized });
+  const [hovered, setHovered] = useState(false);
 
   useDoubleClick(id, onFit);
 
@@ -99,7 +100,8 @@ export function Separator({
           alignItems: "center",
         },
         line: { flex: 1, width: 1, backgroundColor: theme.colors.border },
-        dragged: { flex: 1, width: 1, backgroundColor: theme.colors.accent },
+        // While it's dragged or the pointer is over it.
+        highlighted: { flex: 1, width: 1, backgroundColor: theme.colors.accent },
       }),
     [theme],
   );
@@ -115,9 +117,15 @@ export function Separator({
       accessibilityLabel="File list width"
       aria-valuenow={Math.round(width)}
       style={styles.separator}
+      onPointerEnter={() => {
+        setHovered(true);
+      }}
+      onPointerLeave={() => {
+        setHovered(false);
+      }}
       {...handlers}
     >
-      <View style={dragging ? styles.dragged : styles.line} />
+      <View style={dragging || hovered ? styles.highlighted : styles.line} />
     </View>
   );
 }

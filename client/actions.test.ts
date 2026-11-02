@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
 
+import type { Action, ButtonLook } from "./actions";
 import {
+  buttonLook,
   buttonText,
   fileActions,
   groupActions,
@@ -99,6 +101,40 @@ test("an armed button asks for confirmation, and otherwise says what it does", (
   expect(buttonText(discard, true)).toBe("Confirm discard?");
   expect(buttonText({ operation: "stage", label: "Stage" }, true)).toBe("Stage");
 });
+
+test.each<[Action, boolean, boolean, ButtonLook]>([
+  [
+    { operation: "discard", label: "Discard", confirmation: "Confirm discard?" },
+    true,
+    true,
+    "armed",
+  ],
+  [
+    { operation: "discard", label: "Discard", confirmation: "Confirm discard?" },
+    true,
+    false,
+    "armed",
+  ],
+  [
+    { operation: "discard", label: "Discard", confirmation: "Confirm discard?" },
+    false,
+    true,
+    "warning",
+  ],
+  [
+    { operation: "discard", label: "Discard", confirmation: "Confirm discard?" },
+    false,
+    false,
+    "plain",
+  ],
+  [{ operation: "stage", label: "Stage" }, false, true, "hovered"],
+  [{ operation: "stage", label: "Stage" }, false, false, "plain"],
+])(
+  "%j's button, armed %s, with the pointer over it %s, looks %s",
+  (action, armed, hovered, look) => {
+    expect(buttonLook(action, armed, hovered)).toBe(look);
+  },
+);
 
 test("names a sidebar button by what it does to its file, if it acts on one, until it's armed", () => {
   const discard = {

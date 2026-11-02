@@ -3,7 +3,9 @@ import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useMemo, useRef, useState } from "react";
 import type { TextInput as NativeTextInput } from "react-native";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+
+import { Hoverable, TintLayer } from "./hoverable";
 
 interface FilterInputProps {
   filter: string;
@@ -43,7 +45,7 @@ export function FilterInput({ filter, onFilter, theme }: FilterInputProps): Reac
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
-        clear: { paddingHorizontal: 8, paddingVertical: 6 },
+        clear: { marginHorizontal: 5, padding: 3, borderRadius: 4, overflow: "hidden" },
       }),
     [theme],
   );
@@ -69,7 +71,7 @@ export function FilterInput({ filter, onFilter, theme }: FilterInputProps): Reac
         style={styles.input}
       />
       {filter === "" ? null : (
-        <Pressable
+        <Hoverable
           accessibilityRole="button"
           accessibilityLabel="Clear filter"
           style={styles.clear}
@@ -78,8 +80,17 @@ export function FilterInput({ filter, onFilter, theme }: FilterInputProps): Reac
             input.current?.focus();
           }}
         >
-          <Icon name="X" size={14} color={theme.colors.foregroundMuted} />
-        </Pressable>
+          {({ hovered, pressed }) => (
+            <>
+              <TintLayer color={theme.colors.foreground} hovered={hovered} pressed={pressed} />
+              <Icon
+                name="X"
+                size={14}
+                color={hovered ? theme.colors.foreground : theme.colors.foregroundMuted}
+              />
+            </>
+          )}
+        </Hoverable>
       )}
     </View>
   );

@@ -110,6 +110,22 @@ export function buttonText({ label, confirmation }: Action, armed: boolean): str
   return (armed ? confirmation : undefined) ?? label;
 }
 
+// How an action's button looks: armed, asking for confirmation; warning, in the danger colour, while
+// the pointer is over one that loses work; hovered, while it's over another; or plain.
+export type ButtonLook = "armed" | "warning" | "hovered" | "plain";
+
+export function buttonLook(action: Action, armed: boolean, hovered: boolean): ButtonLook {
+  if (armed) {
+    return "armed";
+  }
+
+  if (!hovered) {
+    return "plain";
+  }
+
+  return action.confirmation === undefined ? "hovered" : "warning";
+}
+
 // A sidebar button's name: what it does to the file at the path, if it acts on one, until it's
 // armed.
 export function sidebarButtonName(action: Action, armed: boolean, path?: string): string {

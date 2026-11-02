@@ -1,53 +1,55 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
 import { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
-import { buttonText } from "./actions";
-import type { Action, Controls } from "./actions";
+import { buttonLook, buttonText } from "./actions";
+import type { Action, ButtonLook, Controls } from "./actions";
 import type { Target } from "./apply";
+import { Hoverable, TintLayer } from "./hoverable";
 
 function useStyles(theme: PluginTheme, color: string) {
   return useMemo(() => {
-    const button = {
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 4,
-      borderWidth: 1,
-      borderColor: color,
+    // The label's colour, and its tint's, by how the button looks.
+    const labels: Record<ButtonLook, string> = {
+      // As readable as the theme's danger colour is on its surface.
+      armed: theme.colors.surface0,
+      warning: theme.colors.statusDanger,
+      hovered: color,
+      plain: color,
     };
 
-    return StyleSheet.create({
-      buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
-      button,
-      armed: {
-        ...button,
-        borderColor: theme.colors.statusDanger,
-        backgroundColor: theme.colors.statusDanger,
-      },
-      text: { fontSize: 12, color },
-      // As readable as the theme's danger colour is on its surface.
-      armedText: { fontSize: 12, color: theme.colors.surface0 },
-      hidden: { opacity: 0 },
-    });
+    return {
+      ...StyleSheet.create({
+        buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
+        // Rounded as its box is, for its focus ring.
+        button: { borderRadius: 4 },
+        hidden: { opacity: 0 },
+        box: {
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          borderRadius: 4,
+          borderWidth: 1,
+          overflow: "hidden",
+        },
+        text: { fontSize: 12 },
+      }),
+      // The box's colours, by how the button looks.
+      boxes: StyleSheet.create({
+        armed: {
+          borderColor: theme.colors.statusDanger,
+          backgroundColor: theme.colors.statusDanger,
+        },
+        warning: { borderColor: theme.colors.statusDanger },
+        hovered: { borderColor: color },
+        plain: { borderColor: color },
+      }),
+      labels,
+    };
   }, [theme, color]);
 }
 
 type Styles = ReturnType<typeof useStyles>;
-
-interface LabelProps {
-  text: string;
-  armed: boolean;
-  styles: Styles;
-}
-
-function Label({ text, armed, styles }: LabelProps): ReactElement {
-  return (
-    <Text selectable={false} style={armed ? styles.armedText : styles.text}>
-      {text}
-    </Text>
-  );
-}
 
 interface ActionButtonProps {
   action: Action;
@@ -69,16 +71,27 @@ function ActionButton({
   const text = buttonText(action, armed);
 
   return (
-    <Pressable
+    <Hoverable
       accessibilityRole="button"
       accessibilityLabel={text}
       accessibilityState={{ disabled: busy }}
       disabled={busy}
-      style={[armed ? styles.armed : styles.button, hidden && styles.hidden]}
+      style={[styles.button, hidden && styles.hidden]}
       onPress={onPress}
     >
-      <Label text={text} armed={armed} styles={styles} />
-    </Pressable>
+      {({ hovered, pressed }) => {
+        const look = buttonLook(action, armed, hovered);
+
+        return (
+          <View style={[styles.box, styles.boxes[look]]}>
+            <TintLayer color={styles.labels[look]} hovered={hovered} pressed={pressed} />
+            <Text selectable={false} style={[styles.text, { color: styles.labels[look] }]}>
+              {text}
+            </Text>
+          </View>
+        );
+      }}
+    </Hoverable>
   );
 }
 

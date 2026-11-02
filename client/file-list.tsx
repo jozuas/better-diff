@@ -11,6 +11,7 @@ import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { isGroupOpen, groups as kinds, isOpen, isShown, toggled } from "./groups";
 import type { GroupName, OpenFile, OpenGroup, SidebarGroup } from "./groups";
+import { Hoverable } from "./hoverable";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
 import { SidebarButtons } from "./sidebar-buttons";
@@ -43,6 +44,7 @@ function useStyles(theme: PluginTheme) {
           borderBottomColor: "transparent",
           borderLeftColor: theme.colors.foregroundMuted,
         },
+        hoveredTriangle: { borderLeftColor: theme.colors.foreground },
         turned: { transform: [{ rotate: "90deg" }] },
         headingButton: { flex: 1 },
         heading: {
@@ -51,6 +53,7 @@ function useStyles(theme: PluginTheme) {
           letterSpacing: 0.5,
           color: theme.colors.foregroundMuted,
         },
+        hoveredHeading: { color: theme.colors.foreground },
         row: { paddingLeft: 16, paddingRight: 12, paddingVertical: 3 },
         path: { fontSize: 13, color: theme.colors.foreground },
         plain: {},
@@ -176,7 +179,7 @@ function GroupHeading({
   return (
     <View>
       <Pressable tabIndex={-1} style={[styles.headingRow, styles[look]]} {...reveal}>
-        <Pressable
+        <Hoverable
           accessibilityRole="button"
           accessibilityLabel={kinds[name].title}
           aria-expanded={expanded}
@@ -184,9 +187,17 @@ function GroupHeading({
           onPress={onToggle}
           {...reveal}
         >
-          <View style={[styles.triangle, expanded && styles.turned]} />
-        </Pressable>
-        <Pressable
+          {({ hovered }) => (
+            <View
+              style={[
+                styles.triangle,
+                hovered && styles.hoveredTriangle,
+                expanded && styles.turned,
+              ]}
+            />
+          )}
+        </Hoverable>
+        <Hoverable
           accessibilityRole="button"
           accessibilityLabel={heading}
           accessibilityState={{ selected: open }}
@@ -194,10 +205,15 @@ function GroupHeading({
           onPress={onOpen}
           {...reveal}
         >
-          <Text accessibilityRole="header" style={styles.heading}>
-            {heading}
-          </Text>
-        </Pressable>
+          {({ hovered }) => (
+            <Text
+              accessibilityRole="header"
+              style={[styles.heading, hovered && styles.hoveredHeading]}
+            >
+              {heading}
+            </Text>
+          )}
+        </Hoverable>
       </Pressable>
       {files === undefined ? null : (
         <SidebarButtons

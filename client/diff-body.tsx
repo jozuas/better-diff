@@ -2,11 +2,12 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import type { OpenFile } from "./groups";
+import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
 import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
@@ -34,6 +35,7 @@ function useStyles(theme: PluginTheme) {
           borderRadius: 4,
           borderWidth: 1,
           borderColor: theme.colors.foreground,
+          overflow: "hidden",
         },
         expandText: { fontSize: 12, color: theme.colors.foreground },
         hunkLines: { marginBottom: 8 },
@@ -166,24 +168,30 @@ interface LabelRowProps {
   diff: Diff;
   onExpand: () => void;
   styles: Styles;
+  theme: PluginTheme;
 }
 
 // What's shown instead of a diff without lines, with a button that shows a collapsed one's.
-function LabelRow({ label, diff, onExpand, styles }: LabelRowProps): ReactElement {
+function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): ReactElement {
   return (
     <View style={styles.labelRow}>
       <Text style={styles.label}>{label}</Text>
       {diff.collapsed === undefined ? null : (
-        <Pressable
+        <Hoverable
           accessibilityRole="button"
           accessibilityLabel="Show diff"
           style={styles.expand}
           onPress={onExpand}
         >
-          <Text selectable={false} style={styles.expandText}>
-            Show diff
-          </Text>
-        </Pressable>
+          {({ hovered, pressed }) => (
+            <>
+              <TintLayer color={theme.colors.foreground} hovered={hovered} pressed={pressed} />
+              <Text selectable={false} style={styles.expandText}>
+                Show diff
+              </Text>
+            </>
+          )}
+        </Hoverable>
       )}
     </View>
   );
@@ -215,7 +223,7 @@ function Hunks({
   const label = labelOf(diff);
 
   if (label !== undefined) {
-    return <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} />;
+    return <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} theme={theme} />;
   }
 
   const hunks = diff.hunks.flatMap((hunk, index) => {

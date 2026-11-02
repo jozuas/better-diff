@@ -5,6 +5,7 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "r
 
 import { copyItems, copyLabel } from "./copy";
 import type { CopyItem } from "./copy";
+import { Hoverable } from "./hoverable";
 import { menuPosition } from "./menu";
 import type { Point, Size } from "./menu";
 import { onContextMenu } from "./web";
@@ -44,25 +45,16 @@ interface MenuItemProps {
 }
 
 function MenuItem({ label, onPress, styles }: MenuItemProps): ReactElement {
-  const [hovered, setHovered] = useState(false);
-
   return (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={label}
-      style={[styles.item, hovered && styles.hovered]}
-      onPress={onPress}
-      onHoverIn={() => {
-        setHovered(true);
-      }}
-      onHoverOut={() => {
-        setHovered(false);
-      }}
-    >
-      <Text selectable={false} style={styles.label}>
-        {label}
-      </Text>
-    </Pressable>
+    <Hoverable accessibilityRole="menuitem" accessibilityLabel={label} onPress={onPress}>
+      {({ hovered }) => (
+        <View style={[styles.item, hovered && styles.hovered]}>
+          <Text selectable={false} style={styles.label}>
+            {label}
+          </Text>
+        </View>
+      )}
+    </Hoverable>
   );
 }
 

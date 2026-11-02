@@ -71,6 +71,13 @@ These ask for confirmation: discard hunk, discard lines, discard mode change, di
 
 Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it.
 
+### Pointer
+
+- A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A sidebar button's icon brightens too.
+- A button that asks for confirmation shows the danger colour while the pointer is over it.
+- A group's triangle and heading brighten while the pointer is over them.
+- The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
+
 ### Later
 
 - Sending line comments to an agent.
