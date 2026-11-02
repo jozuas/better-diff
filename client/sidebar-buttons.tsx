@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -10,6 +10,7 @@ import type { ButtonLook, Controls, SidebarAction } from "./actions";
 import type { Target } from "./apply";
 import { Hoverable, TintLayer } from "./hoverable";
 import type { Look } from "./reveal";
+import { overlayId } from "./web";
 
 // What hears the pointer and focus coming into a row and leaving it.
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
@@ -154,9 +155,14 @@ export function SidebarButtons({
 }: SidebarButtonsProps): ReactElement {
   const styles = useStyles(theme);
   const hidden = look === "plain";
+  const id = useId();
 
   return (
-    <View pointerEvents={hidden ? "none" : "auto"} style={[styles.buttons, background]}>
+    <View
+      nativeID={overlayId(id)}
+      pointerEvents={hidden ? "none" : "auto"}
+      style={[styles.buttons, background]}
+    >
       {actions.map((action) => (
         <SidebarButton
           key={action.operation}

@@ -25,8 +25,15 @@ interface PageEvents {
 
 interface PageElement extends PageNode {
   readonly id: string;
+  readonly parentElement: PageElement | null;
   scrollTop: number;
-  readonly style: { cursor: string; overflowAnchor: string; userSelect: string; width: string };
+  readonly style: {
+    cursor: string;
+    overflowAnchor: string;
+    paddingRight: string;
+    userSelect: string;
+    width: string;
+  };
   getBoundingClientRect: () => { readonly top: number; readonly width: number };
   addEventListener: <Type extends keyof PageEvents>(
     type: Type,
@@ -303,8 +310,17 @@ export function onContextMenu(id: string, listener: (point: Point) => void): () 
   };
 }
 
+// What ids of elements laid over the end of the row they're in start with.
+const overlay = "overlay";
+
+// The id of an element laid over the end of the row it's in, from an id of its own.
+export function overlayId(id: string): string {
+  return `${overlay}${id}`;
+}
+
 // The width the element with the id takes to show all of its content, unwrapped and uncut, as it
-// does without a width of its own. Null without a page to measure it on.
+// does without a width of its own, and each of its rows' content beside what's laid over the row's
+// end rather than under it. Null without a page to measure it on.
 export function fittingWidth(id: string): number | null {
   const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
 
@@ -312,13 +328,29 @@ export function fittingWidth(id: string): number | null {
     return null;
   }
 
+  const rows = [...element.querySelectorAll(`[id^="${overlay}"]`)].flatMap((laid) => {
+    const row = laid.parentElement;
+
+    return row === null
+      ? []
+      : [{ row, padding: row.style.paddingRight, room: laid.getBoundingClientRect().width }];
+  });
+
   const { width } = element.style;
+
+  for (const { row, room } of rows) {
+    row.style.paddingRight = `${room}px`;
+  }
 
   element.style.width = "max-content";
 
   const fitting = element.getBoundingClientRect().width;
 
   element.style.width = width;
+
+  for (const { row, padding } of rows) {
+    row.style.paddingRight = padding;
+  }
 
   return Math.ceil(fitting);
 }
