@@ -6,7 +6,7 @@ Desktop only: the mobile app isn't supported for now.
 
 Replicates Sublime Merge as much as possible:
 
-- Syntax highlighted.
+- Syntax highlighted, by Paseo's own highlighter, so in the languages it knows, by the file's extension. Removed lines are highlighted as part of the old version of the file, and added and unchanged ones as part of the new, so a line inside a comment that starts lines above is a comment. Colours are those of Paseo's default syntax theme, One: One Light in a light Paseo theme, One Dark in a dark one, since plugins can't read the syntax theme chosen in Paseo's settings. A version of more than 768 KiB characters isn't highlighted, as in Paseo's own diff.
 - In a monospace font, as Paseo's own diff, though Paseo gives plugins' text its UI font.
 - Diffs come from git itself (`git diff --no-ext-diff`), honouring the user's `diff.algorithm`.
 - Changed words within a line are highlighted, as in Sublime Merge.

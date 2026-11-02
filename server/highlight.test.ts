@@ -1,0 +1,152 @@
+import type { RpcOutput } from "@getpaseo/plugin";
+import * as fc from "fast-check";
+import { expect, test } from "vitest";
+
+import type { diffRpc } from "../shared/diff";
+import { filePath } from "../test/file-names";
+import { highlighted, syntaxColors } from "./highlight";
+
+type Highlights = RpcOutput<typeof diffRpc>["highlights"];
+
+// The highlights of each of the lines of a new file at the path.
+async function highlightLines(lines: string[], path: string): Promise<Highlights["new"]> {
+  const { highlights } = await highlighted(
+    {
+      version: "",
+      kind: "text",
+      added: lines.length,
+      removed: 0,
+      hunks: [],
+      contents: { old: [], new: lines },
+    },
+    path,
+  );
+
+  return highlights.new;
+}
+
+// Pieces of code that start and end what highlighters tell apart, such as strings and comments, and
+// what diffs break on: `\r`, tabs and non-ASCII.
+const piece = fc.constantFrom(
+  "const",
+  "def",
+  " ",
+  "a",
+  "1",
+  "=",
+  '"',
+  "'",
+  "`",
+  "/*",
+  "*/",
+  "//",
+  "#",
+  "<a>",
+  "{",
+  "}",
+  "\\",
+  "\r",
+  "\t",
+  "é",
+  "中",
+  "😀",
+);
+
+const lines = fc.array(fc.string({ unit: piece, maxLength: 8 }), { maxLength: 12 });
+
+// A path in one of the languages the highlighter knows, by its extension.
+const knownPath = fc
+  .tuple(filePath, fc.constantFrom("ts", "tsx", "py", "md", "json", "html", "rs", "nix", "swift"))
+  .map(([path, extension]) => `${path}.${extension}`);
+
+function sum(numbers: readonly number[]): number {
+  let total = 0;
+
+  for (const number of numbers) {
+    total += number;
+  }
+
+  return total;
+}
+
+test("each line's runs, each a character or more, make up the line", async () => {
+  await fc.assert(
+    fc.asyncProperty(lines, knownPath, async (code, path) => {
+      const highlights = await highlightLines(code, path);
+
+      expect(highlights.map((runs) => sum(runs.map(([length]) => length)))).toStrictEqual(
+        code.map((line) => line.length),
+      );
+      expect(highlights.flat().filter(([length]) => length < 1)).toStrictEqual([]);
+    }),
+  );
+});
+
+test("gives each run the style of Paseo's highlighter, or none", async () => {
+  await expect(highlightLines(['const a = "é";'], "a.ts")).resolves.toStrictEqual([
+    [
+      [5, "keyword"],
+      [1, null],
+      [1, "definition"],
+      [1, null],
+      [1, "operator"],
+      [1, null],
+      [3, "string"],
+      [1, "punctuation"],
+    ],
+  ]);
+});
+
+test("highlights each line as part of the whole version, so a line inside a comment an earlier line starts is a comment", async () => {
+  const highlights = await highlightLines(["/*", "const a = 1;", "*/", "const b = 2;"], "a.ts");
+
+  expect(highlights[1]).toStrictEqual([[12, "comment"]]);
+  expect(highlights[3]?.[0]).toStrictEqual([5, "keyword"]);
+});
+
+test.each(["a.txt", "Makefile", "a.ts.orig"])(
+  "leaves a version in a language the highlighter doesn't know, such as %s's, without highlights",
+  async (path) => {
+    await expect(highlightLines(["const a = 1;"], path)).resolves.toStrictEqual([]);
+  },
+);
+
+test("gives a version without lines, as of a file it doesn't have, no highlights", async () => {
+  await expect(highlightLines([], "a.ts")).resolves.toStrictEqual([]);
+});
+
+test("highlights a version of up to 786,432 characters, as Paseo's own diff does, and leaves a longer one without highlights", async () => {
+  await expect(highlightLines(["a".repeat(786_432)], "a.ts")).resolves.toStrictEqual([
+    [[786_432, "variable"]],
+  ]);
+  await expect(highlightLines(["a".repeat(786_433)], "a.ts")).resolves.toStrictEqual([]);
+});
+
+test("lets the plugin's other work take turns with highlighting", async () => {
+  let finished = false;
+
+  const highlighting = (async () => {
+    await highlightLines(
+      Array.from({ length: 500 }, (_, index) => `const a${index} = ${index};`),
+      "a.ts",
+    );
+    finished = true;
+  })();
+
+  const finishedBeforeOtherWork = await new Promise<boolean>((resolve) => {
+    setImmediate(() => {
+      resolve(finished);
+    });
+  });
+
+  await highlighting;
+
+  expect(finishedBeforeOtherWork).toBe(false);
+});
+
+test("colours each style as Paseo's default syntax theme, One, does: as One Light for a light Paseo theme, and One Dark for a dark one", () => {
+  const { light, dark } = syntaxColors();
+
+  expect([light["keyword"], light["string"]]).toStrictEqual(["#a626a4", "#50a14f"]);
+  expect([dark["keyword"], dark["string"]]).toStrictEqual(["#c678dd", "#98c379"]);
+});

@@ -6,7 +6,8 @@ import { groupsOf, readStatus } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
-import type { ChangedFile, Changes } from "./diff";
+import type { ChangedFile, Changes, UnhighlightedDiff } from "./diff";
+import { highlighted } from "./highlight";
 import { versionOf } from "./version";
 
 type Group = RpcInput<typeof groupRpc>["group"];
@@ -19,7 +20,7 @@ const groupSides: Record<Group, RpcInput<typeof diffRpc>["side"]> = {
 };
 
 interface GroupFile {
-  shown: RpcOutput<typeof groupRpc>["files"][number];
+  shown: (UnhighlightedDiff & { path: string }) | { path: string; error: string };
   // The diff's version, or why the diff can't be read.
   version: string;
   // Undefined where the changes can't be read.
@@ -89,12 +90,19 @@ export async function readGroup({
     files.map(({ shown }) => shown.path),
   );
 
-  return {
-    version: groupVersionOf(files),
-    files: files.map(({ shown }) =>
-      "error" in shown ? shown : collapsed(shown, generated.has(shown.path)),
-    ),
-  };
+  const shown = await Promise.all(
+    files.map(async ({ shown: file }) => {
+      if ("error" in file) {
+        return file;
+      }
+
+      const read = await highlighted(collapsed(file, generated.has(file.path)), file.path);
+
+      return read;
+    }),
+  );
+
+  return { version: groupVersionOf(files), files: shown };
 }
 
 export async function applyGroup({

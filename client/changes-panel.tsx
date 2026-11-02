@@ -35,6 +35,7 @@ import type { GroupName, OpenFile, OpenGroup } from "./groups";
 import { Queried } from "./queried";
 import { defaultWidth, fileListWidth } from "./resize";
 import { Separator } from "./separator";
+import { SyntaxColorsProvider } from "./syntax-colors";
 import { clearSelection, fittingWidth, onWindowFocus } from "./web";
 
 // What the panel keeps of each tab across reloads.
@@ -347,7 +348,9 @@ export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelPr
 
   return (
     <FontSizesContext value={sizes}>
-      <Changes directory={directory} tab={tab} theme={theme} />
+      <SyntaxColorsProvider theme={theme}>
+        <Changes directory={directory} tab={tab} theme={theme} />
+      </SyntaxColorsProvider>
     </FontSizesContext>
   );
 }

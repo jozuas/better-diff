@@ -30,6 +30,9 @@
     "check:fast": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run knip",
     "check": "npm run check:fast && npm run mutate"
   },
+  "dependencies": {
+    "@getpaseo/highlight": "^0.13.2"
+  },
   "devDependencies": {
     "@getpaseo/plugin": "0.14.0",
     "@oxlint/plugins": "1.90.0",

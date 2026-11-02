@@ -5,6 +5,7 @@ import { aloneIntentToAdd, indexOf, readStatus, withIntentToAdd } from "./change
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
+import { highlighted } from "./highlight";
 import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, reverse } from "./patch";
 import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
@@ -165,8 +166,11 @@ function text(content: Buffer): string {
   return content.toString("utf8");
 }
 
-// The diff of the changes, as the plugin shows it.
-export function diffOf({ diff, renamedFrom }: Changes): RpcOutput<typeof diffRpc> {
+// A diff as the plugin shows it, before `highlighted` adds its highlights.
+export type UnhighlightedDiff = Omit<RpcOutput<typeof diffRpc>, "highlights">;
+
+// The diff of the changes.
+export function diffOf({ diff, renamedFrom }: Changes): UnhighlightedDiff {
   const { header, hunks, lines } = parseDiff(diff);
   const changed = hunks.flatMap((hunk) => hunk.lines);
 
@@ -205,8 +209,10 @@ export async function readDiff({
   ]);
 
   const diff = diffOf(changes);
+  const shown = generated === undefined ? diff : collapsed(diff, generated.has(path));
+  const read = await highlighted(shown, path);
 
-  return generated === undefined ? diff : collapsed(diff, generated.has(path));
+  return read;
 }
 
 // The last apply to start on each index.

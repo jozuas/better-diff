@@ -13,6 +13,8 @@ import { isSelected, lineId } from "./selection";
 import type { LineRange } from "./selection";
 import { numbersOf, rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
+import { runsOf, segmentsOf, SyntaxColorsContext } from "./syntax";
+import type { Highlights } from "./syntax";
 
 declare module "react-native" {
   interface ViewProps {
@@ -87,14 +89,24 @@ interface DiffLineProps {
   // The side it shows on, with only that version's number, or undefined inline, with both.
   side: Side | undefined;
   selectable: boolean;
+  highlights: Highlights;
   styles: Styles;
 }
 
 // Only the line's text can be selected, so copying a selection copies what the lines say. The
-// numbers of a selected line stand out.
-function DiffLine({ id, line, selected, side, selectable, styles }: DiffLineProps): ReactElement {
+// numbers of a selected line stand out. Its text is in its syntax's colours.
+function DiffLine({
+  id,
+  line,
+  selected,
+  side,
+  selectable,
+  highlights,
+  styles,
+}: DiffLineProps): ReactElement {
   const numbers = numbersOf(line, side);
   const fonts = useContext(FontSizesContext);
+  const colors = useContext(SyntaxColorsContext);
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
 
   return (
@@ -107,7 +119,15 @@ function DiffLine({ id, line, selected, side, selectable, styles }: DiffLineProp
           </Text>
         ))}
         <Text nativeID={id} selectable={selectable} style={styles.text}>
-          {line.text}
+          {segmentsOf(line.text, runsOf(line, highlights), colors).map(({ start, text, color }) =>
+            color === undefined ? (
+              text
+            ) : (
+              <Text key={start} style={{ color }}>
+                {text}
+              </Text>
+            ),
+          )}
         </Text>
       </View>
       {line.newline ? null : (
@@ -138,11 +158,21 @@ interface HalfProps {
   focused: boolean;
   selected: Selected;
   focus: Focus;
+  highlights: Highlights;
   styles: Styles;
 }
 
 // A side of a side-by-side row. Pressing the pointer on it gives its side focus.
-function Half({ side, shown, idOf, focused, selected, focus, styles }: HalfProps): ReactElement {
+function Half({
+  side,
+  shown,
+  idOf,
+  focused,
+  selected,
+  focus,
+  highlights,
+  styles,
+}: HalfProps): ReactElement {
   return (
     <View
       style={[styles.half, styles[side]]}
@@ -159,6 +189,7 @@ function Half({ side, shown, idOf, focused, selected, focus, styles }: HalfProps
           selected={selected(shown.index, side)}
           side={side}
           selectable={focused}
+          highlights={highlights}
           styles={styles}
         />
       )}
@@ -171,12 +202,20 @@ interface SideBySideRowProps {
   idOf: IdOf | undefined;
   selected: Selected;
   focus: Focus;
+  highlights: Highlights;
   styles: Styles;
 }
 
 // Each side's line level with the other's. Only the text of the side with focus can be selected,
 // and has the ids a selection finds lines by, so a selection has only that side's.
-function SideBySideRow({ row, idOf, selected, focus, styles }: SideBySideRowProps): ReactElement {
+function SideBySideRow({
+  row,
+  idOf,
+  selected,
+  focus,
+  highlights,
+  styles,
+}: SideBySideRowProps): ReactElement {
   return (
     <View style={styles.line}>
       {sides.map((side) => (
@@ -188,6 +227,7 @@ function SideBySideRow({ row, idOf, selected, focus, styles }: SideBySideRowProp
           focused={focus.side === side}
           selected={selected}
           focus={focus}
+          highlights={highlights}
           styles={styles}
         />
       ))}
@@ -202,11 +242,12 @@ interface LinesProps {
   selected: Selected;
   // Undefined for an inline view.
   focus: Focus | undefined;
+  highlights: Highlights;
   styles: Styles;
 }
 
 // The lines one under the other, or side by side.
-function Lines({ lines, idOf, selected, focus, styles }: LinesProps): ReactElement[] {
+function Lines({ lines, idOf, selected, focus, highlights, styles }: LinesProps): ReactElement[] {
   if (focus === undefined) {
     return lines.map((line, index) => (
       <DiffLine
@@ -216,6 +257,7 @@ function Lines({ lines, idOf, selected, focus, styles }: LinesProps): ReactEleme
         selected={selected(index)}
         side={undefined}
         selectable
+        highlights={highlights}
         styles={styles}
       />
     ));
@@ -228,6 +270,7 @@ function Lines({ lines, idOf, selected, focus, styles }: LinesProps): ReactEleme
       idOf={idOf}
       selected={selected}
       focus={focus}
+      highlights={highlights}
       styles={styles}
     />
   ));
@@ -241,6 +284,8 @@ interface HunkLinesProps {
   pointer: PointerHandlers;
   // Undefined for an inline view.
   focus: Focus | undefined;
+  // The diff's.
+  highlights: Highlights;
   theme: PluginTheme;
 }
 
@@ -251,6 +296,7 @@ export function HunkLines({
   selection,
   pointer,
   focus,
+  highlights,
   theme,
 }: HunkLinesProps): ReactElement {
   const styles = useStyles(theme);
@@ -262,6 +308,7 @@ export function HunkLines({
         idOf={(line, focused) => lineId(container, index, line, focused)}
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
+        highlights={highlights}
         styles={styles}
       />
     </View>
@@ -272,6 +319,8 @@ interface UnchangedLinesProps {
   lines: NumberedLine[];
   // Undefined for an inline view.
   focus: Focus | undefined;
+  // The diff's.
+  highlights: Highlights;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
 }
@@ -281,6 +330,7 @@ interface UnchangedLinesProps {
 export function UnchangedLines({
   lines,
   focus,
+  highlights,
   style,
   theme,
 }: UnchangedLinesProps): ReactElement | null {
@@ -288,7 +338,14 @@ export function UnchangedLines({
 
   return lines.length === 0 ? null : (
     <View style={style}>
-      <Lines lines={lines} idOf={undefined} selected={() => false} focus={focus} styles={styles} />
+      <Lines
+        lines={lines}
+        idOf={undefined}
+        selected={() => false}
+        focus={focus}
+        highlights={highlights}
+        styles={styles}
+      />
     </View>
   );
 }

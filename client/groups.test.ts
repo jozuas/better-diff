@@ -243,7 +243,15 @@ test("stays on the open group whatever the changes listed before and after an ac
 type Diff = RpcOutput<typeof diffRpc>;
 
 function diffVersioned(version: string): Diff {
-  return { version, kind: "text", added: 1, removed: 0, hunks: [], contents: { old: [], new: [] } };
+  return {
+    version,
+    kind: "text",
+    added: 1,
+    removed: 0,
+    hunks: [],
+    contents: { old: [], new: [] },
+    highlights: { old: [], new: [] },
+  };
 }
 
 test("shows the files of a group's read that the sidebar lists under the filter, in their order", () => {

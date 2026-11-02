@@ -5,7 +5,8 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { diffRpc } from "../shared/diff";
 import { git } from "./git";
 
-type Diff = RpcOutput<typeof diffRpc>;
+// Collapsing comes before highlighting, which a collapsed diff is spared.
+type Diff = Omit<RpcOutput<typeof diffRpc>, "highlights">;
 
 // What package managers write, by name, which GitHub collapses too.
 const lockfiles = new Set([

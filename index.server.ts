@@ -5,6 +5,7 @@ import { listChanges, waitForChanges } from "./server/changes";
 import { readContents } from "./server/contents";
 import { applyFile, applyLines, applyMode, readDiff } from "./server/diff";
 import { applyGroup, readGroup } from "./server/groups";
+import { syntaxColors } from "./server/highlight";
 import { stopWaiting } from "./server/wait";
 import { changesRpc, waitRpc } from "./shared/changes";
 import { contentsRpc } from "./shared/contents";
@@ -17,6 +18,7 @@ import {
   groupRpc,
 } from "./shared/diff";
 import { viewSettings } from "./shared/settings";
+import { syntaxColorsRpc } from "./shared/syntax";
 
 export default function contribute(server: PluginServerContext): PluginCleanup {
   server.registerSettings(viewSettings);
@@ -29,6 +31,7 @@ export default function contribute(server: PluginServerContext): PluginCleanup {
   server.handle(groupRpc, readGroup);
   server.handle(applyGroupRpc, applyGroup);
   server.handle(contentsRpc, readContents);
+  server.handle(syntaxColorsRpc, syntaxColors);
 
   return stopWaiting;
 }

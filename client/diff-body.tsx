@@ -233,9 +233,15 @@ function Hunks({
           selection={range}
           pointer={pointer}
           focus={focus}
+          highlights={diff.highlights}
           theme={theme}
         />
-        <UnchangedLines lines={unchanged.after[index] ?? []} focus={focus} theme={theme} />
+        <UnchangedLines
+          lines={unchanged.after[index] ?? []}
+          focus={focus}
+          highlights={diff.highlights}
+          theme={theme}
+        />
       </View>,
     ];
   });
@@ -245,6 +251,7 @@ function Hunks({
       key="before"
       lines={unchanged.before}
       focus={focus}
+      highlights={diff.highlights}
       style={styles.spaced}
       theme={theme}
     />,

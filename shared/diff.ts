@@ -3,6 +3,10 @@ import { z } from "zod";
 
 const index = z.int().nonnegative();
 
+// Characters of a line that Paseo's syntax highlighter gives one style, such as "keyword", or none:
+// how many, as JavaScript counts a string's length, and the style.
+const run = z.tuple([z.int().positive(), z.string().nullable()]);
+
 const diff = z.object({
   // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
   // date.
@@ -43,6 +47,9 @@ const diff = z.object({
   // around them, as the hunks' lines have them. None for a diff of another kind, or a version
   // without the file.
   contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
+  // Each line of contents as the runs that make it up, highlighted as part of the whole version.
+  // None for a version in a language the highlighter doesn't know, or too long to highlight.
+  highlights: z.object({ old: z.array(z.array(run)), new: z.array(z.array(run)) }),
 });
 
 export const diffRpc = defineRpc({
