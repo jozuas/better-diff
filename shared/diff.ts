@@ -15,6 +15,9 @@ const diff = z.object({
   // The path the file had before the side's changes, if they rename it. On the unstaged side,
   // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
   renamedFrom: z.string().optional(),
+  // The file's mode before and after the side's changes, if they change it, as git prints them,
+  // such as 100644 and 100755 for a file made executable.
+  mode: z.object({ old: z.string(), new: z.string() }).optional(),
   // Why a text diff's hunks and contents are left out, as GitHub leaves them out: the file is
   // generated, such as a lockfile, or the diff changes more lines than a view shows quickly.
   collapsed: z.enum(["generated", "large"]).optional(),
@@ -99,6 +102,14 @@ export const applyLinesRpc = defineRpc({
 // All of the file's changes, of any kind.
 export const applyFileRpc = defineRpc({
   name: "diff.apply-file",
+  input: z.object(action),
+  output: status,
+});
+
+// Only the file's mode change, which acting on its lines leaves alone, as Magit acts on it. Staging
+// it stages the file's rename too, as staging its lines does.
+export const applyModeRpc = defineRpc({
+  name: "diff.apply-mode",
   input: z.object(action),
   output: status,
 });

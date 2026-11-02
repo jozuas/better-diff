@@ -12,6 +12,7 @@ import type { OpenFile } from "./groups";
 import { labelOf } from "./labels";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
+import { ModeBar } from "./mode-bar";
 import { isSelected, lineId, rangeLines, sameRange, selectedRange } from "./selection";
 import type { LineRange } from "./selection";
 import { onSelection, scrollUpTo } from "./web";
@@ -233,13 +234,14 @@ interface DiffBodyProps {
   theme: PluginTheme;
 }
 
-// The diff's hunks, or what's shown instead of a diff without lines, with a button that shows a
-// collapsed one's. Each hunk's bar is followed by its lines, and stays at the top while they scroll
-// under it, until the next hunk's bar covers it. Just before an action on a hunk runs, the view
-// scrolls up to the hunk's start if it's above, so the next hunk, which then takes its place, shows
-// from its start.
-export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProps): ReactElement {
-  const styles = useStyles(theme);
+interface HunksProps extends DiffBodyProps {
+  styles: Styles;
+}
+
+// Each hunk's bar is followed by its lines, and stays at the top while they scroll under it, until
+// the next hunk's bar covers it. Just before an action on a hunk runs, the view scrolls up to the
+// hunk's start if it's above, so the next hunk, which then takes its place, shows from its start.
+function Hunks({ diff, file, controls, onExpand, styles, theme }: HunksProps): ReactElement {
   const container = useId();
   const selection = useSelectedLines(container);
   const barHeight = useRef(0);
@@ -295,5 +297,33 @@ export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProp
         />,
       ])}
     </ScrollView>
+  );
+}
+
+// The diff's mode change, if it has one, above its hunks, or what's shown instead of a diff without
+// lines, with a button that shows a collapsed one's.
+export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProps): ReactElement {
+  const styles = useStyles(theme);
+
+  return (
+    <>
+      {diff.mode === undefined ? null : (
+        <ModeBar
+          mode={diff.mode}
+          version={diff.version}
+          file={file}
+          controls={controls}
+          theme={theme}
+        />
+      )}
+      <Hunks
+        diff={diff}
+        file={file}
+        controls={controls}
+        onExpand={onExpand}
+        styles={styles}
+        theme={theme}
+      />
+    </>
   );
 }

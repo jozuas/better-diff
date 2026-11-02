@@ -11,7 +11,14 @@ import { z } from "zod";
 
 import { changesRpc } from "../shared/changes";
 import { contentsRpc } from "../shared/contents";
-import { applyFileRpc, applyGroupRpc, applyLinesRpc, diffRpc, groupRpc } from "../shared/diff";
+import {
+  applyFileRpc,
+  applyGroupRpc,
+  applyLinesRpc,
+  applyModeRpc,
+  diffRpc,
+  groupRpc,
+} from "../shared/diff";
 import type { Controls } from "./actions";
 import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
@@ -84,6 +91,7 @@ function useControls(
     readGroup: useRpc(groupRpc),
     applyFile: useRpc(applyFileRpc),
     applyLines: useRpc(applyLinesRpc),
+    applyMode: useRpc(applyModeRpc),
     applyGroup: useRpc(applyGroupRpc),
   };
 

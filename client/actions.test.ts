@@ -7,6 +7,7 @@ import {
   hunkActions,
   hunkLines,
   lineActions,
+  modeActions,
   sidebarButtonName,
 } from "./actions";
 
@@ -71,6 +72,19 @@ test("offers discarding and staging a modified or untracked file's selected line
     modified: discardOrStage,
     untracked: discardOrStage,
     staged: [{ operation: "unstage", label: "Unstage Lines" }],
+  });
+});
+
+test("offers discarding and staging a modified file's mode change, and unstaging a staged one's, asking before discarding", () => {
+  const discardOrStage = [
+    { operation: "discard", label: "Discard Mode Change", confirmation: "Confirm discard?" },
+    { operation: "stage", label: "Stage Mode Change" },
+  ];
+
+  expect(modeActions).toStrictEqual({
+    modified: discardOrStage,
+    untracked: discardOrStage,
+    staged: [{ operation: "unstage", label: "Unstage Mode Change" }],
   });
 });
 

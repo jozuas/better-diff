@@ -4,12 +4,13 @@ import type { diffRpc } from "../shared/diff";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
-const labels: Record<Exclude<Diff["kind"], "text">, string> = {
+// A mode change on its own has none: its bar shows it, as Magit shows it.
+const labels: Record<Exclude<Diff["kind"], "text">, string | undefined> = {
   unchanged: "No changes",
   renamed: "Renamed",
   symlink: "Symlink",
   binary: "Binary file",
-  mode: "File mode changed",
+  mode: undefined,
   unmerged: "Merge conflicts",
 };
 
@@ -19,7 +20,7 @@ const collapsedLabels: Record<NonNullable<Diff["collapsed"]>, string> = {
 };
 
 // What's shown instead of a diff without lines: one of a kind that has none, a new or deleted empty
-// file's, or a collapsed one's. Undefined for a diff with lines.
+// file's, or a collapsed one's. Undefined for a diff with lines, or a mode change on its own.
 export function labelOf({
   kind,
   hunks,

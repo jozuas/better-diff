@@ -22,6 +22,7 @@ function serverWith({ shown, listed = [], status = "applied" }: Answers = {}) {
       .mockResolvedValue({ version: "group", files: listed.map((path) => ({ path })) }),
     applyFile: vi.fn<Server["applyFile"]>().mockResolvedValue({ status }),
     applyLines: vi.fn<Server["applyLines"]>().mockResolvedValue({ status }),
+    applyMode: vi.fn<Server["applyMode"]>().mockResolvedValue({ status }),
     applyGroup: vi.fn<Server["applyGroup"]>().mockResolvedValue({ status }),
   } satisfies Server;
 }
@@ -41,6 +42,23 @@ test("acts on all of a shown diff, or its lines, of the version shown", async ()
   expect(server.applyLines.mock.calls).toStrictEqual([
     [{ directory: "/repo", path: "a.txt", operation: "discard", version: "2", lines }],
   ]);
+  expect(server.readDiff).not.toHaveBeenCalled();
+});
+
+test("acts on the mode change of a shown diff, of the version shown", async () => {
+  const server = serverWith({ shown: { version: "shown" } });
+
+  await apply(server, "/repo", "unstage", {
+    file: { group: "staged", path: "a.txt" },
+    version: "1",
+    mode: true,
+  });
+
+  expect(server.applyMode.mock.calls).toStrictEqual([
+    [{ directory: "/repo", path: "a.txt", operation: "unstage", version: "1" }],
+  ]);
+  expect(server.applyFile).not.toHaveBeenCalled();
+  expect(server.applyLines).not.toHaveBeenCalled();
   expect(server.readDiff).not.toHaveBeenCalled();
 });
 
@@ -103,6 +121,9 @@ test("answers with the server's answer", async () => {
   await expect(apply(server, "/repo", "stage", { group: "modified", paths: ["a"] })).resolves.toBe(
     "stale",
   );
+  await expect(
+    apply(server, "/repo", "stage", { file: modified, version: "1", mode: true }),
+  ).resolves.toBe("stale");
 });
 
 test("acts on all of a group's files, of the version read, while they're the ones listed", async () => {
@@ -151,6 +172,9 @@ test("says why an action was refused: its group's files changed, or its file's d
     "The diff changed after it was shown, so nothing was done. It's been reloaded.",
   );
   expect(staleMessage({ file: modified, version: "1" })).toBe(
+    "The diff changed after it was shown, so nothing was done. It's been reloaded.",
+  );
+  expect(staleMessage({ file: modified, version: "1", mode: true })).toBe(
     "The diff changed after it was shown, so nothing was done. It's been reloaded.",
   );
 });

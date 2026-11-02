@@ -12,11 +12,12 @@ interface Hunk {
   lines: Line[];
 }
 
-// The lines of git's header a patch needs, which name the file in each version and say whether the
-// patch creates, deletes or renames it. A patch leaves out the others, such as a mode change: like
-// Magit and `git add -p`, line and hunk actions leave that alone.
+// The lines of git's header a patch needs, in the order git prints them, which name the file in each
+// version and say whether the patch creates, deletes or renames it, or changes its mode.
 const fields = [
   "diff --git",
+  "old mode",
+  "new mode",
   "new file mode",
   "deleted file mode",
   "rename from",
@@ -63,6 +64,8 @@ function field(lines: readonly string[], name: Field): string | undefined {
 function headerOf(lines: readonly string[]): Header {
   return {
     "diff --git": field(lines, "diff --git"),
+    "old mode": field(lines, "old mode"),
+    "new mode": field(lines, "new mode"),
     "new file mode": field(lines, "new file mode"),
     "deleted file mode": field(lines, "deleted file mode"),
     "rename from": field(lines, "rename from"),
@@ -70,6 +73,27 @@ function headerOf(lines: readonly string[]): Header {
     "---": field(lines, "---"),
     "+++": field(lines, "+++"),
   };
+}
+
+// A change to a file's mode.
+export interface Mode {
+  old: string;
+  new: string;
+}
+
+// The diff's change to the file's mode, which git prints as its old mode and its new one.
+export function modeOf(header: Header): Mode | undefined {
+  const { "old mode": old, "new mode": changed } = header;
+
+  if (old === undefined) {
+    return undefined;
+  }
+
+  if (changed === undefined) {
+    throw new Error("git printed a file's old mode without its new one.");
+  }
+
+  return { old, new: changed };
 }
 
 type Kind = "text" | "unchanged" | "renamed" | "symlink" | "binary" | "mode" | "unmerged";
@@ -258,20 +282,32 @@ export function parseDiff(diff: Buffer): FileDiff & { lines: Line[] } {
   return { header, hunks: narrow(lines), lines };
 }
 
-// The diff the other way round, which undoes its changes: a file it creates, the reverse deletes.
-// A file it renames keeps its new path, where the reverse undoes its other changes: for a diff
-// whose `diff --git` line names two paths without saying it renames, `git apply` takes them from
-// the --- and +++ lines.
+// A path as a --- or +++ line names it: git quotes a path that needs it with its prefix.
+function prefixed(prefix: string, path: string): string {
+  // Stryker disable next-line MethodExpression: git quotes a path with a quote in it, so a path it prints starts with a quote only where it ends with one.
+  return path.startsWith('"') ? `"${prefix}${path.slice(1)}` : `${prefix}${path}`;
+}
+
+// The diff the other way round, which undoes its changes: a file it creates, the reverse deletes,
+// and a mode it changes, the reverse changes back. A file it renames keeps its new path, where the
+// reverse undoes its other changes: for a diff whose `diff --git` line names two paths without
+// saying it renames, `git apply` takes them from the --- and +++ lines, which name the new path as
+// its rename to line does, since git prints them only with hunks.
 export function reverse({ header, hunks }: FileDiff): FileDiff {
+  const renamed = header["rename to"];
+  const kept = renamed === undefined ? undefined : prefixed("b/", renamed);
+
   return {
     header: {
       "diff --git": header["diff --git"],
+      "old mode": header["new mode"],
+      "new mode": header["old mode"],
       "new file mode": header["deleted file mode"],
       "deleted file mode": header["new file mode"],
       "rename from": undefined,
       "rename to": undefined,
-      "---": header["+++"],
-      "+++": header["rename to"] === undefined ? header["---"] : header["+++"],
+      "---": kept ?? header["+++"],
+      "+++": kept ?? header["---"],
     },
     hunks: hunks.map(({ oldStart, newStart, lines }) => ({
       oldStart: newStart,
@@ -312,19 +348,30 @@ function endLines(lines: readonly Line[]): Line[] {
   });
 }
 
-// A patch that deletes a file can't leave any of its lines, so one that does changes the file
-// instead.
+function headerLines(header: Header): Buffer[] {
+  return fields.flatMap((name) => {
+    const value = header[name];
+
+    return value === undefined ? [] : [bytes(`${name} ${value}\n`)];
+  });
+}
+
+// A patch of lines leaves out a mode change: like Magit and lazygit, line and hunk actions leave
+// that alone. A patch that deletes a file can't leave any of its lines, so one that does changes
+// the file instead.
 function patchHeader(header: Header, leavesLines: boolean): Buffer[] {
   const changed =
     header["deleted file mode"] !== undefined && leavesLines
       ? { ...header, "deleted file mode": undefined, "+++": header["---"] }
       : header;
 
-  return fields.flatMap((name) => {
-    const value = changed[name];
+  return headerLines({ ...changed, "old mode": undefined, "new mode": undefined });
+}
 
-    return value === undefined ? [] : [bytes(`${name} ${value}\n`)];
-  });
+// A patch of only the diff's mode change, and of its rename, where it has one, as a patch of its
+// lines would rename the file too.
+export function buildModePatch({ header }: FileDiff): Buffer {
+  return Buffer.concat(headerLines(header));
 }
 
 function render(line: Line): Buffer[] {

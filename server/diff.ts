@@ -1,11 +1,12 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
-import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
+import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
 import { readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
-import { buildPatch, isRename, kindOf, parseDiff, reverse } from "./patch";
+import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, reverse } from "./patch";
+import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
 
 type Side = RpcInput<typeof diffRpc>["side"];
@@ -119,12 +120,13 @@ function text(content: Buffer): string {
 
 // The diff of the changes, as the plugin shows it.
 export function diffOf({ diff, renamedFrom }: Changes): RpcOutput<typeof diffRpc> {
-  const { hunks, lines } = parseDiff(diff);
+  const { header, hunks, lines } = parseDiff(diff);
 
   return {
     version: versionOf(diff),
     kind: kindOf(diff),
     renamedFrom,
+    mode: modeOf(header),
     hunks: hunks.map(({ oldStart, newStart, lines: hunkLines }) => ({
       oldStart,
       newStart,
@@ -204,6 +206,23 @@ async function applyToFile(
   return status;
 }
 
+// The diff to make a patch of for the operation: the diff to stage, its reverse to unstage or
+// discard.
+function patchedBy(operation: Action["operation"], diff: FileDiff): FileDiff {
+  return operation === "stage" ? diff : reverse(diff);
+}
+
+// Applies the patch to the index, or to the worktree to discard.
+async function applyPatch(
+  directory: string,
+  operation: Action["operation"],
+  patch: Buffer,
+): Promise<void> {
+  await git(directory, "apply", operation === "discard" ? [] : ["--cached"], [], {
+    input: patch,
+  });
+}
+
 // Stages, unstages or discards the selected lines' changes.
 export async function applyLines({
   lines,
@@ -222,15 +241,30 @@ export async function applyLines({
 
     const selected = new Set(lines.map(({ hunk, line }) => `${hunk}:${line}`));
 
-    const patch = buildPatch(operation === "stage" ? parsed : reverse(parsed), (hunk, line) =>
+    const patch = buildPatch(patchedBy(operation, parsed), (hunk, line) =>
       selected.has(`${hunk}:${line}`),
     );
 
     if (patch.length > 0) {
-      await git(directory, "apply", operation === "discard" ? [] : ["--cached"], [], {
-        input: patch,
-      });
+      await applyPatch(directory, operation, patch);
     }
+  });
+
+  return status;
+}
+
+// Stages, unstages or discards the file's mode change.
+export async function applyMode(action: RpcInput<typeof applyModeRpc>): Promise<Status> {
+  const { directory, operation } = action;
+
+  const status = await applyToFile(action, async ({ diff }) => {
+    const parsed = parseDiff(diff);
+
+    if (modeOf(parsed.header) === undefined) {
+      throw new Error("The diff has no mode change.");
+    }
+
+    await applyPatch(directory, operation, buildModePatch(patchedBy(operation, parsed)));
   });
 
   return status;

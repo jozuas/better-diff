@@ -7,10 +7,13 @@ test.each([
   ["renamed", "Renamed"],
   ["symlink", "Symlink"],
   ["binary", "Binary file"],
-  ["mode", "File mode changed"],
   ["unmerged", "Merge conflicts"],
 ] as const)("labels a diff of kind %s %j instead of showing it", (kind, label) => {
   expect(labelOf({ kind, hunks: [] })).toBe(label);
+});
+
+test("shows a mode change on its own without a label, as its bar shows it", () => {
+  expect(labelOf({ kind: "mode", hunks: [] })).toBeUndefined();
 });
 
 test("labels a new or deleted empty file's diff, which has no lines, as an empty file", () => {

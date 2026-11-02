@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { isRename, parseDiff } from "./patch";
+import { isRename, modeOf, parseDiff } from "./patch";
 
 test("rejects a hunk line with no prefix, as git prints a blank one with diff.suppressBlankEmpty", () => {
   const diff = Buffer.from("diff --git a/a b/a\n--- a/a\n+++ b/a\n@@ -1,3 +1,3 @@\n a\n\n-b\n+c\n");
@@ -16,6 +16,12 @@ test("rejects a diff that goes on past where its hunk's counts end, as another d
   );
 
   expect(() => parseDiff(diff)).toThrow("git printed more than one diff for the path.");
+});
+
+test("rejects a diff with a file's old mode but not its new one", () => {
+  const { header } = parseDiff(Buffer.from("diff --git a/a b/a\nold mode 100644\n"));
+
+  expect(() => modeOf(header)).toThrow("git printed a file's old mode without its new one.");
 });
 
 const rename = "diff --git a/a b/b\nsimilarity index 100%\nrename from a\nrename to b\n";

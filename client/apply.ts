@@ -1,7 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { applyGroupRpc } from "../shared/diff";
-import type { applyFileRpc, applyLinesRpc, diffRpc, groupRpc } from "../shared/diff";
+import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc, groupRpc } from "../shared/diff";
 import { groups } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 
@@ -18,6 +18,13 @@ interface ShownFile {
   lines?: Selection;
 }
 
+// A file's mode change, in its diff of the version shown.
+interface ShownMode {
+  file: OpenFile;
+  version: string;
+  mode: true;
+}
+
 // A file the sidebar lists: all of its diff, as shown if it's the file shown, or else as it is then.
 interface ListedFile {
   file: OpenFile;
@@ -30,7 +37,7 @@ interface ListedGroup {
   paths: readonly string[];
 }
 
-export type Target = ShownFile | ListedFile | ListedGroup;
+export type Target = ShownFile | ShownMode | ListedFile | ListedGroup;
 
 // What an action asks the server, and the diff shown.
 export interface Server {
@@ -42,6 +49,7 @@ export interface Server {
   ) => Promise<{ version: string; files: { path: string }[] }>;
   applyFile: (input: RpcInput<typeof applyFileRpc>) => Promise<{ status: Status }>;
   applyLines: (input: RpcInput<typeof applyLinesRpc>) => Promise<{ status: Status }>;
+  applyMode: (input: RpcInput<typeof applyModeRpc>) => Promise<{ status: Status }>;
   applyGroup: (input: RpcInput<typeof applyGroupRpc>) => Promise<{ status: Status }>;
 }
 
@@ -101,14 +109,31 @@ async function applyToFile(
   return status;
 }
 
+async function applyToMode(
+  server: Server,
+  directory: string,
+  operation: Operation,
+  { file, version }: ShownMode,
+): Promise<Status> {
+  const { status } = await server.applyMode({ directory, path: file.path, operation, version });
+
+  return status;
+}
+
 export async function apply(
   server: Server,
   directory: string,
   operation: Operation,
   target: Target,
 ): Promise<Status> {
-  const status = await ("group" in target
-    ? applyToGroup(server, directory, operation, target)
+  if ("group" in target) {
+    const status = await applyToGroup(server, directory, operation, target);
+
+    return status;
+  }
+
+  const status = await ("mode" in target
+    ? applyToMode(server, directory, operation, target)
     : applyToFile(server, directory, operation, target));
 
   return status;

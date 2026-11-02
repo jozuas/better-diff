@@ -52,6 +52,12 @@ const discardHunk: Action = {
   confirmation: "Confirm discard?",
 };
 
+const discardMode: Action = {
+  operation: "discard",
+  label: "Discard Mode Change",
+  confirmation: "Confirm discard?",
+};
+
 // Discarding staged changes is left out: they can only be unstaged.
 export const fileActions: Record<GroupName, SidebarAction[]> = {
   modified: [discardFile, stageFile],
@@ -76,6 +82,13 @@ export const hunkActions: Record<GroupName, Action[]> = {
   modified: [discardHunk, { operation: "stage", label: "Stage Hunk" }],
   untracked: [discardHunk, { operation: "stage", label: "Stage Hunk" }],
   staged: [{ operation: "unstage", label: "Unstage Hunk" }],
+};
+
+// On the bar of a file's mode change, which an untracked file never has.
+export const modeActions: Record<GroupName, Action[]> = {
+  modified: [discardMode, { operation: "stage", label: "Stage Mode Change" }],
+  untracked: [discardMode, { operation: "stage", label: "Stage Mode Change" }],
+  staged: [{ operation: "unstage", label: "Unstage Mode Change" }],
 };
 
 // What the panel's buttons share: the one armed, whether an action is running, and pressing one,

@@ -134,6 +134,7 @@ test("reads a collapsed diff's hunks and contents when asked to expand it, and i
       version: collapsed.version,
       kind: "text",
       renamedFrom: undefined,
+      mode: undefined,
       hunks: [
         {
           oldStart: 1,

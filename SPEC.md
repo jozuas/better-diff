@@ -38,6 +38,7 @@ Replicates Sublime Merge as much as possible:
 
 - No changes: show "No changes".
 - Binary file, symlink: show "Binary file" or "Symlink" instead of the diff.
+- Mode change (e.g. `chmod +x`): handled as Magit handles it. A bar like a hunk's, under the file bar, shows the old and new mode, with its own actions: Discard Mode Change and Stage Mode Change, or Unstage Mode Change. Hunk and line actions leave the mode change alone, as in Magit and lazygit, and file actions include it. A file whose only change is its mode shows just that bar.
 - Renamed file: the file bar shows the path it was renamed from, and the diff shows its other changes, or "Renamed" if it has none. Its lines can be staged, unstaged and discarded like any file's; staging one stages the rename too. Unstaging the file unstages only the new file, and leaves the old one's deletion staged.
 - A file moved without git (a plain `mv`) is a renamed file in MODIFIED, as `git status` shows it once the new file is added with `--intent-to-add`, not a deleted file plus an untracked one. Discarding it deletes the new file and restores the old one.
 - A file added with `git add --intent-to-add` is in MODIFIED. Discarding it deletes it, as deleting an untracked file does, and restores the file it was renamed from, if any.
@@ -65,7 +66,7 @@ Replicates Sublime Merge as much as possible:
 
 ### Confirmation
 
-These ask for confirmation: discard hunk, discard lines, discard file, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
+These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
 
 Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it.
 
@@ -85,6 +86,5 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 ### Open questions
 
 - Refreshing: the agent edits the worktree while you stage. When does the view refresh, does it keep scroll position and selection, and what happens when an action targets a diff that has changed since it was shown? (Suggestion: fail and refresh, never apply a stale patch.)
-- Mode-only changes (e.g. `chmod +x`): a plain label like "Binary file", or collapsed?
 - Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)

@@ -8,6 +8,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -77,7 +78,10 @@ function readEmptyRepository(): Entry[] {
     return readdirSync(made, { recursive: true, withFileTypes: true }).map((entry) => {
       const path = join(relative(made, entry.parentPath), entry.name);
 
-      return { path, content: entry.isDirectory() ? undefined : readFileSync(join(made, path)) };
+      return {
+        path,
+        content: entry.isDirectory() ? undefined : readFileSync(join(made, path)),
+      };
     });
   } finally {
     rmSync(made, { recursive: true, force: true });
@@ -143,8 +147,21 @@ export function deleteFile(repository: string, path: string): void {
   rmSync(join(repository, path), { force: true });
 }
 
-export function makeExecutable(repository: string, path: string): void {
-  chmodSync(join(repository, path), 0o755);
+export function makeExecutable(repository: string, path: string, executable = true): void {
+  chmodSync(join(repository, path), executable ? 0o755 : 0o644);
+}
+
+// The file's mode in the worktree, as git reads it: executable or not.
+export function worktreeMode(repository: string, path: string): string {
+  return (statSync(join(repository, path)).mode & 0o100) === 0 ? "100644" : "100755";
+}
+
+// Undefined if the index doesn't have the file.
+export function indexMode(repository: string, path: string): string | undefined {
+  // `git ls-files --stage -z` prints `<mode> <blob> <stage>\t<path>\0` for each file.
+  const output = runGit(repository, ["ls-files", "--stage", "-z", "--", path]);
+
+  return output === "" ? undefined : output.slice(0, 6);
 }
 
 export function makeUnreadable(repository: string, path: string): void {
