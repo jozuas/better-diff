@@ -25,24 +25,9 @@ function useStyles(theme: PluginTheme, color: string) {
         // Rounded as its box is, for its focus ring.
         button: { borderRadius: 4 },
         hidden: { opacity: 0 },
-        box: {
-          paddingHorizontal: 8,
-          paddingVertical: 2,
-          borderRadius: 4,
-          borderWidth: 1,
-          overflow: "hidden",
-        },
+        box: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
+        armed: { backgroundColor: theme.colors.statusDanger },
         text: { fontSize: 12 },
-      }),
-      // The box's colours, by how the button looks.
-      boxes: StyleSheet.create({
-        armed: {
-          borderColor: theme.colors.statusDanger,
-          backgroundColor: theme.colors.statusDanger,
-        },
-        warning: { borderColor: theme.colors.statusDanger },
-        hovered: { borderColor: color },
-        plain: { borderColor: color },
       }),
       labels,
     };
@@ -83,8 +68,13 @@ function ActionButton({
         const look = buttonLook(action, armed, hovered);
 
         return (
-          <View style={[styles.box, styles.boxes[look]]}>
-            <TintLayer color={styles.labels[look]} hovered={hovered} pressed={pressed} />
+          <View style={[styles.box, armed && styles.armed]}>
+            <TintLayer
+              color={styles.labels[look]}
+              hovered={hovered}
+              pressed={pressed}
+              filled={!armed}
+            />
             <Text selectable={false} style={[styles.text, { color: styles.labels[look] }]}>
               {text}
             </Text>

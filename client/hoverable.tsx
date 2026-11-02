@@ -48,14 +48,32 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.24 },
 });
 
+// A filled button's tint, which fills it even while the pointer isn't over it, as Paseo fills its
+// buttons in a surface a step above the one they're on, rather than outlining them.
+const filledStyles = StyleSheet.create({
+  none: { opacity: 0.1 },
+  hovered: { opacity: 0.18 },
+  pressed: { opacity: 0.28 },
+});
+
 interface TintLayerProps extends Pointer {
   color: string;
+  filled?: boolean;
 }
 
 // Under a button's label, tinting the button in the label's colour, which the button clips to its
 // corners.
-export function TintLayer({ color, hovered, pressed }: TintLayerProps): ReactElement {
+export function TintLayer({
+  color,
+  hovered,
+  pressed,
+  filled = false,
+}: TintLayerProps): ReactElement {
+  const tint = tintOf(hovered, pressed);
+
   return (
-    <View style={[styles.tint, styles[tintOf(hovered, pressed)], { backgroundColor: color }]} />
+    <View
+      style={[styles.tint, (filled ? filledStyles : styles)[tint], { backgroundColor: color }]}
+    />
   );
 }

@@ -26,14 +26,7 @@ function useStyles(theme: PluginTheme) {
       StyleSheet.create({
         labelRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
         label: { color: theme.colors.foregroundMuted },
-        expand: {
-          paddingHorizontal: 8,
-          paddingVertical: 2,
-          borderRadius: 4,
-          borderWidth: 1,
-          borderColor: theme.colors.foreground,
-          overflow: "hidden",
-        },
+        expand: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
         expandText: { fontSize: 12, color: theme.colors.foreground },
         // Under each hunk, and the unchanged lines before the first.
         spaced: { marginBottom: 8 },
@@ -86,7 +79,12 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
         >
           {({ hovered, pressed }) => (
             <>
-              <TintLayer color={theme.colors.foreground} hovered={hovered} pressed={pressed} />
+              <TintLayer
+                color={theme.colors.foreground}
+                hovered={hovered}
+                pressed={pressed}
+                filled
+              />
               <Text selectable={false} style={styles.expandText}>
                 Show diff
               </Text>
