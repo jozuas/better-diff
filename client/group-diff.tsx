@@ -10,14 +10,15 @@ import type { diffRpc, groupRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
+import { DiffLayout } from "./diff-layout";
+import type { Layout } from "./diff-style";
 import { FileBar } from "./file-diff";
-import type { Layout } from "./file-diff";
 import { FontSizesContext } from "./fonts";
 import { diffOf, listedFiles, measured, tallest } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
 import { fileId, rangeIn } from "./selection";
-import { scrollUpTo, stopScrollAnchoring, useHeldPlace, useSelectedLines } from "./web";
+import { scrollUpTo, stopScrollAnchoring, useSelectedLines } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -62,8 +63,12 @@ function GroupFileDiff({ read, expanded, theme, ...shown }: GroupFileDiffProps):
   return <DiffBody diff={read} scrolls={false} theme={theme} {...shown} />;
 }
 
-interface GroupFilesProps extends Layout {
+interface GroupFilesProps {
   read: GroupRead;
+  // The id of the view they scroll in.
+  view: string;
+  // Whether they show the old versions' lines beside the new ones', rather than inline.
+  sideBySide: boolean;
   // The query of a file's diff with its lines, though it would be collapsed.
   expanded: (file: OpenFile) => DiffQuery;
   group: GroupName;
@@ -75,19 +80,17 @@ interface GroupFilesProps extends Layout {
 
 function GroupFiles({
   read,
+  view,
+  sideBySide,
   expanded,
   group,
   filter,
-  sideBySide,
-  onToggleSideBySide,
   controls,
   theme,
 }: GroupFilesProps): ReactElement {
-  const view = useId();
   const selection = useSelectedLines(view);
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
-  const hold = useHeldPlace(view, String(sideBySide));
 
   const fonts = useContext(FontSizesContext);
 
@@ -130,11 +133,6 @@ function GroupFiles({
               onRun={() => {
                 scrollUpTo(view, fileId(view, index), barHeight);
               }}
-              sideBySide={sideBySide}
-              onToggleSideBySide={() => {
-                hold();
-                onToggleSideBySide();
-              }}
               controls={controls}
               theme={theme}
             />,
@@ -165,9 +163,10 @@ function GroupFiles({
   );
 }
 
-interface GroupDiffProps extends Omit<GroupFilesProps, "read"> {
+interface GroupDiffProps extends Omit<GroupFilesProps, "read" | "view" | "sideBySide"> {
   // The query of the group's files' diffs.
   query: UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
+  layout: Layout;
 }
 
 // The diffs of the files the group lists, one after another in one view, each under its file's
@@ -176,12 +175,19 @@ interface GroupDiffProps extends Omit<GroupFilesProps, "read"> {
 // diff shows its lines once asked to, until another file or group is opened. Just before an action
 // on a file or a hunk runs, the view scrolls up to its start if it's above, so what then takes its
 // place shows from its start.
-export function GroupDiff({ query, theme, ...files }: GroupDiffProps): ReactElement {
+export function GroupDiff({ query, layout, theme, ...files }: GroupDiffProps): ReactElement {
   const read = useQuery(query);
+  const view = useId();
 
   return (
-    <Queried query={read} theme={theme}>
-      {(data) => <GroupFiles read={data} theme={theme} {...files} />}
-    </Queried>
+    <DiffLayout layout={layout} view={view}>
+      {(sideBySide) => (
+        <Queried query={read} theme={theme}>
+          {(data) => (
+            <GroupFiles read={data} view={view} sideBySide={sideBySide} theme={theme} {...files} />
+          )}
+        </Queried>
+      )}
+    </DiffLayout>
   );
 }

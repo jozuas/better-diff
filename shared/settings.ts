@@ -14,7 +14,10 @@ export const fontSizeRanges = {
   diff: { min: 9, max: 22, default: 12 },
 } satisfies Record<string, Range>;
 
-function fontSize(range: Range) {
+// The line lengths the settings take, in characters, and the one they start at.
+export const lineLengthRange = { min: 20, max: 400, default: 80 } satisfies Range;
+
+function wholeNumber(range: Range) {
   return z.number().int().min(range.min).max(range.max).default(range.default);
 }
 
@@ -24,11 +27,14 @@ export const viewSettings = defineSettings({
   scope: "host",
   version: 1,
   schema: z.object({
-    // Removed lines beside the added ones, rather than above them.
-    sideBySide: z.boolean().default(false),
+    // Removed lines above the added ones, beside them, or beside them where lines of lineLength fit.
+    diffStyle: z.enum(["auto", "inline", "side by side"]).default("auto"),
+    // How long a line the auto style has room for on each side before it shows a diff side by side,
+    // such as the length the code wraps at.
+    lineLength: wholeNumber(lineLengthRange),
     // Paseo doesn't pass its own font sizes on to plugins, so Better Diff has these.
-    diffFontSize: fontSize(fontSizeRanges.diff),
-    panelFontSize: fontSize(fontSizeRanges.panel),
+    diffFontSize: wholeNumber(fontSizeRanges.diff),
+    panelFontSize: wholeNumber(fontSizeRanges.panel),
   }),
 });
 

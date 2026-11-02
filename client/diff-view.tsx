@@ -9,8 +9,8 @@ import { StyleSheet, Text } from "react-native";
 import type { diffRpc, groupRpc } from "../shared/diff";
 import { viewSettings } from "../shared/settings";
 import type { Controls } from "./actions";
+import type { Layout } from "./diff-style";
 import { FileDiff } from "./file-diff";
-import type { Layout } from "./file-diff";
 import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
 import type { GroupName, OpenFile, OpenGroup } from "./groups";
@@ -20,28 +20,16 @@ type Diff = RpcOutput<typeof diffRpc>;
 
 type GroupRead = RpcOutput<typeof groupRpc>;
 
-// Whether diffs show side by side, as the host's settings say, and what toggles it. Undefined until
-// the host says.
+// How diffs show, as the host's settings say. Undefined until the host says.
 function useLayout(): Layout | undefined {
   const toast = useToast();
-  const settings = viewSettingsOf(useSettings(viewSettings), toast.error);
 
-  if (settings === undefined) {
-    return undefined;
-  }
-
-  const { sideBySide } = settings.values;
-
-  return {
-    sideBySide,
-    onToggleSideBySide: () => {
-      void settings.change({ sideBySide: !sideBySide });
-    },
-  };
+  return viewSettingsOf(useSettings(viewSettings), toast.error)?.values;
 }
 
-interface ShownDiffProps extends Layout {
+interface ShownDiffProps {
   open: OpenFile | OpenGroup;
+  layout: Layout;
   // The query of a file's diff, collapsed or not.
   fileQuery: (
     file: OpenFile,
@@ -60,8 +48,7 @@ function ShownDiff({
   fileQuery,
   groupQuery,
   filter,
-  sideBySide,
-  onToggleSideBySide,
+  layout,
   controls,
   theme,
 }: ShownDiffProps): ReactElement {
@@ -75,8 +62,7 @@ function ShownDiff({
         expanded={(file) => fileQuery(file, true)}
         group={group}
         filter={filter}
-        sideBySide={sideBySide}
-        onToggleSideBySide={onToggleSideBySide}
+        layout={layout}
         controls={controls}
         theme={theme}
       />
@@ -88,15 +74,14 @@ function ShownDiff({
       key={`${group}:${path}`}
       query={(expand) => fileQuery({ group, path }, expand)}
       file={{ group, path }}
-      sideBySide={sideBySide}
-      onToggleSideBySide={onToggleSideBySide}
+      layout={layout}
       controls={controls}
       theme={theme}
     />
   );
 }
 
-interface DiffViewProps extends Omit<ShownDiffProps, keyof Layout | "open"> {
+interface DiffViewProps extends Omit<ShownDiffProps, "layout" | "open"> {
   open: OpenFile | OpenGroup | undefined;
   // What shows while nothing is open.
   placeholder: string;
@@ -120,5 +105,5 @@ export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactE
     return <Text style={styles.hint}>{placeholder}</Text>;
   }
 
-  return layout === undefined ? <Loading /> : <ShownDiff open={open} {...layout} {...shown} />;
+  return layout === undefined ? <Loading /> : <ShownDiff open={open} layout={layout} {...shown} />;
 }

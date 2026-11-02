@@ -1,6 +1,14 @@
 import { viewSettings } from "../shared/settings";
 import type { ViewValues } from "../shared/settings";
 
+// The line length typed, if it's a whole number of characters the settings take.
+export function lineLengthOf(text: string): number | undefined {
+  const typed = text.trim();
+  const parsed = viewSettings.schema.shape.lineLength.safeParse(Number(typed));
+
+  return /^\d+$/u.test(typed) && parsed.success ? parsed.data : undefined;
+}
+
 // The host's settings of how diffs show as useSettings gives them: their read, which is pending,
 // failed, found them invalid or found their values, and what saves them all against the revision
 // read.

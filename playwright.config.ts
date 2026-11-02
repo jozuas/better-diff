@@ -12,5 +12,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: true,
   reporter: "list",
-  use: { trace: "retain-on-failure", screenshot: "only-on-failure" },
+  use: {
+    // Playwright's default, too narrow for the Auto style to show a diff side by side.
+    viewport: { width: 1280, height: 720 },
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+  },
 });

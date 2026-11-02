@@ -8,11 +8,20 @@ import { inRepository } from "../test/repository";
 import { addressOf, paseoUi, pluginId } from "./paseo";
 import type { Daemon } from "./paseo";
 
+// The styles diffs can show in, as Better Diff's page in Paseo's settings names them.
+type DiffStyle = "Auto" | "Inline" | "Side by side";
+
 interface App {
   // Shows the repository's workspace, and opens the plugin's panel in it.
   openPanel: () => Promise<void>;
   // Opens the plugin's page in Paseo's settings, from its menu in the list of the host's plugins.
   openSettings: () => Promise<void>;
+  // Picks the style on the plugin's page in Paseo's settings, whichever an earlier test on the
+  // daemon left picked.
+  pickDiffStyle: (style: DiffStyle) => Promise<void>;
+  // Saves the line length on the plugin's page in Paseo's settings, whichever an earlier test on the
+  // daemon left saved.
+  saveLineLength: (length: number) => Promise<void>;
   // Has the page's window regain focus, as switching back to Paseo from another app does.
   focus: () => Promise<void>;
 }
@@ -70,15 +79,38 @@ export const test = base.extend<Fixtures>({
   },
 
   app: async ({ daemon, page, workspace }, provide) => {
+    async function openSettings(): Promise<void> {
+      await show(page, `/settings/hosts/${addressOf(daemon).server}/plugins`);
+      await page.getByRole("button", { name: `Actions for ${pluginId}`, exact: true }).click();
+      await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+    }
+
     await provide({
       openPanel: async () => {
         await show(page, `/h/${addressOf(daemon).server}/workspace/${workspace}`);
         await page.getByRole("button", { name: "Better Diff", exact: true }).click();
       },
-      openSettings: async () => {
-        await show(page, `/settings/hosts/${addressOf(daemon).server}/plugins`);
-        await page.getByRole("button", { name: `Actions for ${pluginId}`, exact: true }).click();
-        await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+      openSettings,
+      pickDiffStyle: async (style) => {
+        await openSettings();
+        await page.getByRole("button", { name: /^Diff style: /u }).click();
+        await page.getByRole("menuitem", { name: style, exact: true }).click();
+        await expect(
+          page.getByRole("button", { name: `Diff style: ${style}`, exact: true }),
+        ).toBeVisible();
+      },
+      saveLineLength: async (length) => {
+        await openSettings();
+        await page.getByRole("textbox", { name: "Line length", exact: true }).fill(String(length));
+
+        const save = page.getByRole("button", { name: "Save", exact: true });
+
+        // Save is disabled while the length typed is the one saved.
+        if (await save.isEnabled()) {
+          await save.click();
+        }
+
+        await expect(save).toBeDisabled();
       },
       focus: async () => {
         // A string, since the tests typecheck without the DOM library.

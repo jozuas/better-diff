@@ -11,12 +11,13 @@ import { fileActions } from "./actions";
 import type { Controls } from "./actions";
 import { countsOf } from "./counts";
 import { DiffBody } from "./diff-body";
+import { DiffLayout } from "./diff-layout";
+import type { Layout } from "./diff-style";
 import { FontSizesContext } from "./fonts";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
-import { IconButton } from "./icon-button";
 import { Queried } from "./queried";
-import { scrollUpTo, useHeldPlace, useSelectedLines } from "./web";
+import { scrollUpTo, useSelectedLines } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -38,7 +39,6 @@ function useStyles(theme: PluginTheme) {
         },
         status: { fontSize: fonts.label, fontWeight: "700", color: theme.colors.foregroundMuted },
         barPath: { flexShrink: 1, fontSize: fonts.text, color: theme.colors.foreground },
-        end: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" },
         counts: { fontSize: fonts.small, fontWeight: "600" },
         added: { color: theme.colors.statusSuccess },
         removed: { color: theme.colors.statusDanger },
@@ -103,42 +103,7 @@ function FileActions({
   );
 }
 
-// What the toggle shows a diff side by side with, and inline.
-const layouts = {
-  sideBySide: { label: "Show side by side", icon: "Columns2" },
-  inline: { label: "Show inline", icon: "Rows2" },
-};
-
-// The views a diff can be shown in.
-export interface Layout {
-  // Whether diffs show the old version's lines beside the new one's, rather than inline.
-  sideBySide: boolean;
-  onToggleSideBySide: () => void;
-}
-
-interface SideBySideToggleProps extends Layout {
-  theme: PluginTheme;
-}
-
-// Shows diffs side by side, or inline again.
-function SideBySideToggle({
-  sideBySide,
-  onToggleSideBySide,
-  theme,
-}: SideBySideToggleProps): ReactElement {
-  const layout = sideBySide ? layouts.inline : layouts.sideBySide;
-
-  return (
-    <IconButton
-      label={layout.label}
-      icon={layout.icon}
-      onPress={onToggleSideBySide}
-      theme={theme}
-    />
-  );
-}
-
-interface FileBarProps extends Layout {
+interface FileBarProps {
   file: OpenFile;
   // Undefined until it's read, or if it can't be.
   diff: Diff | undefined;
@@ -152,16 +117,14 @@ interface FileBarProps extends Layout {
   theme: PluginTheme;
 }
 
-// Which file a diff is of, as opened from its group, how many lines it adds and removes, the actions
-// on the file, and the toggle between diffs side by side and inline.
+// Which file a diff is of, as opened from its group, how many lines it adds and removes, and the
+// actions on the file.
 export function FileBar({
   file,
   diff,
   minHeight,
   onHeight,
   onRun,
-  sideBySide,
-  onToggleSideBySide,
   controls,
   theme,
 }: FileBarProps): ReactElement {
@@ -181,23 +144,17 @@ export function FileBar({
         )}
         <Text style={styles.barPath}>{file.path}</Text>
         <LineCounts diff={diff} styles={styles} />
-        <View style={styles.end}>
-          <FileActions diff={diff} file={file} controls={controls} onRun={onRun} theme={theme} />
-          <SideBySideToggle
-            sideBySide={sideBySide}
-            onToggleSideBySide={onToggleSideBySide}
-            theme={theme}
-          />
-        </View>
+        <FileActions diff={diff} file={file} controls={controls} onRun={onRun} theme={theme} />
       </View>
     </View>
   );
 }
 
-interface FileDiffProps extends Layout {
+interface FileDiffProps {
   // The query of its diff, collapsed or not.
   query: (expand: boolean) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   file: OpenFile;
+  layout: Layout;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -206,55 +163,41 @@ interface FileDiffProps extends Layout {
 // asked to, until another file is opened. Just before an action on a hunk runs, the view scrolls up
 // to the hunk's start if it's above, so the next hunk, which then takes its place, shows from its
 // start.
-export function FileDiff({
-  query,
-  file,
-  sideBySide,
-  onToggleSideBySide,
-  controls,
-  theme,
-}: FileDiffProps): ReactElement {
+export function FileDiff({ query, file, layout, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
   const view = useId();
   const selection = useSelectedLines(view);
   const [expand, setExpand] = useState(false);
   const diff = useQuery(query(expand));
-  const hold = useHeldPlace(view, String(sideBySide));
 
   return (
     <View style={styles.file}>
-      <FileBar
-        file={file}
-        diff={diff.data}
-        sideBySide={sideBySide}
-        onToggleSideBySide={() => {
-          hold();
-          onToggleSideBySide();
-        }}
-        controls={controls}
-        theme={theme}
-      />
-      <Queried query={diff} theme={theme}>
-        {(data) => (
-          <DiffBody
-            diff={data}
-            file={file}
-            view={view}
-            fileIndex={0}
-            selection={selection}
-            scrolls
-            sideBySide={sideBySide}
-            onHunkRun={(top, barHeight) => {
-              scrollUpTo(view, top, barHeight);
-            }}
-            controls={controls}
-            onExpand={() => {
-              setExpand(true);
-            }}
-            theme={theme}
-          />
+      <FileBar file={file} diff={diff.data} controls={controls} theme={theme} />
+      <DiffLayout layout={layout} view={view}>
+        {(sideBySide) => (
+          <Queried query={diff} theme={theme}>
+            {(data) => (
+              <DiffBody
+                diff={data}
+                file={file}
+                view={view}
+                fileIndex={0}
+                selection={selection}
+                scrolls
+                sideBySide={sideBySide}
+                onHunkRun={(top, barHeight) => {
+                  scrollUpTo(view, top, barHeight);
+                }}
+                controls={controls}
+                onExpand={() => {
+                  setExpand(true);
+                }}
+                theme={theme}
+              />
+            )}
+          </Queried>
         )}
-      </Queried>
+      </DiffLayout>
     </View>
   );
 }

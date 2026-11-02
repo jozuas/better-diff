@@ -10,17 +10,40 @@ function valid(values: Record<string, number>): boolean {
 // Halfway between two whole sizes.
 const fraction = fc.integer({ min: 0, max: 30 }).map((size) => size + 0.5);
 
-test("diffs show inline until they're shown side by side", () => {
-  expect(viewSettings.schema.parse({})).toMatchObject({ sideBySide: false });
-  expect(viewSettings.schema.parse({ sideBySide: true })).toMatchObject({ sideBySide: true });
-});
-
-test("without a document, the font sizes are Paseo's defaults: 12 for the diff and 14 for the rest of the panel", () => {
+test("without a document, diffs show in the auto style with room for lines of 80 characters, and the font sizes are Paseo's defaults: 12 for the diff and 14 for the rest of the panel", () => {
   expect(viewSettings.schema.parse({})).toStrictEqual({
-    sideBySide: false,
+    diffStyle: "auto",
+    lineLength: 80,
     diffFontSize: 12,
     panelFontSize: 14,
   });
+});
+
+test("each diff style is kept as picked", () => {
+  for (const diffStyle of ["auto", "inline", "side by side"]) {
+    expect(viewSettings.schema.parse({ diffStyle })).toMatchObject({ diffStyle });
+  }
+});
+
+test("the line length takes each whole number of characters from 20 to 400", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 20, max: 400 }), (lineLength) => {
+      expect(viewSettings.schema.parse({ lineLength })).toMatchObject({ lineLength });
+    }),
+    { examples: [[20], [400]] },
+  );
+});
+
+test("the line length takes no number outside 20 to 400, nor a fraction", () => {
+  fc.assert(
+    fc.property(
+      fc.oneof(fc.integer({ max: 19 }), fc.integer({ min: 401 }), fraction),
+      (lineLength) => {
+        expect(valid({ lineLength })).toBe(false);
+      },
+    ),
+    { examples: [[19], [401], [80.5]] },
+  );
 });
 
 test("the panel font size takes each whole size Paseo's interface size does, 10 to 21, and keeps the diff's default", () => {

@@ -19,6 +19,9 @@ export interface FontSizes {
   number: number;
 }
 
+// The room either side of a diff line's text.
+export const textPadding = 8;
+
 // The sizes of the panel's text, its smaller text scaled from the panel font size as Paseo scales its
 // own from its interface size, and its lines spaced as Paseo's diff spaces them.
 export function fontSizes({

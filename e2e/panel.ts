@@ -24,25 +24,6 @@ export function button(page: Page, name: string): Locator {
   return page.getByRole("button", { name, exact: true });
 }
 
-// How diffs show, as their toggle names it.
-type Layout = "side by side" | "inline";
-
-const others: Record<Layout, Layout> = { "side by side": "inline", inline: "side by side" };
-
-// Shows diffs as the layout says, whichever way an earlier test on the daemon left them. Needs a
-// diff open, for the toggle on its file's bar.
-export async function showLayout(page: Page, layout: Layout): Promise<void> {
-  const toggle = page.getByRole("button", { name: /^Show (?:side by side|inline)$/u }).first();
-
-  await toggle.waitFor();
-
-  if ((await toggle.getAttribute("aria-label")) === `Show ${layout}`) {
-    await toggle.click();
-  }
-
-  await button(page, `Show ${others[layout]}`).first().waitFor();
-}
-
 // Drags across the lines' text, from the start of the first to the end of the last, as selecting
 // them does.
 export async function selectLines(page: Page, first: string, last = first): Promise<void> {

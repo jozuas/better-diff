@@ -5,7 +5,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
-import { FontSizesContext } from "./fonts";
+import { FontSizesContext, textPadding } from "./fonts";
 import type { PointerHandlers } from "./hunk-bar";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
@@ -30,9 +30,6 @@ const monospace =
 // Paseo sets its UI font on everything in the app but what's marked data-pmono, and inside it, over
 // any font family the plugin gives.
 const paseoMonospace = { pmono: "" };
-
-// The room either side of a line's text.
-const textPadding = 8;
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
