@@ -108,6 +108,24 @@ test.each([
 );
 
 test.each([
+  ["generated", "yarn.lock", "a\n", "b\nc\n", { added: 2, removed: 1 }],
+  ["large", "a", lines("a", 501), lines("b", 500), { added: 500, removed: 501 }],
+])(
+  "counts the lines a diff collapsed as %s adds and removes",
+  async (collapsed, path, head, worktree, counts) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, path, head);
+      commitAll(repository);
+      writeFile(repository, path, worktree);
+
+      const diff = await readDiff({ directory: repository, path, side: "unstaged" });
+
+      expect(diff).toMatchObject({ collapsed, ...counts });
+    });
+  },
+);
+
+test.each([
   ["an empty lockfile", "package-lock.json", ""],
   ["a binary lockfile", "package-lock.json", "\0"],
 ])("leaves a diff without lines as it is: %s", async (_, path, content) => {
@@ -135,6 +153,8 @@ test("reads a collapsed diff's hunks and contents when asked to expand it, and i
       kind: "text",
       renamedFrom: undefined,
       mode: undefined,
+      added: 1,
+      removed: 1,
       hunks: [
         {
           oldStart: 1,

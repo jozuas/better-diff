@@ -121,12 +121,15 @@ function text(content: Buffer): string {
 // The diff of the changes, as the plugin shows it.
 export function diffOf({ diff, renamedFrom }: Changes): RpcOutput<typeof diffRpc> {
   const { header, hunks, lines } = parseDiff(diff);
+  const changed = hunks.flatMap((hunk) => hunk.lines);
 
   return {
     version: versionOf(diff),
     kind: kindOf(diff),
     renamedFrom,
     mode: modeOf(header),
+    added: changed.filter(({ kind }) => kind === "added").length,
+    removed: changed.filter(({ kind }) => kind === "removed").length,
     hunks: hunks.map(({ oldStart, newStart, lines: hunkLines }) => ({
       oldStart,
       newStart,

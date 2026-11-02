@@ -21,6 +21,10 @@ const diff = z.object({
   // Why a text diff's hunks and contents are left out, as GitHub leaves them out: the file is
   // generated, such as a lockfile, or the diff changes more lines than a view shows quickly.
   collapsed: z.enum(["generated", "large"]).optional(),
+  // How many lines the hunks add and remove, as `git diff --numstat` counts them, collapsed or
+  // not.
+  added: index,
+  removed: index,
   hunks: z.array(
     z.object({
       oldStart: index,

@@ -75,6 +75,14 @@ export function setUp(repository: string, files: readonly File[], algorithm: str
   }
 }
 
+// git's own commands leave out an untracked file, which the plugin's unstaged diff has as new,
+// unless it's added with --intent-to-add.
+export function intendToAdd(repository: string, { path, versions }: File, side: Side): void {
+  if (side === "unstaged" && versions.index === undefined && versions.worktree !== undefined) {
+    runGit(repository, ["add", "--intent-to-add", "--", path]);
+  }
+}
+
 // Undefined for a version without the file.
 export interface FileState {
   index: Buffer | undefined;

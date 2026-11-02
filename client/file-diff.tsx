@@ -9,6 +9,7 @@ import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import { fileActions } from "./actions";
 import type { Controls } from "./actions";
+import { countsOf } from "./counts";
 import { DiffBody } from "./diff-body";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
@@ -32,12 +33,43 @@ function useStyles(theme: PluginTheme) {
         },
         status: { fontSize: 11, fontWeight: "700", color: theme.colors.accentForeground },
         barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.accentForeground },
+        // On the page's own surface, since the bar's accent can be as green or red as the counts.
+        counts: {
+          paddingHorizontal: 6,
+          borderRadius: 4,
+          fontSize: 12,
+          fontWeight: "600",
+          backgroundColor: theme.colors.surface0,
+        },
+        added: { color: theme.colors.statusSuccess },
+        removed: { color: theme.colors.statusDanger },
       }),
     [theme],
   );
 }
 
 type Styles = ReturnType<typeof useStyles>;
+
+interface LineCountsProps {
+  // Undefined until it's read.
+  diff: Diff | undefined;
+  styles: Styles;
+}
+
+function LineCounts({ diff, styles }: LineCountsProps): ReactElement | null {
+  const counts = diff === undefined ? undefined : countsOf(diff);
+
+  if (counts === undefined) {
+    return null;
+  }
+
+  return (
+    <Text style={styles.counts}>
+      <Text style={styles.added}>{counts.added}</Text>{" "}
+      <Text style={styles.removed}>{counts.removed}</Text>
+    </Text>
+  );
+}
 
 interface FileActionsProps {
   // Undefined until it's read.
@@ -91,8 +123,9 @@ interface FileDiffProps {
   theme: PluginTheme;
 }
 
-// The file's diff, as opened from its group, under a bar that says which file it is. A collapsed
-// diff shows its lines once asked to, until another file is opened.
+// The file's diff, as opened from its group, under a bar that says which file it is and how many
+// lines it adds and removes. A collapsed diff shows its lines once asked to, until another file is
+// opened.
 export function FileDiff({ query, file, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
   const [expand, setExpand] = useState(false);
@@ -106,6 +139,7 @@ export function FileDiff({ query, file, controls, theme }: FileDiffProps): React
         renamedFrom={diff.data?.renamedFrom}
         styles={styles}
       >
+        <LineCounts diff={diff.data} styles={styles} />
         <FileActions diff={diff.data} file={file} controls={controls} theme={theme} />
       </FileBar>
       <Queried query={diff} theme={theme}>

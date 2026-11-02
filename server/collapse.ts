@@ -62,8 +62,7 @@ export async function generatedPaths(
 // The diff without its hunks and contents, where it has some and the file is generated or the diff
 // large: thousands of lines are slow to show, and a generated file's are seldom read.
 export function collapsed<D extends Diff>(diff: D, generated: boolean): D {
-  const changed = diff.hunks.flatMap(({ lines }) => lines.filter(({ kind }) => kind !== "context"));
-  const large = changed.length > largeDiff;
+  const large = diff.added + diff.removed > largeDiff;
 
   if (diff.hunks.length === 0 || !(generated || large)) {
     return diff;
