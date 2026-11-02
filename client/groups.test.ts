@@ -1,9 +1,25 @@
+import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import type { diffRpc } from "../shared/diff";
 import { filePath } from "../test/file-names";
-import { groups, isOpen, openAfter, placeholder, sidebarGroups, toggled } from "./groups";
-import type { GroupName, OpenFile } from "./groups";
+import {
+  diffIn,
+  diffOf,
+  groups,
+  isGroupOpen,
+  isOpen,
+  isShown,
+  listedFiles,
+  measured,
+  openAfter,
+  placeholder,
+  sidebarGroups,
+  tallest,
+  toggled,
+} from "./groups";
+import type { GroupName, OpenFile, OpenGroup } from "./groups";
 
 test("heads each group with its title and number of files: modified, then untracked, then staged, and acts on all the files of each that has some", () => {
   expect(sidebarGroups({ modified: ["a", "b/c"], untracked: ["d"], staged: [] })).toStrictEqual([
@@ -98,6 +114,24 @@ test("a file is open only in the group it was opened from, under its own path", 
   expect(isOpen(undefined, "staged", "a")).toBe(false);
 });
 
+test("a group is open only once its heading opens it, not one of its files", () => {
+  const open: OpenGroup = { group: "staged" };
+
+  expect(isGroupOpen(open, "staged")).toBe(true);
+  expect(isGroupOpen(open, "modified")).toBe(false);
+  expect(isGroupOpen({ group: "staged", path: "a" }, "staged")).toBe(false);
+  expect(isGroupOpen(undefined, "staged")).toBe(false);
+  expect(isOpen(open, "staged", "a")).toBe(false);
+});
+
+test("shows the diff of each file of the open group, and of the open file alone", () => {
+  expect(isShown({ group: "staged" }, "staged", "a")).toBe(true);
+  expect(isShown({ group: "staged" }, "modified", "a")).toBe(false);
+  expect(isShown({ group: "staged", path: "a" }, "staged", "a")).toBe(true);
+  expect(isShown({ group: "staged", path: "a" }, "staged", "b")).toBe(false);
+  expect(isShown(undefined, "staged", "a")).toBe(false);
+});
+
 function modified(...paths: string[]) {
   return { modified: paths, untracked: [], staged: [] };
 }
@@ -187,6 +221,103 @@ test("opens no file once the open one's group lists none", () => {
   fc.assert(
     fc.property(groupName, filePath, changes, changes, (group, path, before, after) => {
       expect(openAfter({ group, path }, before, { ...after, [group]: [] })).toBeUndefined();
+    }),
+  );
+});
+
+test("stays on the open group whatever the changes listed before and after an action", () => {
+  fc.assert(
+    fc.property(
+      groupName,
+      fc.option(changes, { nil: undefined }),
+      fc.option(changes, { nil: undefined }),
+      (group, before, after) => {
+        const open: OpenGroup = { group };
+
+        expect(openAfter(open, before, after)).toBe(open);
+      },
+    ),
+  );
+});
+
+type Diff = RpcOutput<typeof diffRpc>;
+
+function diffVersioned(version: string): Diff {
+  return { version, kind: "text", added: 1, removed: 0, hunks: [], contents: { old: [], new: [] } };
+}
+
+test("shows the files of a group's read that the sidebar lists under the filter, in their order", () => {
+  fc.assert(
+    fc.property(fc.uniqueArray(filePath), fc.string({ unit: "binary" }), (paths, filter) => {
+      const read = {
+        version: "group",
+        files: paths.map((path) => Object.assign(diffVersioned(path), { path })),
+      };
+
+      expect(listedFiles(read, filter).map(({ path }) => path)).toStrictEqual(
+        sidebarGroups({ modified: paths, untracked: [], staged: [] }, filter)[0]?.paths,
+      );
+    }),
+  );
+});
+
+test("finds the diff of a file of a group's read, unless the read couldn't read it", () => {
+  const read = {
+    version: "group",
+    files: [Object.assign(diffVersioned("1"), { path: "a" }), { path: "b", error: "unreadable" }],
+  };
+
+  expect(diffIn(read, "a")).toStrictEqual({ ...diffVersioned("1"), path: "a" });
+  expect(diffIn(read, "b")).toBeUndefined();
+  expect(diffIn(read, "c")).toBeUndefined();
+  expect(diffIn(undefined, "a")).toBeUndefined();
+  expect(diffOf({ path: "b", error: "unreadable" })).toBeUndefined();
+});
+
+// Bars measured one after another, by their files' paths, some more than once.
+const measures = fc.array(fc.tuple(fc.constantFrom("a", "b", "c", "d"), fc.nat()));
+
+function measuredAll(all: readonly (readonly [string, number])[]): ReadonlyMap<string, number> {
+  let heights: ReadonlyMap<string, number> = new Map();
+
+  for (const [path, height] of all) {
+    heights = measured(heights, path, height);
+  }
+
+  return heights;
+}
+
+test("keeps the height each file's bar was measured at last", () => {
+  fc.assert(
+    fc.property(measures, (all) => {
+      const heights = measuredAll(all);
+
+      for (const path of ["a", "b", "c", "d"]) {
+        expect(heights.get(path)).toBe(all.findLast(([other]) => other === path)?.[1]);
+      }
+    }),
+  );
+});
+
+test("keeps the same heights when a bar is measured at the height it has", () => {
+  const heights = measured(new Map(), "a", 20);
+
+  expect(measured(heights, "a", 20)).toBe(heights);
+  expect(measured(heights, "a", 21)).not.toBe(heights);
+});
+
+test("makes the bars of the files listed as tall as the tallest of them, ignoring others'", () => {
+  fc.assert(
+    fc.property(measures, fc.subarray(["a", "b", "c", "d"]), (all, paths) => {
+      const heights = measuredAll(all);
+      const listed = [...heights].filter(([path]) => paths.includes(path));
+      const height = tallest(heights, paths);
+
+      expect([0, ...new Map(listed).values()]).toContain(height);
+
+      for (const [, other] of listed) {
+        expect(height).toBeGreaterThanOrEqual(other);
+      }
     }),
   );
 });

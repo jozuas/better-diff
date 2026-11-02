@@ -4,6 +4,20 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { Text } from "react-native";
 
+interface FailedProps {
+  message: string;
+  theme: PluginTheme;
+}
+
+// Why something couldn't be read.
+export function Failed({ message, theme }: FailedProps): ReactElement {
+  return (
+    <Text selectable style={{ padding: 16, color: theme.colors.statusDanger }}>
+      {message}
+    </Text>
+  );
+}
+
 interface QueriedProps<Data> {
   query: UseQueryResult<Data>;
   theme: PluginTheme;
@@ -17,11 +31,7 @@ export function Queried<Data>({ query, theme, children }: QueriedProps<Data>): R
   }
 
   if (query.isError) {
-    return (
-      <Text selectable style={{ padding: 16, color: theme.colors.statusDanger }}>
-        {query.error.message}
-      </Text>
-    );
+    return <Failed message={query.error.message} theme={theme} />;
   }
 
   return children(query.data);

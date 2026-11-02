@@ -6,7 +6,7 @@ import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/r
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { z } from "zod";
 
 import { changesRpc } from "../shared/changes";
@@ -25,10 +25,10 @@ import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
 import { copy } from "./copy";
 import type { CopyItem } from "./copy";
-import { FileDiff } from "./file-diff";
+import { DiffView } from "./diff-view";
 import { FileList } from "./file-list";
-import { groups, openAfter, placeholder, sidebarGroups } from "./groups";
-import type { OpenFile } from "./groups";
+import { diffIn, groups, openAfter, placeholder, sidebarGroups } from "./groups";
+import type { GroupName, OpenFile, OpenGroup } from "./groups";
 import { Queried } from "./queried";
 import { defaultWidth, fileListWidth } from "./resize";
 import { Separator } from "./separator";
@@ -39,22 +39,39 @@ const tabState = z.object({ fileListWidth: z.number() });
 
 type Diff = RpcOutput<typeof diffRpc>;
 
+type GroupRead = RpcOutput<typeof groupRpc>;
+
 interface Request {
   operation: RpcInput<typeof applyFileRpc>["operation"];
   target: Target;
 }
 
 // The queries of a file's diff, as opened from its group, collapsed or not, whose keys start with
-// the file's.
+// the file's, and of the diffs of all of a group's files.
 function useDiffQueries(directory: string) {
   const readDiff = useRpc(diffRpc);
+  const readGroup = useRpc(groupRpc);
 
   function fileKey({ group, path }: OpenFile): string[] {
     return [directory, "diff", groups[group].side, path];
   }
 
+  function groupKey(group: GroupName): string[] {
+    return [directory, "group", group];
+  }
+
   return {
     fileKey,
+    groupKey,
+    groupQuery: (group: GroupName) =>
+      queryOptions({
+        queryKey: groupKey(group),
+        queryFn: async () => {
+          const read = await readGroup({ directory, group });
+
+          return read;
+        },
+      }),
     query: (file: OpenFile, expand: boolean) =>
       queryOptions({
         queryKey: [...fileKey(file), expand],
@@ -202,7 +219,7 @@ interface ChangesProps {
 function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState<OpenFile>();
+  const [open, setOpen] = useState<OpenFile | OpenGroup>();
   const [filter, setFilter] = useState("");
 
   const changesQuery = queryOptions({
@@ -231,11 +248,22 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     setOpen((shown) => openAfter(shown, before, after));
   }
 
+  // The file's diff as its group's diffs show it, while they're shown.
+  function groupShown(file: OpenFile): Diff | undefined {
+    const [shown] = queryClient.getQueriesData<GroupRead>({
+      queryKey: diffs.groupKey(file.group),
+      type: "active",
+    });
+
+    return diffIn(shown?.[1], file.path);
+  }
+
   const controls = useControls(
     directory,
-    // The one of the file's queries the diff shown watches.
+    // The one of the file's queries the diff shown watches, or else its group's.
     (file) =>
-      queryClient.getQueriesData<Diff>({ queryKey: diffs.fileKey(file), type: "active" })[0]?.[1],
+      queryClient.getQueriesData<Diff>({ queryKey: diffs.fileKey(file), type: "active" })[0]?.[1] ??
+      groupShown(file),
     refresh,
   );
 
@@ -246,7 +274,6 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
       StyleSheet.create({
         panel: { flex: 1, flexDirection: "row", backgroundColor: theme.colors.surface0 },
         diff: { flex: 1 },
-        hint: { padding: 16, color: theme.colors.foregroundMuted },
       }),
     [theme],
   );
@@ -262,6 +289,9 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
               groups={sidebarGroups(data, filter)}
               open={open}
               onOpen={setOpen}
+              onOpenGroup={(group) => {
+                setOpen({ group });
+              }}
               filter={filter}
               onFilter={setFilter}
               controls={controls}
@@ -279,17 +309,15 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
         theme={theme}
       />
       <View style={styles.diff}>
-        {open === undefined ? (
-          <Text style={styles.hint}>{placeholder(changes.data)}</Text>
-        ) : (
-          <FileDiff
-            key={`${open.group}:${open.path}`}
-            query={(expand) => diffs.query(open, expand)}
-            file={open}
-            controls={controls}
-            theme={theme}
-          />
-        )}
+        <DiffView
+          open={open}
+          placeholder={placeholder(changes.data)}
+          fileQuery={diffs.query}
+          groupQuery={diffs.groupQuery}
+          filter={filter}
+          controls={controls}
+          theme={theme}
+        />
       </View>
     </View>
   );

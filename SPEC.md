@@ -49,7 +49,7 @@ Replicates Sublime Merge as much as possible:
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
 - A triangle left of each group's heading collapses the group, hiding its files, and expands it again: it points right while the group is collapsed and down while it's expanded. Groups start expanded.
-- Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's coloured bar is a sticky header, so you always know which file you're looking at.
+- Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's coloured bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.
 - Each file's row has its file bar's actions as icons at its end (Stage +, Unstage −, Discard ↺, Delete 🗑), over the end of its path. They show while the pointer is over the row or focus is in it, and always on the open file's row, whose actions act on the diff shown.
 - Each group's heading has the actions on all its files the same way:
   - MODIFIED: Stage All, Discard All

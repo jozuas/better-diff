@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -13,9 +13,8 @@ import { labelOf } from "./labels";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { isSelected, lineId, sameRange, selectedRange } from "./selection";
+import { fileId, isSelected, lineId } from "./selection";
 import type { LineRange } from "./selection";
-import { onSelection, scrollUpTo } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -74,23 +73,6 @@ function useStyles(theme: PluginTheme) {
 }
 
 type Styles = ReturnType<typeof useStyles>;
-
-// The lines of the container's diff that the page's text selection touches.
-function useSelectedLines(container: string): LineRange | undefined {
-  const [range, setRange] = useState<LineRange>();
-
-  useEffect(
-    () =>
-      onSelection(container, (touched, anchor) => {
-        const next = selectedRange(container, touched, anchor);
-
-        setRange((current) => (sameRange(current, next) ? current : next));
-      }),
-    [container],
-  );
-
-  return range;
-}
 
 interface DiffLineProps {
   id: string;
@@ -159,99 +141,137 @@ function HunkLines({
   );
 }
 
-interface DiffBodyProps {
+export interface DiffBodyProps {
   diff: Diff;
   file: OpenFile;
+  // The id of the view it's shown in, and its index among the view's files.
+  view: string;
+  fileIndex: number;
+  // Its lines the page's text selection touches, if any.
+  selection: LineRange | undefined;
+  // Whether its hunks scroll in the view on their own, under bars that stay at the top, as when
+  // it's the view's only diff, rather than with the view's other diffs.
+  scrolls: boolean;
+  // Called just before an action on one of its hunks runs, with the id of the hunk's first line and
+  // the height of its bar.
+  onHunkRun: (line: string, barHeight: number) => void;
   controls: Controls;
   // Asks for a collapsed diff's lines.
   onExpand: () => void;
   theme: PluginTheme;
 }
 
+interface LabelRowProps {
+  label: string;
+  diff: Diff;
+  onExpand: () => void;
+  styles: Styles;
+}
+
+// What's shown instead of a diff without lines, with a button that shows a collapsed one's.
+function LabelRow({ label, diff, onExpand, styles }: LabelRowProps): ReactElement {
+  return (
+    <View style={styles.labelRow}>
+      <Text style={styles.label}>{label}</Text>
+      {diff.collapsed === undefined ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show diff"
+          style={styles.expand}
+          onPress={onExpand}
+        >
+          <Text selectable={false} style={styles.expandText}>
+            Show diff
+          </Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 interface HunksProps extends DiffBodyProps {
   styles: Styles;
 }
 
-// Each hunk's bar is followed by its lines, and stays at the top while they scroll under it, until
-// the next hunk's bar covers it. The pointer over either reveals the hunk's actions. Just before an
-// action on a hunk runs, the view scrolls up to the hunk's start if it's above, so the next hunk,
-// which then takes its place, shows from its start.
-function Hunks({ diff, file, controls, onExpand, styles, theme }: HunksProps): ReactElement {
-  const container = useId();
-  const selection = useSelectedLines(container);
+// Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions. Hunks
+// that scroll on their own have each bar stay at the top while its lines scroll under it, until the
+// next hunk's bar covers it.
+function Hunks({
+  diff,
+  file,
+  view,
+  fileIndex,
+  selection,
+  scrolls,
+  onHunkRun,
+  controls,
+  onExpand,
+  styles,
+  theme,
+}: HunksProps): ReactElement {
   const [pointed, setPointed] = useState<number>();
   const barHeight = useRef(0);
+  const container = fileId(view, fileIndex);
   const label = labelOf(diff);
 
   if (label !== undefined) {
-    return (
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
-        {diff.collapsed === undefined ? null : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Show diff"
-            style={styles.expand}
-            onPress={onExpand}
-          >
-            <Text selectable={false} style={styles.expandText}>
-              Show diff
-            </Text>
-          </Pressable>
-        )}
-      </View>
-    );
+    return <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} />;
   }
 
-  return (
-    <ScrollView nativeID={container} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index)}>
-      {diff.hunks.flatMap((hunk, index) => {
-        const pointer: PointerHandlers = {
-          onPointerEnter: () => {
-            setPointed(index);
-          },
-          onPointerLeave: () => {
-            setPointed(undefined);
-          },
-        };
+  const hunks = diff.hunks.flatMap((hunk, index) => {
+    const pointer: PointerHandlers = {
+      onPointerEnter: () => {
+        setPointed(index);
+      },
+      onPointerLeave: () => {
+        setPointed(undefined);
+      },
+    };
 
-        return [
-          <HunkBar
-            key={`bar ${hunk.oldStart},${hunk.newStart}`}
-            hunk={hunk}
-            index={index}
-            version={diff.version}
-            file={file}
-            selection={selection}
-            pointed={pointed}
-            pointer={pointer}
-            controls={controls}
-            onHeight={(height) => {
-              barHeight.current = height;
-            }}
-            onRun={() => {
-              scrollUpTo(container, lineId(container, index, 0), barHeight.current);
-            }}
-            theme={theme}
-          />,
-          <HunkLines
-            key={`lines ${hunk.oldStart},${hunk.newStart}`}
-            hunk={hunk}
-            index={index}
-            container={container}
-            selection={selection}
-            pointer={pointer}
-            styles={styles}
-          />,
-        ];
-      })}
+    return [
+      <HunkBar
+        key={`bar ${hunk.oldStart},${hunk.newStart}`}
+        hunk={hunk}
+        index={index}
+        version={diff.version}
+        file={file}
+        selection={selection}
+        pointed={pointed}
+        pointer={pointer}
+        controls={controls}
+        onHeight={(height) => {
+          barHeight.current = height;
+        }}
+        onRun={() => {
+          onHunkRun(lineId(container, index, 0), barHeight.current);
+        }}
+        theme={theme}
+      />,
+      <HunkLines
+        key={`lines ${hunk.oldStart},${hunk.newStart}`}
+        hunk={hunk}
+        index={index}
+        container={container}
+        selection={selection}
+        pointer={pointer}
+        styles={styles}
+      />,
+    ];
+  });
+
+  return scrolls ? (
+    <ScrollView nativeID={view} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index)}>
+      {hunks}
     </ScrollView>
+  ) : (
+    <View>{hunks}</View>
   );
 }
 
 // The diff's mode change, if it has one, above its hunks, or what's shown instead of a diff without
 // lines, with a button that shows a collapsed one's.
-export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProps): ReactElement {
+export function DiffBody(props: DiffBodyProps): ReactElement {
+  const { diff, file, controls, theme } = props;
   const styles = useStyles(theme);
 
   return (
@@ -265,14 +285,7 @@ export function DiffBody({ diff, file, controls, onExpand, theme }: DiffBodyProp
           theme={theme}
         />
       )}
-      <Hunks
-        diff={diff}
-        file={file}
-        controls={controls}
-        onExpand={onExpand}
-        styles={styles}
-        theme={theme}
-      />
+      <Hunks {...props} styles={styles} />
     </>
   );
 }

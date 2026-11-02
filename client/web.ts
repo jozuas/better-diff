@@ -1,7 +1,10 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
+import { useEffect, useState } from "react";
 import { Platform } from "react-native";
 
 import type { Point } from "./menu";
+import { sameRange, selectedRange } from "./selection";
+import type { LineRange } from "./selection";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageNode {
@@ -23,7 +26,7 @@ interface PageEvents {
 interface PageElement extends PageNode {
   readonly id: string;
   scrollTop: number;
-  readonly style: { cursor: string; userSelect: string; width: string };
+  readonly style: { cursor: string; overflowAnchor: string; userSelect: string; width: string };
   getBoundingClientRect: () => { readonly top: number; readonly width: number };
   addEventListener: <Type extends keyof PageEvents>(
     type: Type,
@@ -119,7 +122,7 @@ function touches(selection: PageSelection, element: PageElement): boolean {
 // called, with the ids of the elements inside the element with the id `container` that have one and
 // whose text the selection touches, in the page's order, and of the one it starts in, or "" if it
 // starts in none.
-export function onSelection(
+function onSelection(
   container: string,
   listener: (touched: string[], anchor: string) => void,
 ): () => void {
@@ -157,6 +160,23 @@ export function onSelection(
   };
 }
 
+// The lines of the diffs in the element with the id `view` that the page's text selection touches.
+export function useSelectedLines(view: string): LineRange | undefined {
+  const [range, setRange] = useState<LineRange>();
+
+  useEffect(
+    () =>
+      onSelection(view, (touched, anchor) => {
+        const next = selectedRange(view, touched, anchor);
+
+        setRange((current) => (sameRange(current, next) ? current : next));
+      }),
+    [view],
+  );
+
+  return range;
+}
+
 export function clearSelection(): void {
   if (Platform.OS === "web") {
     document.getSelection()?.removeAllRanges();
@@ -182,6 +202,21 @@ export function scrollUpTo(container: string, target: string, margin: number): v
 
   if (hidden > 0) {
     scroller.scrollTop -= hidden;
+  }
+}
+
+// Has the element with the id keep its scroll position when what it shows changes size, rather than
+// keep what it shows in place, as browsers that anchor scrolling do: they move a view that scrolls
+// itself to what takes the place of something an action removes back to what was before it.
+export function stopScrollAnchoring(id: string): void {
+  if (Platform.OS !== "web") {
+    return;
+  }
+
+  const element = document.querySelector(`#${CSS.escape(id)}`);
+
+  if (element !== null) {
+    element.style.overflowAnchor = "none";
   }
 }
 

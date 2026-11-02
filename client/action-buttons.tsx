@@ -89,7 +89,7 @@ interface ActionButtonsProps {
   target: Target;
   controls: Controls;
   // Called just before one of the actions runs.
-  onRun?: () => void;
+  onRun?: (() => void) | undefined;
   hidden?: boolean;
   // The buttons' colour, against the bar's.
   color: string;

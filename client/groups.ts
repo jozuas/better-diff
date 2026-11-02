@@ -1,9 +1,13 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { changesRpc } from "../shared/changes";
-import type { diffRpc } from "../shared/diff";
+import type { diffRpc, groupRpc } from "../shared/diff";
 
 type Changes = RpcOutput<typeof changesRpc>;
+
+type Diff = RpcOutput<typeof diffRpc>;
+
+type GroupRead = RpcOutput<typeof groupRpc>;
 
 export type GroupName = keyof Changes;
 
@@ -81,21 +85,79 @@ export interface OpenFile {
   path: string;
 }
 
-export function isOpen(open: OpenFile | undefined, group: GroupName, path: string): boolean {
+// A group as opened from its heading, which shows the diffs of all the files it lists.
+export interface OpenGroup {
+  group: GroupName;
+  path?: undefined;
+}
+
+export function isOpen(
+  open: OpenFile | OpenGroup | undefined,
+  group: GroupName,
+  path: string,
+): boolean {
   return open?.group === group && open.path === path;
 }
 
-// The file to show once the changes are listed again, as after an action, from the lists before
-// and after: the open file while its group still lists it. Otherwise the next file in the group's
-// list before that it still lists, or else the closest one before it, or else the first one it lists
-// now. None if it lists none, or none was open, and the open file without both lists.
+export function isGroupOpen(open: OpenFile | OpenGroup | undefined, group: GroupName): boolean {
+  return open?.group === group && open.path === undefined;
+}
+
+// Whether the diff of the file the group lists is shown: the file is open, or the group is.
+export function isShown(
+  open: OpenFile | OpenGroup | undefined,
+  group: GroupName,
+  path: string,
+): boolean {
+  return isOpen(open, group, path) || isGroupOpen(open, group);
+}
+
+// The files of the group's read that the sidebar lists under the filter, each with its diff or why
+// it can't be read.
+export function listedFiles(read: GroupRead, filter: string): GroupRead["files"] {
+  return read.files.filter(({ path }) => matches(path, filter));
+}
+
+// The file's diff, if the group's read could read it.
+export function diffOf(file: GroupRead["files"][number]): Diff | undefined {
+  return "error" in file ? undefined : file;
+}
+
+// The diff of the file at the path in the group's read, if it has the file and could read its diff.
+export function diffIn(read: GroupRead | undefined, path: string): Diff | undefined {
+  const file = read?.files.find((other) => other.path === path);
+
+  return file === undefined ? undefined : diffOf(file);
+}
+
+// The heights of the files' bars by their paths, once the bar of the file at the path is measured:
+// the same heights if they have its height already.
+export function measured(
+  heights: ReadonlyMap<string, number>,
+  path: string,
+  height: number,
+): ReadonlyMap<string, number> {
+  return heights.get(path) === height ? heights : new Map(heights).set(path, height);
+}
+
+// The height of the tallest of the bars of the files at the paths, by their heights, or 0 if none
+// has been measured.
+export function tallest(heights: ReadonlyMap<string, number>, paths: readonly string[]): number {
+  return Math.max(0, ...paths.map((path) => heights.get(path) ?? 0));
+}
+
+// What to show once the changes are listed again, as after an action, from the lists before and
+// after: the open group, or the open file while its group still lists it. Otherwise the next file
+// in the group's list before that it still lists, or else the closest one before it, or else the
+// first one it lists now. None if it lists none, or nothing was open, and what was open without
+// both lists.
 export function openAfter(
-  open: OpenFile | undefined,
+  open: OpenFile | OpenGroup | undefined,
   before: Changes | undefined,
   after?: Changes,
-): OpenFile | undefined {
+): OpenFile | OpenGroup | undefined {
   if (
-    open === undefined ||
+    open?.path === undefined ||
     before === undefined ||
     after === undefined ||
     after[open.group].includes(open.path)

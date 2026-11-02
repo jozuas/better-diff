@@ -9,8 +9,8 @@ import type { Controls } from "./actions";
 import type { CopyItem } from "./copy";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
-import { groups as kinds, isOpen, toggled } from "./groups";
-import type { GroupName, OpenFile, SidebarGroup } from "./groups";
+import { isGroupOpen, groups as kinds, isOpen, isShown, toggled } from "./groups";
+import type { GroupName, OpenFile, OpenGroup, SidebarGroup } from "./groups";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
 import { SidebarButtons } from "./sidebar-buttons";
@@ -44,6 +44,7 @@ function useStyles(theme: PluginTheme) {
           borderLeftColor: theme.colors.foregroundMuted,
         },
         turned: { transform: [{ rotate: "90deg" }] },
+        headingButton: { flex: 1 },
         heading: {
           fontSize: 11,
           fontWeight: "600",
@@ -91,6 +92,8 @@ function useReveal() {
 interface FileRowProps {
   file: OpenFile;
   open: boolean;
+  // Whether its diff is shown, as it is while it's open or its group is.
+  shown: boolean;
   onPress: () => void;
   // Hears where the row was right-clicked.
   onMenu: (point: Point) => void;
@@ -102,6 +105,7 @@ interface FileRowProps {
 function FileRow({
   file,
   open,
+  shown,
   onPress,
   onMenu,
   controls,
@@ -131,7 +135,7 @@ function FileRow({
       <SidebarButtons
         actions={fileActions[file.group]}
         row={`file:${file.group}:${file.path}`}
-        target={{ file, shown: open }}
+        target={{ file, shown }}
         path={file.path}
         look={look}
         background={styles[look]}
@@ -145,6 +149,8 @@ function FileRow({
 
 interface GroupHeadingProps {
   group: SidebarGroup;
+  open: boolean;
+  onOpen: () => void;
   expanded: boolean;
   onToggle: () => void;
   controls: Controls;
@@ -152,10 +158,12 @@ interface GroupHeadingProps {
   theme: PluginTheme;
 }
 
-// The group's heading, after the triangle that collapses and expands it, with the actions on all
-// its files while it lists them all.
+// The group's heading, which opens the group, after the triangle that collapses and expands it,
+// with the actions on all its files while it lists them all.
 function GroupHeading({
   group: { name, heading, files },
+  open,
+  onOpen,
   expanded,
   onToggle,
   controls,
@@ -163,7 +171,7 @@ function GroupHeading({
   theme,
 }: GroupHeadingProps): ReactElement {
   const { revealed, reveal } = useReveal();
-  const look = lookOf(false, revealed);
+  const look = lookOf(open, revealed);
 
   return (
     <View>
@@ -178,9 +186,18 @@ function GroupHeading({
         >
           <View style={[styles.triangle, expanded && styles.turned]} />
         </Pressable>
-        <Text accessibilityRole="header" style={styles.heading}>
-          {heading}
-        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={heading}
+          accessibilityState={{ selected: open }}
+          style={styles.headingButton}
+          onPress={onOpen}
+          {...reveal}
+        >
+          <Text accessibilityRole="header" style={styles.heading}>
+            {heading}
+          </Text>
+        </Pressable>
       </Pressable>
       {files === undefined ? null : (
         <SidebarButtons
@@ -200,8 +217,9 @@ function GroupHeading({
 
 interface FileListProps {
   groups: SidebarGroup[];
-  open: OpenFile | undefined;
+  open: OpenFile | OpenGroup | undefined;
   onOpen: (file: OpenFile) => void;
+  onOpenGroup: (group: GroupName) => void;
   // What the groups' files are filtered by.
   filter: string;
   onFilter: (filter: string) => void;
@@ -213,11 +231,12 @@ interface FileListProps {
 
 // The changed files, in their groups, under the filter they're listed by. Each file and group has
 // its actions at the end of its row, shown while the pointer is over it or focus is in it, and
-// always for the open file. A file's row opens its menu when right-clicked.
+// always for the open file or group. A file's row opens its menu when right-clicked.
 export function FileList({
   groups,
   open,
   onOpen,
+  onOpenGroup,
   filter,
   onFilter,
   controls,
@@ -236,6 +255,10 @@ export function FileList({
           <View key={group.name} style={styles.group}>
             <GroupHeading
               group={group}
+              open={isGroupOpen(open, group.name)}
+              onOpen={() => {
+                onOpenGroup(group.name);
+              }}
               expanded={!collapsed.includes(group.name)}
               onToggle={() => {
                 setCollapsed((shown) => toggled(shown, group.name));
@@ -250,6 +273,7 @@ export function FileList({
                   key={path}
                   file={{ group: group.name, path }}
                   open={isOpen(open, group.name, path)}
+                  shown={isShown(open, group.name, path)}
                   onPress={() => {
                     onOpen({ group: group.name, path });
                   }}

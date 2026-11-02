@@ -1,8 +1,8 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
-import type { ReactElement, ReactNode } from "react";
-import { useMemo, useState } from "react";
+import type { ReactElement } from "react";
+import { useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -14,6 +14,7 @@ import { DiffBody } from "./diff-body";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
+import { scrollUpTo, useSelectedLines } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -22,14 +23,14 @@ function useStyles(theme: PluginTheme) {
     () =>
       StyleSheet.create({
         file: { flex: 1 },
-        fileBar: {
+        fileBar: { justifyContent: "center", backgroundColor: theme.colors.accent },
+        barContent: {
           flexDirection: "row",
           flexWrap: "wrap",
           alignItems: "center",
           gap: 8,
           paddingHorizontal: 12,
           paddingVertical: 6,
-          backgroundColor: theme.colors.accent,
         },
         status: { fontSize: 11, fontWeight: "700", color: theme.colors.accentForeground },
         barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.accentForeground },
@@ -76,10 +77,17 @@ interface FileActionsProps {
   diff: Diff | undefined;
   file: OpenFile;
   controls: Controls;
+  onRun: (() => void) | undefined;
   theme: PluginTheme;
 }
 
-function FileActions({ diff, file, controls, theme }: FileActionsProps): ReactElement | null {
+function FileActions({
+  diff,
+  file,
+  controls,
+  onRun,
+  theme,
+}: FileActionsProps): ReactElement | null {
   if (diff === undefined) {
     return null;
   }
@@ -90,6 +98,7 @@ function FileActions({ diff, file, controls, theme }: FileActionsProps): ReactEl
       bar={`${diff.version}:file`}
       target={{ file, version: diff.version }}
       controls={controls}
+      onRun={onRun}
       color={theme.colors.accentForeground}
       theme={theme}
     />
@@ -97,20 +106,48 @@ function FileActions({ diff, file, controls, theme }: FileActionsProps): ReactEl
 }
 
 interface FileBarProps {
-  status: string;
-  path: string;
-  renamedFrom: string | undefined;
-  styles: Styles;
-  children: ReactNode;
+  file: OpenFile;
+  // Undefined until it's read, or if it can't be.
+  diff: Diff | undefined;
+  // At least as tall as this, with what it shows in its middle.
+  minHeight?: number;
+  // Hears how tall what it shows is, whatever minHeight.
+  onHeight?: (height: number) => void;
+  // Called just before one of the file's actions runs.
+  onRun?: () => void;
+  controls: Controls;
+  theme: PluginTheme;
 }
 
-function FileBar({ status, path, renamedFrom, styles, children }: FileBarProps): ReactElement {
+// Which file a diff is of, as opened from its group, how many lines it adds and removes, and the
+// actions on the file.
+export function FileBar({
+  file,
+  diff,
+  minHeight,
+  onHeight,
+  onRun,
+  controls,
+  theme,
+}: FileBarProps): ReactElement {
+  const styles = useStyles(theme);
+
   return (
-    <View accessibilityRole="header" style={styles.fileBar}>
-      <Text style={styles.status}>{status}</Text>
-      {renamedFrom === undefined ? null : <Text style={styles.barPath}>{renamedFrom} →</Text>}
-      <Text style={styles.barPath}>{path}</Text>
-      {children}
+    <View accessibilityRole="header" style={[styles.fileBar, { minHeight }]}>
+      <View
+        style={styles.barContent}
+        onLayout={(event) => {
+          onHeight?.(event.nativeEvent.layout.height);
+        }}
+      >
+        <Text style={styles.status}>{groups[file.group].status}</Text>
+        {diff?.renamedFrom === undefined ? null : (
+          <Text style={styles.barPath}>{diff.renamedFrom} →</Text>
+        )}
+        <Text style={styles.barPath}>{file.path}</Text>
+        <LineCounts diff={diff} styles={styles} />
+        <FileActions diff={diff} file={file} controls={controls} onRun={onRun} theme={theme} />
+      </View>
     </View>
   );
 }
@@ -123,30 +160,32 @@ interface FileDiffProps {
   theme: PluginTheme;
 }
 
-// The file's diff, as opened from its group, under a bar that says which file it is and how many
-// lines it adds and removes. A collapsed diff shows its lines once asked to, until another file is
-// opened.
+// The file's diff, as opened from its group, under its bar. A collapsed diff shows its lines once
+// asked to, until another file is opened. Just before an action on a hunk runs, the view scrolls up
+// to the hunk's start if it's above, so the next hunk, which then takes its place, shows from its
+// start.
 export function FileDiff({ query, file, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
+  const view = useId();
+  const selection = useSelectedLines(view);
   const [expand, setExpand] = useState(false);
   const diff = useQuery(query(expand));
 
   return (
     <View style={styles.file}>
-      <FileBar
-        status={groups[file.group].status}
-        path={file.path}
-        renamedFrom={diff.data?.renamedFrom}
-        styles={styles}
-      >
-        <LineCounts diff={diff.data} styles={styles} />
-        <FileActions diff={diff.data} file={file} controls={controls} theme={theme} />
-      </FileBar>
+      <FileBar file={file} diff={diff.data} controls={controls} theme={theme} />
       <Queried query={diff} theme={theme}>
         {(data) => (
           <DiffBody
             diff={data}
             file={file}
+            view={view}
+            fileIndex={0}
+            selection={selection}
+            scrolls
+            onHunkRun={(line, barHeight) => {
+              scrollUpTo(view, line, barHeight);
+            }}
             controls={controls}
             onExpand={() => {
               setExpand(true);
