@@ -57,6 +57,11 @@ Replicates Sublime Merge as much as possible:
   They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
 - "Filter files..." input to quickly find a file.
+- Right-clicking a file's row opens its menu, which closes with Escape or a click outside it:
+  - Copy full path
+  - Copy relative path: from the repository's root, as git status lists it.
+  - Copy filename
+  - Copy file contents: the file as it is in the worktree, whichever group lists it. A binary file, or one gone from the worktree, copies nothing, and says so.
 
 ### Confirmation
 
@@ -69,7 +74,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - Sending line comments to an agent.
 - Show/hide whitespace changes.
 - Keyboard shortcuts.
-- Right-click menus on files and groups, with the same actions as their buttons.
+- The actions of a file's and a group's buttons in right-click menus too.
 - Mobile.
 
 ### Out of scope

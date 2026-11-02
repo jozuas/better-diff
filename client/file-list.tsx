@@ -1,16 +1,20 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fileActions, groupActions } from "./actions";
 import type { Controls } from "./actions";
+import type { CopyItem } from "./copy";
+import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { isOpen } from "./groups";
 import type { OpenFile, SidebarGroup } from "./groups";
+import type { Point } from "./menu";
 import { lookOf } from "./reveal";
 import { SidebarButtons } from "./sidebar-buttons";
+import { onContextMenu } from "./web";
 
 function useStyles(theme: PluginTheme) {
   return useMemo(
@@ -69,17 +73,30 @@ interface FileRowProps {
   file: OpenFile;
   open: boolean;
   onPress: () => void;
+  // Hears where the row was right-clicked.
+  onMenu: (point: Point) => void;
   controls: Controls;
   styles: Styles;
   theme: PluginTheme;
 }
 
-function FileRow({ file, open, onPress, controls, styles, theme }: FileRowProps): ReactElement {
+function FileRow({
+  file,
+  open,
+  onPress,
+  onMenu,
+  controls,
+  styles,
+  theme,
+}: FileRowProps): ReactElement {
   const { revealed, reveal } = useReveal();
   const look = lookOf(open, revealed);
+  const id = useId();
+
+  useEffect(() => onContextMenu(id, onMenu), [id, onMenu]);
 
   return (
-    <View role="listitem">
+    <View role="listitem" nativeID={id}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={file.path}
@@ -155,12 +172,14 @@ interface FileListProps {
   filter: string;
   onFilter: (filter: string) => void;
   controls: Controls;
+  // Copies what a file's menu item names of the file at the path.
+  onCopy: (item: CopyItem, path: string) => void;
   theme: PluginTheme;
 }
 
 // The changed files, in their groups, under the filter they're listed by. Each file and group has
 // its actions at the end of its row, shown while the pointer is over it or focus is in it, and
-// always for the open file.
+// always for the open file. A file's row opens its menu when right-clicked.
 export function FileList({
   groups,
   open,
@@ -168,9 +187,11 @@ export function FileList({
   filter,
   onFilter,
   controls,
+  onCopy,
   theme,
 }: FileListProps): ReactElement {
   const styles = useStyles(theme);
+  const [menu, setMenu] = useState<{ path: string; point: Point }>();
 
   return (
     <View style={styles.fileList}>
@@ -188,6 +209,9 @@ export function FileList({
                   onPress={() => {
                     onOpen({ group: group.name, path });
                   }}
+                  onMenu={(point) => {
+                    setMenu({ path, point });
+                  }}
                   controls={controls}
                   styles={styles}
                   theme={theme}
@@ -197,6 +221,19 @@ export function FileList({
           </View>
         ))}
       </ScrollView>
+      {menu === undefined ? null : (
+        <FileMenu
+          path={menu.path}
+          point={menu.point}
+          onCopy={(item) => {
+            onCopy(item, menu.path);
+          }}
+          onClose={() => {
+            setMenu(undefined);
+          }}
+          theme={theme}
+        />
+      )}
     </View>
   );
 }

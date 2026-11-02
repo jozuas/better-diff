@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useRpc, useTabState, useWorkspace } from "@getpaseo/plugin/client";
-import { Loading, useToast } from "@getpaseo/plugin/client/ui";
+import { copyText, Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
@@ -10,11 +10,14 @@ import { StyleSheet, Text, View } from "react-native";
 import { z } from "zod";
 
 import { changesRpc } from "../shared/changes";
+import { contentsRpc } from "../shared/contents";
 import { applyFileRpc, applyGroupRpc, applyLinesRpc, diffRpc, groupRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
+import { copy } from "./copy";
+import type { CopyItem } from "./copy";
 import { FileDiff } from "./file-diff";
 import { FileList } from "./file-list";
 import { groups, openAfter, placeholder, sidebarGroups } from "./groups";
@@ -118,6 +121,33 @@ function useControls(
   };
 }
 
+// Copies what a file's menu item names of the file at the path, and says why where it copies
+// nothing.
+function useCopy(directory: string): (item: CopyItem, path: string) => void {
+  const toast = useToast();
+  const readContents = useRpc(contentsRpc);
+
+  const run = useMutation({
+    mutationFn: async ({ item, path }: { item: CopyItem; path: string }) => {
+      const refused = await copy(item, directory, path, { readContents, write: copyText });
+
+      return refused;
+    },
+    onSuccess: (refused) => {
+      if (refused !== undefined) {
+        toast.show(refused, { variant: "warning" });
+      }
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  return (item, path) => {
+    run.mutate({ item, path });
+  };
+}
+
 // Calls the latest `refresh` whenever the window regains focus, as on switching back from an
 // editor.
 function useRefreshOnFocus(refresh: () => Promise<void>): void {
@@ -201,6 +231,8 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     refresh,
   );
 
+  const onCopy = useCopy(directory);
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -225,6 +257,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
               filter={filter}
               onFilter={setFilter}
               controls={controls}
+              onCopy={onCopy}
               theme={theme}
             />
           )}

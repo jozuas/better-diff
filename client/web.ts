@@ -1,9 +1,23 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
 import { Platform } from "react-native";
 
+import type { Point } from "./menu";
+
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageNode {
   readonly nodeType: number;
+}
+
+interface PageMouseEvent {
+  readonly clientX: number;
+  readonly clientY: number;
+  preventDefault: () => void;
+}
+
+// What an element's listeners hear, by the event they listen for.
+interface PageEvents {
+  dblclick: PageMouseEvent;
+  contextmenu: PageMouseEvent;
 }
 
 interface PageElement extends PageNode {
@@ -11,8 +25,14 @@ interface PageElement extends PageNode {
   scrollTop: number;
   readonly style: { cursor: string; userSelect: string; width: string };
   getBoundingClientRect: () => { readonly top: number; readonly width: number };
-  addEventListener: (type: "dblclick", listener: () => void) => void;
-  removeEventListener: (type: "dblclick", listener: () => void) => void;
+  addEventListener: <Type extends keyof PageEvents>(
+    type: Type,
+    listener: (event: PageEvents[Type]) => void,
+  ) => void;
+  removeEventListener: <Type extends keyof PageEvents>(
+    type: Type,
+    listener: (event: PageEvents[Type]) => void,
+  ) => void;
   contains: (node: PageNode | null) => boolean;
   querySelectorAll: (selectors: string) => Iterable<PageElement>;
 }
@@ -207,6 +227,23 @@ export function onDoubleClick(id: string, listener: () => void): () => void {
 
   return () => {
     element?.removeEventListener("dblclick", listener);
+  };
+}
+
+// Calls the listener with where the pointer is on each right click on the element with the id, in
+// place of the page's own menu, until the returned function is called.
+export function onContextMenu(id: string, listener: (point: Point) => void): () => void {
+  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+  function open(event: PageMouseEvent): void {
+    event.preventDefault();
+    listener({ x: event.clientX, y: event.clientY });
+  }
+
+  element?.addEventListener("contextmenu", open);
+
+  return () => {
+    element?.removeEventListener("contextmenu", open);
   };
 }
 
