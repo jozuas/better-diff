@@ -5,15 +5,15 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
-import { ActionButtons } from "./action-buttons";
-import { hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
 import type { OpenFile } from "./groups";
+import { HunkBar } from "./hunk-bar";
+import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { isSelected, lineId, rangeLines, sameRange, selectedRange } from "./selection";
+import { isSelected, lineId, sameRange, selectedRange } from "./selection";
 import type { LineRange } from "./selection";
 import { onSelection, scrollUpTo } from "./web";
 
@@ -37,19 +37,6 @@ function useStyles(theme: PluginTheme) {
           borderColor: theme.colors.foreground,
         },
         expandText: { fontSize: 12, color: theme.colors.foreground },
-        // Opaque, since it stays over the hunk's lines as they scroll under it.
-        hunkBar: {
-          flexDirection: "row",
-          paddingHorizontal: 12,
-          paddingVertical: 3,
-          backgroundColor: theme.colors.surface0,
-        },
-        hunkTint: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: theme.colors.accent,
-          opacity: 0.25,
-        },
-        hunkButtons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
         hunkLines: { marginBottom: 8 },
         line: { flexDirection: "row" },
         // Under a line, tinting it as removed or added.
@@ -140,78 +127,25 @@ function DiffLine({ id, line, selected, styles }: DiffLineProps): ReactElement {
   );
 }
 
-interface HunkBarProps {
-  hunk: Diff["hunks"][number];
-  index: number;
-  version: string;
-  file: OpenFile;
-  selection: LineRange | undefined;
-  controls: Controls;
-  // Hears the bar's height.
-  onHeight: (height: number) => void;
-  // Called just before an action on the hunk runs.
-  onRun: () => void;
-  styles: Styles;
-  theme: PluginTheme;
-}
-
-// A hunk's actions, and those on its selected lines while it has any.
-function HunkBar({
-  hunk,
-  index,
-  version,
-  file,
-  selection,
-  controls,
-  onHeight,
-  onRun,
-  styles,
-  theme,
-}: HunkBarProps): ReactElement {
-  return (
-    <View
-      style={styles.hunkBar}
-      onLayout={(event) => {
-        onHeight(event.nativeEvent.layout.height);
-      }}
-    >
-      <View style={styles.hunkTint} />
-      <View style={styles.hunkButtons}>
-        {selection?.hunk === index ? (
-          <ActionButtons
-            actions={lineActions[file.group]}
-            bar={`${version}:lines ${index}:${selection.first}-${selection.last}`}
-            target={{ file, version, lines: rangeLines(selection) }}
-            controls={controls}
-            color={theme.colors.foreground}
-            theme={theme}
-          />
-        ) : null}
-        <ActionButtons
-          actions={hunkActions[file.group]}
-          bar={`${version}:hunk ${index}`}
-          target={{ file, version, lines: hunkLines(hunk.lines, index) }}
-          controls={controls}
-          onRun={onRun}
-          color={theme.colors.foreground}
-          theme={theme}
-        />
-      </View>
-    </View>
-  );
-}
-
 interface HunkLinesProps {
   hunk: Diff["hunks"][number];
   index: number;
   container: string;
   selection: LineRange | undefined;
+  pointer: PointerHandlers;
   styles: Styles;
 }
 
-function HunkLines({ hunk, index, container, selection, styles }: HunkLinesProps): ReactElement {
+function HunkLines({
+  hunk,
+  index,
+  container,
+  selection,
+  pointer,
+  styles,
+}: HunkLinesProps): ReactElement {
   return (
-    <View style={styles.hunkLines}>
+    <View style={styles.hunkLines} {...pointer}>
       {numberLines(hunk).map((line, lineIndex) => (
         <DiffLine
           key={`${line.oldNumber},${line.newNumber}`}
@@ -239,11 +173,13 @@ interface HunksProps extends DiffBodyProps {
 }
 
 // Each hunk's bar is followed by its lines, and stays at the top while they scroll under it, until
-// the next hunk's bar covers it. Just before an action on a hunk runs, the view scrolls up to the
-// hunk's start if it's above, so the next hunk, which then takes its place, shows from its start.
+// the next hunk's bar covers it. The pointer over either reveals the hunk's actions. Just before an
+// action on a hunk runs, the view scrolls up to the hunk's start if it's above, so the next hunk,
+// which then takes its place, shows from its start.
 function Hunks({ diff, file, controls, onExpand, styles, theme }: HunksProps): ReactElement {
   const container = useId();
   const selection = useSelectedLines(container);
+  const [pointed, setPointed] = useState<number>();
   const barHeight = useRef(0);
   const label = labelOf(diff);
 
@@ -269,33 +205,46 @@ function Hunks({ diff, file, controls, onExpand, styles, theme }: HunksProps): R
 
   return (
     <ScrollView nativeID={container} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index)}>
-      {diff.hunks.flatMap((hunk, index) => [
-        <HunkBar
-          key={`bar ${hunk.oldStart},${hunk.newStart}`}
-          hunk={hunk}
-          index={index}
-          version={diff.version}
-          file={file}
-          selection={selection}
-          controls={controls}
-          onHeight={(height) => {
-            barHeight.current = height;
-          }}
-          onRun={() => {
-            scrollUpTo(container, lineId(container, index, 0), barHeight.current);
-          }}
-          styles={styles}
-          theme={theme}
-        />,
-        <HunkLines
-          key={`lines ${hunk.oldStart},${hunk.newStart}`}
-          hunk={hunk}
-          index={index}
-          container={container}
-          selection={selection}
-          styles={styles}
-        />,
-      ])}
+      {diff.hunks.flatMap((hunk, index) => {
+        const pointer: PointerHandlers = {
+          onPointerEnter: () => {
+            setPointed(index);
+          },
+          onPointerLeave: () => {
+            setPointed(undefined);
+          },
+        };
+
+        return [
+          <HunkBar
+            key={`bar ${hunk.oldStart},${hunk.newStart}`}
+            hunk={hunk}
+            index={index}
+            version={diff.version}
+            file={file}
+            selection={selection}
+            pointed={pointed}
+            pointer={pointer}
+            controls={controls}
+            onHeight={(height) => {
+              barHeight.current = height;
+            }}
+            onRun={() => {
+              scrollUpTo(container, lineId(container, index, 0), barHeight.current);
+            }}
+            theme={theme}
+          />,
+          <HunkLines
+            key={`lines ${hunk.oldStart},${hunk.newStart}`}
+            hunk={hunk}
+            index={index}
+            container={container}
+            selection={selection}
+            pointer={pointer}
+            styles={styles}
+          />,
+        ];
+      })}
     </ScrollView>
   );
 }

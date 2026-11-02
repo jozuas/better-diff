@@ -1,7 +1,7 @@
 import { commitTenLines } from "../test/renames";
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, button, group, line, openFile } from "./panel";
+import { box, button, group, line, openFile, selectLines } from "./panel";
 
 function staged(repository: string): string {
   return runGit(repository, ["diff", "--cached"]);
@@ -154,6 +154,73 @@ test("a confirmation lapses after about three seconds, having changed nothing", 
   await expect(button(page, "Discard Hunk")).toHaveCount(2, { timeout: 5000 });
 
   expect(worktreeFile(repository, "a.txt")?.toString()).toContain("first");
+});
+
+test("a hunk's actions show only while the pointer is over the hunk, its bar or its lines", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await expect(line(page, "first")).toBeVisible();
+
+  const stageHunk = button(page, "Stage Hunk");
+
+  await expect(stageHunk.first()).toHaveCSS("opacity", "0");
+  await expect(stageHunk.last()).toHaveCSS("opacity", "0");
+  await line(page, "first").hover();
+  await expect(stageHunk.first()).toHaveCSS("opacity", "1");
+  await expect(stageHunk.last()).toHaveCSS("opacity", "0");
+  await line(page, "last").hover();
+  await expect(stageHunk.first()).toHaveCSS("opacity", "0");
+  await expect(stageHunk.last()).toHaveCSS("opacity", "1");
+  await stageHunk.first().hover();
+  await expect(button(page, "Discard Hunk").first()).toHaveCSS("opacity", "1");
+  await expect(stageHunk.last()).toHaveCSS("opacity", "0");
+  await page.mouse.move(0, 0);
+
+  await expect(stageHunk.first()).toHaveCSS("opacity", "0");
+  await expect(stageHunk.last()).toHaveCSS("opacity", "0");
+});
+
+test("a hunk's actions show while focus is in its bar, so the keyboard reaches them, and while lines in it are selected", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await button(page, "Stage").focus();
+  await page.keyboard.press("Tab");
+
+  await expect(button(page, "Discard Hunk").first()).toBeFocused();
+  await expect(button(page, "Discard Hunk").first()).toHaveCSS("opacity", "1");
+
+  await selectLines(page, "last");
+  await page.mouse.move(0, 0);
+
+  await expect(button(page, "Stage Hunk").last()).toHaveCSS("opacity", "1");
+});
+
+test("once a hunk is staged, the hunk that takes its place under the pointer shows its actions", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await button(page, "Stage Hunk").first().click();
+  await expect(line(page, "first")).toBeHidden();
+
+  await expect(button(page, "Stage Hunk")).toHaveCSS("opacity", "1");
+  expect(staged(repository)).toContain("+first");
 });
 
 test("staging a hunk stages only it, and the view moves to the next hunk", async ({

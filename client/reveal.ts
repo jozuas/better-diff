@@ -9,3 +9,15 @@ export function lookOf(open: boolean, revealed: boolean): Look {
 
   return revealed ? "revealed" : "plain";
 }
+
+// Whether a hunk's actions show: while the pointer is over the hunk, focus is in its bar, or lines
+// in it are selected. `pointed` and `selected` are the hunks the pointer is over and lines are
+// selected in, if any.
+export function hunkRevealed(
+  hunk: number,
+  pointed: number | undefined,
+  focused: boolean,
+  selected: number | undefined,
+): boolean {
+  return pointed === hunk || focused || selected === hunk;
+}

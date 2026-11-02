@@ -27,21 +27,44 @@ function useStyles(theme: PluginTheme, color: string) {
       },
       text: { fontSize: 12, color },
       armedText: { fontSize: 12, color: theme.colors.accentForeground },
+      hidden: { opacity: 0 },
     });
   }, [theme, color]);
 }
 
 type Styles = ReturnType<typeof useStyles>;
 
+interface LabelProps {
+  text: string;
+  armed: boolean;
+  styles: Styles;
+}
+
+function Label({ text, armed, styles }: LabelProps): ReactElement {
+  return (
+    <Text selectable={false} style={armed ? styles.armedText : styles.text}>
+      {text}
+    </Text>
+  );
+}
+
 interface ActionButtonProps {
   action: Action;
   armed: boolean;
   busy: boolean;
+  hidden: boolean;
   onPress: () => void;
   styles: Styles;
 }
 
-function ActionButton({ action, armed, busy, onPress, styles }: ActionButtonProps): ReactElement {
+function ActionButton({
+  action,
+  armed,
+  busy,
+  hidden,
+  onPress,
+  styles,
+}: ActionButtonProps): ReactElement {
   const text = buttonText(action, armed);
 
   return (
@@ -50,12 +73,10 @@ function ActionButton({ action, armed, busy, onPress, styles }: ActionButtonProp
       accessibilityLabel={text}
       accessibilityState={{ disabled: busy }}
       disabled={busy}
-      style={armed ? styles.armed : styles.button}
+      style={[armed ? styles.armed : styles.button, hidden && styles.hidden]}
       onPress={onPress}
     >
-      <Text selectable={false} style={armed ? styles.armedText : styles.text}>
-        {text}
-      </Text>
+      <Label text={text} armed={armed} styles={styles} />
     </Pressable>
   );
 }
@@ -69,18 +90,20 @@ interface ActionButtonsProps {
   controls: Controls;
   // Called just before one of the actions runs.
   onRun?: () => void;
+  hidden?: boolean;
   // The buttons' colour, against the bar's.
   color: string;
   theme: PluginTheme;
 }
 
-// A bar's actions, on its right.
+// A bar's actions, on its right. Hidden ones can still be reached with the keyboard.
 export function ActionButtons({
   actions,
   bar,
   target,
   controls,
   onRun,
+  hidden = false,
   color,
   theme,
 }: ActionButtonsProps): ReactElement {
@@ -94,6 +117,7 @@ export function ActionButtons({
           action={action}
           armed={controls.armed === `${bar}:${action.operation}`}
           busy={controls.busy}
+          hidden={hidden}
           onPress={() => {
             controls.press(`${bar}:${action.operation}`, action, target, onRun);
           }}

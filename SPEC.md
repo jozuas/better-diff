@@ -12,7 +12,7 @@ Replicates Sublime Merge as much as possible:
 - Inline and side-by-side diffs (+ a button). In side-by-side, removals and additions are separate texts.
 - Diff is shown file by file instead of as one continuously scrollable diff.
 - The very top of a file's diff is a horizontal coloured bar (Sublime Merge uses deep blue). It shows the file's status (MODIFIED, UNTRACKED, STAGED), its full path, how many lines the diff adds and removes, as GitHub shows them after the path (+12 −3), even while it's collapsed, and the file actions on the right. A file shown without lines, such as a binary file, has no counts.
-- Each hunk is delimited by a horizontal coloured bar (Sublime Merge uses blue), with the hunk actions on the right. On hover, its left side shows a "Show entire file" / "Show only modified hunks" toggle. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
+- Each hunk is delimited by a horizontal coloured bar (Sublime Merge uses blue), with the hunk actions on the right. As in Sublime Merge, they show only while the pointer is over the hunk, its bar or its lines, focus is in its bar, or lines in it are selected. On hover, its left side shows a "Show entire file" / "Show only modified hunks" toggle. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
 
 ### Actions
 
