@@ -183,25 +183,46 @@ export function clearSelection(): void {
   }
 }
 
-// Scrolls the element with the id `container` up, if it has to, to show the top of the element with
-// the id `target` just below the `margin` at its top, which a bar stuck there takes.
-export function scrollUpTo(container: string, target: string, margin: number): void {
+// How far below the top of the element with the id `container` the top of the element with the id
+// `target` is, if both are on the page.
+export function offsetIn(container: string, target: string): number | undefined {
   if (Platform.OS !== "web") {
-    return;
+    return undefined;
   }
 
   const scroller = document.querySelector(`#${CSS.escape(container)}`);
   const element = document.querySelector(`#${CSS.escape(target)}`);
 
   if (scroller === null || element === null) {
+    return undefined;
+  }
+
+  return element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+}
+
+// Scrolls the element with the id `container`, as far as it goes, to show the top of the element
+// with the id `target` `offset` below its top.
+export function scrollToOffset(container: string, target: string, offset: number): void {
+  const current = offsetIn(container, target);
+
+  if (current === undefined) {
     return;
   }
 
-  const hidden =
-    scroller.getBoundingClientRect().top + margin - element.getBoundingClientRect().top;
+  const scroller = document.querySelector(`#${CSS.escape(container)}`);
 
-  if (hidden > 0) {
-    scroller.scrollTop -= hidden;
+  if (scroller !== null) {
+    scroller.scrollTop += current - offset;
+  }
+}
+
+// Scrolls the element with the id `container` up, if it has to, to show the top of the element with
+// the id `target` just below the `margin` at its top, which a bar stuck there takes.
+export function scrollUpTo(container: string, target: string, margin: number): void {
+  const offset = offsetIn(container, target);
+
+  if (offset !== undefined && offset < margin) {
+    scrollToOffset(container, target, margin);
   }
 }
 

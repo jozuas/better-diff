@@ -1,4 +1,5 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 import type { ViewProps } from "react-native";
@@ -9,6 +10,8 @@ import { ActionButtons } from "./action-buttons";
 import { hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
 import type { OpenFile } from "./groups";
+import { Hoverable, TintLayer } from "./hoverable";
+import { entireFileIcon, onlyHunksIcon } from "./icons";
 import { hunkRevealed } from "./reveal";
 import { rangeLines } from "./selection";
 import type { LineRange } from "./selection";
@@ -33,8 +36,59 @@ function useStyles(theme: PluginTheme) {
           backgroundColor: theme.colors.surface1,
         },
         buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
+        toggle: { alignSelf: "center", padding: 2, borderRadius: 4, overflow: "hidden" },
+        hidden: { opacity: 0 },
       }),
     [theme],
+  );
+}
+
+type Styles = ReturnType<typeof useStyles>;
+
+// What the toggle shows the entire file with, and only the hunks.
+const toggles = {
+  entire: { label: "Show entire file", icon: entireFileIcon },
+  hunks: { label: "Show only modified hunks", icon: onlyHunksIcon },
+};
+
+interface EntireFileToggleProps {
+  // Whether the view shows the entire file, rather than only its hunks.
+  entire: boolean;
+  onPress: () => void;
+  hidden: boolean;
+  styles: Styles;
+  theme: PluginTheme;
+}
+
+// Sublime Merge's icon for what it shows the view instead, which brightens while the pointer is over
+// it. Hidden, it can still be reached with the keyboard.
+function EntireFileToggle({
+  entire,
+  onPress,
+  hidden,
+  styles,
+  theme,
+}: EntireFileToggleProps): ReactElement {
+  const toggle = entire ? toggles.hunks : toggles.entire;
+
+  return (
+    <Hoverable
+      accessibilityRole="button"
+      accessibilityLabel={toggle.label}
+      style={[styles.toggle, hidden && styles.hidden]}
+      onPress={onPress}
+    >
+      {({ hovered, pressed }) => {
+        const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
+
+        return (
+          <>
+            <TintLayer color={color} hovered={hovered} pressed={pressed} />
+            <Icon icon={toggle.icon} size={15} color={color} />
+          </>
+        );
+      }}
+    </Hoverable>
   );
 }
 
@@ -78,6 +132,9 @@ interface HunkBarProps {
   pointed: number | undefined;
   pointer: PointerHandlers;
   controls: Controls;
+  // Whether the view shows the entire file, rather than only its hunks.
+  entire: boolean;
+  onToggleEntire: () => void;
   // Hears the bar's height.
   onHeight: (height: number) => void;
   // Called just before an action on the hunk runs.
@@ -85,7 +142,8 @@ interface HunkBarProps {
   theme: PluginTheme;
 }
 
-// A hunk's actions, hidden until the hunk is revealed, and those on its selected lines while it has
+// On its left, the toggle between the entire file and only its hunks, and on its right, the hunk's
+// actions, both hidden until the hunk is revealed, and those on its selected lines while it has
 // any.
 export function HunkBar({
   hunk,
@@ -96,12 +154,15 @@ export function HunkBar({
   pointed,
   pointer,
   controls,
+  entire,
+  onToggleEntire,
   onHeight,
   onRun,
   theme,
 }: HunkBarProps): ReactElement {
   const styles = useStyles(theme);
   const [focused, setFocused] = useState(false);
+  const revealed = hunkRevealed(index, pointed, focused, selection?.hunk);
 
   return (
     <View
@@ -117,6 +178,13 @@ export function HunkBar({
       }}
       {...pointer}
     >
+      <EntireFileToggle
+        entire={entire}
+        onPress={onToggleEntire}
+        hidden={!revealed}
+        styles={styles}
+        theme={theme}
+      />
       <View style={styles.buttons}>
         <LineButtons
           index={index}
@@ -132,7 +200,7 @@ export function HunkBar({
           target={{ file, version, lines: hunkLines(hunk.lines, index) }}
           controls={controls}
           onRun={onRun}
-          hidden={!hunkRevealed(index, pointed, focused, selection?.hunk)}
+          hidden={!revealed}
           color={theme.colors.foreground}
           theme={theme}
         />

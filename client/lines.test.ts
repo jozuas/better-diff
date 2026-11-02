@@ -1,7 +1,8 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { numberLines } from "./lines";
+import { numberLines, unchangedLines } from "./lines";
+import type { NumberedLine } from "./lines";
 
 type Kind = "context" | "removed" | "added";
 
@@ -69,6 +70,138 @@ test("numbers each line where it is in the old version of the file and the new o
           new: lineAt(newVersion, newNumber),
         })),
       ).toStrictEqual(found);
+    }),
+  );
+});
+
+// A line of a file as a diff with every line of context has it: in the hunk at an index, or else
+// unchanged, in the gap at an index, which is before the hunk with that index, or after the last.
+interface FileLine extends Line {
+  hunk: number | undefined;
+  gap: number | undefined;
+}
+
+const lineText = fc.string({ unit: "binary" });
+
+const hunkLine = fc.record({
+  kind: fc.constantFrom<Kind>("context", "removed", "added"),
+  text: lineText,
+  newline: fc.boolean(),
+});
+
+function gapLines(texts: readonly string[], gap: number): FileLine[] {
+  return texts.map((text) => ({ kind: "context", text, newline: true, hunk: undefined, gap }));
+}
+
+// Where a hunk starts in a version, with `before` of its lines before it and `count` in it: git
+// starts one without any at the line before it.
+function startOf(before: number, count: number): number {
+  return count > 0 ? before + 1 : before;
+}
+
+// How many of the lines are in a version.
+function countIn(lines: readonly FileLine[], without: Kind): number {
+  return lines.filter(({ kind }) => kind !== without).length;
+}
+
+// The gap's lines, each with the text of each version where it is.
+function foundIn(lines: readonly FileLine[], gap: number): unknown[] {
+  return lines.flatMap((line) =>
+    line.gap === gap
+      ? [{ kind: "context", text: line.text, newline: true, old: line.text, new: line.text }]
+      : [],
+  );
+}
+
+// A file's lines, some in hunks and the rest unchanged, around them, the diff of the file, and the
+// unchanged lines before the first hunk and after each one, each with the text of each version
+// where it is. Each line has text no other line has, so a number can only find it where it is.
+// Hunks often have none of a version's lines, as where they only add or remove lines.
+const fileInHunks = fc
+  .record({
+    sections: fc.array(
+      fc.record({
+        unchanged: fc.array(lineText, { maxLength: 4 }),
+        hunk: fc.array(hunkLine, { minLength: 1, maxLength: 4 }),
+      }),
+      { maxLength: 4 },
+    ),
+    end: fc.array(lineText, { maxLength: 4 }),
+  })
+  .map(({ sections, end }) => {
+    const lines = [
+      ...sections.flatMap((section, hunk) => [
+        ...gapLines(section.unchanged, hunk),
+        ...section.hunk.map(({ kind, text, newline }) => ({
+          kind,
+          text,
+          newline,
+          hunk,
+          gap: undefined,
+        })),
+      ]),
+      ...gapLines(end, sections.length),
+    ].map(({ kind, text, newline, hunk, gap }, index) => ({
+      kind,
+      text: `${index} ${text}`,
+      newline,
+      hunk,
+      gap,
+    }));
+
+    const hunks = sections.map((_, hunk) => {
+      const before = lines.slice(
+        0,
+        lines.findIndex((line) => line.hunk === hunk),
+      );
+
+      const inHunk = lines.filter((line) => line.hunk === hunk);
+
+      return {
+        oldStart: startOf(countIn(before, "added"), countIn(inHunk, "added")),
+        newStart: startOf(countIn(before, "removed"), countIn(inHunk, "removed")),
+        lines: inHunk.map(({ kind, text, newline }) => ({ kind, text, newline })),
+      };
+    });
+
+    return {
+      diff: {
+        hunks,
+        contents: {
+          old: lines.flatMap((line) => (line.kind === "added" ? [] : [line.text])),
+          new: lines.flatMap((line) => (line.kind === "removed" ? [] : [line.text])),
+        },
+      },
+      found: {
+        before: foundIn(lines, 0),
+        after: sections.map((_, hunk) => foundIn(lines, hunk + 1)),
+      },
+    };
+  });
+
+// The lines, each with the text each version has where its numbers say it is.
+function read(
+  contents: { old: string[]; new: string[] },
+  lines: readonly NumberedLine[],
+): unknown[] {
+  return lines.map(({ kind, text, newline, oldNumber, newNumber }) => ({
+    kind,
+    text,
+    newline,
+    old: lineAt(contents.old, oldNumber),
+    new: lineAt(contents.new, newNumber),
+  }));
+}
+
+test("the unchanged lines are those of both versions before the first hunk and after each one, each numbered where it is in them", () => {
+  fc.assert(
+    fc.property(fileInHunks, ({ diff, found }) => {
+      const { before, after } = unchangedLines(diff);
+
+      expect({
+        before: read(diff.contents, before),
+        after: after.map((lines) => read(diff.contents, lines)),
+      }).toStrictEqual(found);
     }),
   );
 });

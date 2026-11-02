@@ -1,27 +1,24 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import { HunkLines, UnchangedLines } from "./diff-lines";
 import type { OpenFile } from "./groups";
 import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
 import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
-import { numberLines } from "./lines";
-import type { NumberedLine } from "./lines";
+import { unchangedLines } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { fileId, isSelected, lineId } from "./selection";
+import { fileId, lineId } from "./selection";
 import type { LineRange } from "./selection";
+import { offsetIn, scrollToOffset } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
-
-// Paseo's own monospace fonts.
-const monospace =
-  "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 
 function useStyles(theme: PluginTheme) {
   return useMemo(
@@ -38,110 +35,14 @@ function useStyles(theme: PluginTheme) {
           overflow: "hidden",
         },
         expandText: { fontSize: 12, color: theme.colors.foreground },
-        hunkLines: { marginBottom: 8 },
-        line: { flexDirection: "row" },
-        // Under a line, tinting it as removed or added.
-        tint: { ...StyleSheet.absoluteFillObject, opacity: 0.15 },
-        context: { backgroundColor: "transparent" },
-        removed: { backgroundColor: theme.colors.statusDanger },
-        added: { backgroundColor: theme.colors.statusSuccess },
-        number: {
-          width: 44,
-          paddingRight: 8,
-          textAlign: "right",
-          fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
-          color: theme.colors.foregroundMuted,
-        },
-        selected: { color: theme.colors.surface0, backgroundColor: theme.colors.foregroundMuted },
-        text: {
-          flex: 1,
-          paddingHorizontal: 8,
-          fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
-          color: theme.colors.foreground,
-        },
-        noNewline: {
-          paddingLeft: 96,
-          fontSize: 11,
-          lineHeight: 18,
-          color: theme.colors.foregroundMuted,
-        },
+        // Under each hunk, and the unchanged lines before the first.
+        spaced: { marginBottom: 8 },
       }),
     [theme],
   );
 }
 
 type Styles = ReturnType<typeof useStyles>;
-
-interface DiffLineProps {
-  id: string;
-  line: NumberedLine;
-  selected: boolean;
-  styles: Styles;
-}
-
-// Only the line's text can be selected, so copying a selection copies what the lines say. The
-// numbers of a selected line stand out.
-function DiffLine({ id, line, selected, styles }: DiffLineProps): ReactElement {
-  const number = selected ? [styles.number, styles.selected] : styles.number;
-
-  return (
-    <View>
-      <View style={styles.line}>
-        <View style={[styles.tint, styles[line.kind]]} />
-        <Text selectable={false} style={number}>
-          {line.oldNumber}
-        </Text>
-        <Text selectable={false} style={number}>
-          {line.newNumber}
-        </Text>
-        <Text nativeID={id} selectable style={styles.text}>
-          {line.text}
-        </Text>
-      </View>
-      {line.newline ? null : (
-        <Text selectable={false} style={styles.noNewline}>
-          No newline at end of file
-        </Text>
-      )}
-    </View>
-  );
-}
-
-interface HunkLinesProps {
-  hunk: Diff["hunks"][number];
-  index: number;
-  container: string;
-  selection: LineRange | undefined;
-  pointer: PointerHandlers;
-  styles: Styles;
-}
-
-function HunkLines({
-  hunk,
-  index,
-  container,
-  selection,
-  pointer,
-  styles,
-}: HunkLinesProps): ReactElement {
-  return (
-    <View style={styles.hunkLines} {...pointer}>
-      {numberLines(hunk).map((line, lineIndex) => (
-        <DiffLine
-          key={`${line.oldNumber},${line.newNumber}`}
-          id={lineId(container, index, lineIndex)}
-          line={line}
-          selected={isSelected(selection, index, lineIndex)}
-          styles={styles}
-        />
-      ))}
-    </View>
-  );
-}
 
 export interface DiffBodyProps {
   diff: Diff;
@@ -197,13 +98,46 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
   );
 }
 
+// Where a hunk was in a view, by how far below its top the hunk's first line was, while it showed
+// what `shown` says.
+interface Place {
+  hunk: number;
+  offset: number;
+  shown: string;
+}
+
+// Holds a hunk's place in the view with the id `view`. Once what the view shows of the diff,
+// `shown`, changes, the view scrolls to show the hunk with the same index in that place: the hunk
+// itself, once the view shows more or less of the file around it, or the next one, once an action
+// has taken it out of the diff.
+function useHunkPlace(view: string, container: string, shown: string): (hunk: number) => void {
+  const held = useRef<Place | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const place = held.current;
+
+    if (place !== undefined && place.shown !== shown) {
+      held.current = undefined;
+      scrollToOffset(view, lineId(container, place.hunk, 0), place.offset);
+    }
+  }, [view, container, shown]);
+
+  return (hunk) => {
+    const offset = offsetIn(view, lineId(container, hunk, 0));
+
+    held.current = offset === undefined ? undefined : { hunk, offset, shown };
+  };
+}
+
 interface HunksProps extends DiffBodyProps {
   styles: Styles;
 }
 
-// Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions. Hunks
-// that scroll on their own have each bar stay at the top while its lines scroll under it, until the
-// next hunk's bar covers it.
+// Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions, and
+// the toggle that shows the entire file, with the unchanged lines around the hunks, or only the
+// hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
+// the top while its lines scroll under it, until the next hunk's bar covers it. While the entire
+// file shows, the next hunk takes the place of one an action is run on.
 function Hunks({
   diff,
   file,
@@ -213,18 +147,15 @@ function Hunks({
   scrolls,
   onHunkRun,
   controls,
-  onExpand,
   styles,
   theme,
 }: HunksProps): ReactElement {
   const [pointed, setPointed] = useState<number>();
+  const [entire, setEntire] = useState(false);
   const barHeight = useRef(0);
   const container = fileId(view, fileIndex);
-  const label = labelOf(diff);
-
-  if (label !== undefined) {
-    return <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} theme={theme} />;
-  }
+  const hold = useHunkPlace(view, container, `${diff.version} ${String(entire)}`);
+  const unchanged = entire ? unchangedLines(diff) : { before: [], after: [] };
 
   const hunks = diff.hunks.flatMap((hunk, index) => {
     const pointer: PointerHandlers = {
@@ -247,40 +178,57 @@ function Hunks({
         pointed={pointed}
         pointer={pointer}
         controls={controls}
+        entire={entire}
+        onToggleEntire={() => {
+          hold(index);
+          setEntire(!entire);
+        }}
         onHeight={(height) => {
           barHeight.current = height;
         }}
         onRun={() => {
           onHunkRun(lineId(container, index, 0), barHeight.current);
+
+          if (entire) {
+            hold(index);
+          }
         }}
         theme={theme}
       />,
-      <HunkLines
-        key={`lines ${hunk.oldStart},${hunk.newStart}`}
-        hunk={hunk}
-        index={index}
-        container={container}
-        selection={selection}
-        pointer={pointer}
-        styles={styles}
-      />,
+      <View key={`lines ${hunk.oldStart},${hunk.newStart}`} style={styles.spaced}>
+        <HunkLines
+          hunk={hunk}
+          index={index}
+          container={container}
+          selection={selection}
+          pointer={pointer}
+          theme={theme}
+        />
+        <UnchangedLines lines={unchanged.after[index] ?? []} theme={theme} />
+      </View>,
     ];
   });
 
+  const shown = [
+    <UnchangedLines key="before" lines={unchanged.before} style={styles.spaced} theme={theme} />,
+    ...hunks,
+  ];
+
   return scrolls ? (
-    <ScrollView nativeID={view} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index)}>
-      {hunks}
+    <ScrollView nativeID={view} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index + 1)}>
+      {shown}
     </ScrollView>
   ) : (
-    <View>{hunks}</View>
+    <View>{shown}</View>
   );
 }
 
 // The diff's mode change, if it has one, above its hunks, or what's shown instead of a diff without
 // lines, with a button that shows a collapsed one's.
 export function DiffBody(props: DiffBodyProps): ReactElement {
-  const { diff, file, controls, theme } = props;
+  const { diff, file, controls, onExpand, theme } = props;
   const styles = useStyles(theme);
+  const label = labelOf(diff);
 
   return (
     <>
@@ -293,7 +241,11 @@ export function DiffBody(props: DiffBodyProps): ReactElement {
           theme={theme}
         />
       )}
-      <Hunks {...props} styles={styles} />
+      {label === undefined ? (
+        <Hunks {...props} styles={styles} />
+      ) : (
+        <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} theme={theme} />
+      )}
     </>
   );
 }

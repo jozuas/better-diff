@@ -198,6 +198,11 @@ test("a hunk's actions show while focus is in its bar, so the keyboard reaches t
   await button(page, "Stage").focus();
   await page.keyboard.press("Tab");
 
+  await expect(button(page, "Show entire file").first()).toBeFocused();
+  await expect(button(page, "Show entire file").first()).toHaveCSS("opacity", "1");
+
+  await page.keyboard.press("Tab");
+
   await expect(button(page, "Discard Hunk").first()).toBeFocused();
   await expect(button(page, "Discard Hunk").first()).toHaveCSS("opacity", "1");
 
