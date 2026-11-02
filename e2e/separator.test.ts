@@ -84,7 +84,7 @@ test("the separator can be grabbed a few pixels either side of its line", async 
 
 // Whether the file list cuts the path short, to fit the row it's in.
 async function cutShort(page: Page, path: string): Promise<boolean> {
-  const text = JSON.stringify(`[aria-label="${path}"] > div`);
+  const text = JSON.stringify(`[aria-label="${path}"] [dir="auto"]`);
 
   const cut = await page.evaluate(
     `(() => { const text = document.querySelector(${text}); return text.scrollWidth > text.clientWidth; })()`,
@@ -144,7 +144,7 @@ test("double-clicking the separator fits the file list to a path beside its row'
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", path);
 
-  const text = `[aria-label="${path}"] > div`;
+  const text = `[aria-label="${path}"] [dir="auto"]`;
 
   const deleteButton = row(page, "UNTRACKED FILES (1)", path).getByRole("button", {
     name: `Delete ${path}`,

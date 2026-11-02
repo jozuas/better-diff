@@ -7,6 +7,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { fileActions, groupActions } from "./actions";
 import type { Controls } from "./actions";
 import type { CopyItem } from "./copy";
+import { FileLabel } from "./file-label";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { FontSizesContext } from "./fonts";
@@ -134,9 +135,7 @@ function FileRow({
         onPress={onPress}
         {...reveal}
       >
-        <Text numberOfLines={1} style={styles.path}>
-          {file.path}
-        </Text>
+        <FileLabel path={file.path} style={styles.path} />
       </Pressable>
       <SidebarButtons
         actions={fileActions[file.group]}
