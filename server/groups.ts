@@ -1,11 +1,12 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyGroupRpc, diffRpc, groupRpc } from "../shared/diff";
+import { batchedChanges, readEach } from "./batches";
 import { groupsOf, readStatus } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
-import type { ChangedFile } from "./diff";
+import type { ChangedFile, Changes } from "./diff";
 import { versionOf } from "./version";
 
 type Group = RpcInput<typeof groupRpc>["group"];
@@ -25,33 +26,19 @@ interface GroupFile {
   changed: ChangedFile | undefined;
 }
 
-// Reads each item, a few at a time: a group can have hundreds of files, each read by git commands
-// of its own.
-async function readInBatches<T, R>(
-  items: readonly T[],
-  read: (item: T) => Promise<R>,
-): Promise<R[]> {
-  if (items.length === 0) {
-    return [];
-  }
-
-  const batch = await Promise.all(items.slice(0, 8).map(read));
-  const rest = await readInBatches(items.slice(8), read);
-
-  return [...batch, ...rest];
-}
-
-// The file, with its changes, or why they can't be read, which leaves the group's other files to be
-// read: git can't open a file it has no permission to read, and diffs a file replaced by a
-// directory together with what's in the directory.
+// The file, with its changes, as a diff of several read them, or else as its own diff reads them,
+// or why they can't be read, which leaves the group's other files to be read: git can't open a file
+// it has no permission to read, and diffs a file replaced by a directory together with what's in
+// the directory.
 async function readFile(
   directory: string,
   listed: readonly Entry[],
   path: string,
   group: Group,
+  batched: Changes | undefined,
 ): Promise<GroupFile> {
   try {
-    const changes = await changesIn(directory, listed, path, groupSides[group]);
+    const changes = batched ?? (await changesIn(directory, listed, path, groupSides[group]));
     const diff = diffOf(changes);
 
     return {
@@ -76,8 +63,10 @@ async function filesOf(directory: string, group: Group): Promise<GroupFile[]> {
     listings.get(entry.path)?.push(entry);
   }
 
-  const files = await readInBatches([...listings], async ([path, listed]) => {
-    const file = await readFile(directory, listed, path, group);
+  const batched = await batchedChanges(directory, listings, groupSides[group]);
+
+  const files = await readEach([...listings], async ([path, listed]) => {
+    const file = await readFile(directory, listed, path, group, batched.get(path));
 
     return file;
   });

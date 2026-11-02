@@ -9,7 +9,7 @@ import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, revers
 import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
 
-type Side = RpcInput<typeof diffRpc>["side"];
+export type Side = RpcInput<typeof diffRpc>["side"];
 
 type Action = RpcInput<typeof applyFileRpc>;
 
@@ -26,7 +26,7 @@ const sides: Record<Action["operation"], Side> = {
 // `git restore --staged` can't, before the first commit.
 const fileCommands = { stage: "add", unstage: "reset", discard: "restore" } as const;
 
-const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"] };
+export const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"] };
 
 export interface Changes {
   diff: Buffer;
@@ -92,35 +92,60 @@ async function renameDiff(
   return isRename(diff) ? diff : undefined;
 }
 
-// The file's changes on the side, as the entries git status lists it in say. A file listed twice,
-// as deleted from the index and untracked, isn't renamed.
+// How the entries git status lists a file in say its changes on a side are read. A file listed
+// twice, as deleted from the index and untracked, isn't renamed.
+export interface Listing {
+  // The path git status names as the one the file was renamed or copied from.
+  original: string | undefined;
+  untracked: boolean;
+  intentToAdd: boolean;
+}
+
+export function listingOf(listed: readonly Entry[], side: Side): Listing {
+  return {
+    original: listed[0]?.original,
+    untracked: side === "unstaged" && listed.some((entry) => entry.untracked),
+    intentToAdd: listed[0]?.intentToAdd === true,
+  };
+}
+
+// The file's changes, as its diff makes them: a rename where it renames the file from a path.
+export function changesFrom(
+  diff: Buffer,
+  path: string,
+  renamedFrom: string | undefined,
+  { untracked, intentToAdd }: Listing,
+): Changes {
+  return {
+    diff,
+    renamedFrom,
+    paths: renamedFrom === undefined ? [path] : [renamedFrom, path],
+    untracked,
+    intentToAdd,
+  };
+}
+
+// The file's changes on the side, as the entries git status lists it in say.
 export async function changesIn(
   directory: string,
   listed: readonly Entry[],
   path: string,
   side: Side,
 ): Promise<Changes> {
-  const original = listed[0]?.original;
-  const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
-  const intentToAdd = listed[0]?.intentToAdd === true;
+  const listing = listingOf(listed, side);
+  const { original, untracked } = listing;
 
   if (original !== undefined) {
     const renamed = await renameDiff(directory, [original, path], side, untracked);
 
     if (renamed !== undefined) {
-      return {
-        diff: renamed,
-        renamedFrom: original,
-        paths: [original, path],
-        untracked,
-        intentToAdd,
-      };
+      return changesFrom(renamed, path, original, listing);
     }
   }
 
   const diff = await ownDiff(directory, path, side, untracked);
 
-  return { diff, renamedFrom: undefined, paths: [path], untracked, intentToAdd };
+  return changesFrom(diff, path, undefined, listing);
 }
 
 async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {

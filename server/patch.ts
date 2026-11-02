@@ -29,7 +29,7 @@ const fields = [
 type Field = (typeof fields)[number];
 
 // What follows each field, if git printed it.
-type Header = Record<Field, string | undefined>;
+export type Header = Record<Field, string | undefined>;
 
 // One file's diff, as git prints it.
 export interface FileDiff {
@@ -61,7 +61,7 @@ function field(lines: readonly string[], name: Field): string | undefined {
 
 // Each field is on the first line that starts with it: the header comes before the hunks, whose
 // lines can start with `---` or `+++` too.
-function headerOf(lines: readonly string[]): Header {
+export function headerOf(lines: readonly string[]): Header {
   return {
     "diff --git": field(lines, "diff --git"),
     "old mode": field(lines, "old mode"),

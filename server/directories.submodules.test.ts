@@ -4,27 +4,9 @@ import { setImmediate } from "node:timers/promises";
 
 import { expect, test, vi } from "vitest";
 
-import { commitAll, inRepository, runGit, writeFile } from "../test/repository";
+import { runGit } from "../test/repository";
+import { submodule, withSubmodule } from "../test/submodules";
 import { toldOf, watchers, watching } from "../test/watching";
-
-// git clones a submodule from a repository on the same machine only where told it may.
-function submodule(repository: string, args: readonly string[]): void {
-  runGit(repository, ["-c", "protocol.file.allow=always", "submodule", ...args]);
-}
-
-// Runs the test in a repository with the submodule `sub`, which has the file `d/s`.
-async function withSubmodule(use: (repository: string) => Promise<void>): Promise<void> {
-  await inRepository(async (source) => {
-    writeFile(source, join("d", "s"), "s\n");
-    commitAll(source);
-
-    await inRepository(async (repository) => {
-      submodule(repository, ["add", "--quiet", source, "sub"]);
-      commitAll(repository);
-      await use(repository);
-    });
-  });
-}
 
 test.each<NodeJS.Platform>(["darwin", "linux"])(
   "tells of a change in a submodule, in a directory that appears there after one appears elsewhere, and to its index, and of nothing once stopped, on %s",
