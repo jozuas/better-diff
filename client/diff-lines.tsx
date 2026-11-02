@@ -13,11 +13,22 @@ import type { LineRange } from "./selection";
 import { numbersOf, rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
 
+declare module "react-native" {
+  interface ViewProps {
+    // React Native Web's: each entry becomes a data- attribute of the element.
+    dataSet?: Readonly<Record<string, string>>;
+  }
+}
+
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
 // Paseo's own monospace fonts.
 const monospace =
   "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
+
+// Paseo sets its UI font on everything in the app but what's marked data-pmono, and inside it, over
+// any font family the plugin gives.
+const paseoMonospace = { pmono: "" };
 
 // The width of a line's number, and the room either side of its text.
 const numberWidth = 44;
@@ -84,7 +95,7 @@ function DiffLine({ id, line, selected, side, selectable, styles }: DiffLineProp
 
   return (
     <View>
-      <View style={styles.line}>
+      <View dataSet={paseoMonospace} style={styles.line}>
         <View style={[styles.tint, styles[line.kind]]} />
         {numbers.map(({ side: version, number }) => (
           <Text key={version} selectable={false} style={numberStyle}>

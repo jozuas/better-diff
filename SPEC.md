@@ -7,6 +7,7 @@ Desktop only: the mobile app isn't supported for now.
 Replicates Sublime Merge as much as possible:
 
 - Syntax highlighted.
+- In a monospace font, as Paseo's own diff, though Paseo gives plugins' text its UI font.
 - Diffs come from git itself (`git diff --no-ext-diff`), honouring the user's `diff.algorithm`.
 - Changed words within a line are highlighted, as in Sublime Merge.
 - Inline and side-by-side diffs (+ a button). In side-by-side, removals and additions are separate texts.

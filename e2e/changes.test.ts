@@ -1,3 +1,6 @@
+import type { Page } from "@playwright/test";
+import { z } from "zod";
+
 import { commitTenLines, move, tenLines } from "../test/renames";
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
@@ -39,6 +42,33 @@ test("a file's diff is under a bar with its status and full path", async ({
 
   await expect(page.getByRole("heading", { name: "UNTRACKED dir/sub/new file.txt" })).toBeVisible();
   await expect(line(page, "new line")).toBeVisible();
+});
+
+// How wide a line's text is, rather than the line, which fills the diff's width.
+async function textWidth(page: Page, text: string): Promise<number> {
+  await expect(line(page, text)).toBeVisible();
+
+  const width = await page.evaluate(
+    `(() => { const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); while (walker.nextNode()) { if (walker.currentNode.data === ${JSON.stringify(text)}) { const range = document.createRange(); range.selectNodeContents(walker.currentNode); return range.getBoundingClientRect().width; } } })()`,
+  );
+
+  return z.number().parse(width);
+}
+
+test("a diff's lines are in a monospace font, not Paseo's UI font", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "iiiiiiii\nMMMMMMMM\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
+  const narrow = await textWidth(page, "iiiiiiii");
+
+  expect(narrow).toBeGreaterThan(0);
+  expect(narrow).toBe(await textWidth(page, "MMMMMMMM"));
 });
 
 test("a partly staged file is in modified and staged files, and shows the unstaged part from one and the staged part from the other", async ({
