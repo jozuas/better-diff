@@ -1,14 +1,17 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { buttonLook, buttonText } from "./actions";
 import type { Action, ButtonLook, Controls } from "./actions";
 import type { Target } from "./apply";
+import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 
 function useStyles(theme: PluginTheme, color: string) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(() => {
     // The label's colour, and its tint's, by how the button looks.
     const labels: Record<ButtonLook, string> = {
@@ -27,11 +30,11 @@ function useStyles(theme: PluginTheme, color: string) {
         hidden: { opacity: 0 },
         box: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
         armed: { backgroundColor: theme.colors.statusDanger },
-        text: { fontSize: 12 },
+        text: { fontSize: fonts.small },
       }),
       labels,
     };
-  }, [theme, color]);
+  }, [theme, color, fonts]);
 }
 
 type Styles = ReturnType<typeof useStyles>;

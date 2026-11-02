@@ -3,7 +3,7 @@ import { useSettings } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -11,6 +11,7 @@ import { viewSettings } from "../shared/settings";
 import type { Controls } from "./actions";
 import { FileDiff } from "./file-diff";
 import type { Layout } from "./file-diff";
+import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
 import type { GroupName, OpenFile, OpenGroup } from "./groups";
 import { viewSettingsOf } from "./settings";
@@ -105,10 +106,14 @@ interface DiffViewProps extends Omit<ShownDiffProps, keyof Layout | "open"> {
 // settings say.
 export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactElement {
   const layout = useLayout();
+  const fonts = useContext(FontSizesContext);
 
   const styles = useMemo(
-    () => StyleSheet.create({ hint: { padding: 16, color: shown.theme.colors.foregroundMuted } }),
-    [shown.theme],
+    () =>
+      StyleSheet.create({
+        hint: { padding: 16, fontSize: fonts.text, color: shown.theme.colors.foregroundMuted },
+      }),
+    [shown.theme, fonts],
   );
 
   if (open === undefined) {

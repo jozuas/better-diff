@@ -1,6 +1,6 @@
 import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { useRpc, useTabState, useWorkspace } from "@getpaseo/plugin/client";
+import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
 import { copyText, Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
@@ -19,6 +19,7 @@ import {
   diffRpc,
   groupRpc,
 } from "../shared/diff";
+import { viewSettings } from "../shared/settings";
 import type { Controls } from "./actions";
 import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
@@ -27,6 +28,8 @@ import { copy } from "./copy";
 import type { CopyItem } from "./copy";
 import { DiffView } from "./diff-view";
 import { FileList } from "./file-list";
+import { fontSizes, FontSizesContext } from "./fonts";
+import type { FontSizes } from "./fonts";
 import { diffIn, groups, openAfter, placeholder, sidebarGroups } from "./groups";
 import type { GroupName, OpenFile, OpenGroup } from "./groups";
 import { Queried } from "./queried";
@@ -210,6 +213,16 @@ function useFileListWidth(tab: PluginTab, id: string) {
   };
 }
 
+// The sizes the font size settings set, or their defaults until they're read, or if they can't be.
+function useSettingsFontSizes(): FontSizes {
+  const settings = useSettings(viewSettings);
+
+  const { panelFontSize, diffFontSize } =
+    settings.status === "ready" ? settings.values : viewSettings.schema.parse({});
+
+  return useMemo(() => fontSizes({ panelFontSize, diffFontSize }), [panelFontSize, diffFontSize]);
+}
+
 interface ChangesProps {
   directory: string;
   tab: PluginTab;
@@ -326,10 +339,15 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
 // The workspace's changed files, and the diff of the one opened.
 export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelProps): ReactElement {
   const directory = useWorkspace(workspaceId, (workspace) => workspace.directory);
+  const sizes = useSettingsFontSizes();
 
   if (directory === null) {
     return <Loading />;
   }
 
-  return <Changes directory={directory} tab={tab} theme={theme} />;
+  return (
+    <FontSizesContext value={sizes}>
+      <Changes directory={directory} tab={tab} theme={theme} />
+    </FontSizesContext>
+  );
 }

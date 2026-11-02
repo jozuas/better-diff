@@ -1,18 +1,21 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import { modeActions } from "./actions";
 import type { Controls } from "./actions";
+import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
 
 type Mode = NonNullable<RpcOutput<typeof diffRpc>["mode"]>;
 
 // Shaded as a hunk's bar.
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -28,9 +31,9 @@ function useStyles(theme: PluginTheme) {
           borderColor: theme.colors.border,
           backgroundColor: theme.colors.surface1,
         },
-        text: { fontSize: 12, color: theme.colors.foreground },
+        text: { fontSize: fonts.small, color: theme.colors.foreground },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 

@@ -1,10 +1,11 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { useContext, useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
+import { FontSizesContext } from "./fonts";
 import type { PointerHandlers } from "./hunk-bar";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
@@ -30,11 +31,12 @@ const monospace =
 // any font family the plugin gives.
 const paseoMonospace = { pmono: "" };
 
-// The width of a line's number, and the room either side of its text.
-const numberWidth = 44;
+// The room either side of a line's text.
 const textPadding = 8;
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -45,12 +47,12 @@ function useStyles(theme: PluginTheme) {
         removed: { backgroundColor: theme.colors.statusDanger },
         added: { backgroundColor: theme.colors.statusSuccess },
         number: {
-          width: numberWidth,
+          width: fonts.number,
           paddingRight: 8,
           textAlign: "right",
           fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
+          fontSize: fonts.code,
+          lineHeight: fonts.codeLine,
           color: theme.colors.foregroundMuted,
         },
         selected: { color: theme.colors.surface0, backgroundColor: theme.colors.foregroundMuted },
@@ -58,11 +60,15 @@ function useStyles(theme: PluginTheme) {
           flex: 1,
           paddingHorizontal: textPadding,
           fontFamily: monospace,
-          fontSize: 12,
-          lineHeight: 18,
+          fontSize: fonts.code,
+          lineHeight: fonts.codeLine,
           color: theme.colors.foreground,
         },
-        noNewline: { fontSize: 11, lineHeight: 18, color: theme.colors.foregroundMuted },
+        noNewline: {
+          fontSize: fonts.code,
+          lineHeight: fonts.codeLine,
+          color: theme.colors.foregroundMuted,
+        },
         // Each side of a side-by-side row, with a line between them.
         half: { flex: 1, minWidth: 0 },
         old: {},
@@ -70,7 +76,7 @@ function useStyles(theme: PluginTheme) {
         // Where a side has no line level with the other's.
         filler: { flex: 1, backgroundColor: theme.colors.surface1 },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 
@@ -91,6 +97,7 @@ interface DiffLineProps {
 // numbers of a selected line stand out.
 function DiffLine({ id, line, selected, side, selectable, styles }: DiffLineProps): ReactElement {
   const numbers = numbersOf(line, side);
+  const fonts = useContext(FontSizesContext);
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
 
   return (
@@ -109,7 +116,7 @@ function DiffLine({ id, line, selected, side, selectable, styles }: DiffLineProp
       {line.newline ? null : (
         <Text
           selectable={false}
-          style={[styles.noNewline, { paddingLeft: numbers.length * numberWidth + textPadding }]}
+          style={[styles.noNewline, { paddingLeft: numbers.length * fonts.number + textPadding }]}
         >
           No newline at end of file
         </Text>

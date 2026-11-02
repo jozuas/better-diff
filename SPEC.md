@@ -79,6 +79,15 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - A group's triangle and heading brighten while the pointer is over them.
 - The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
 
+### Font sizes
+
+Plugins can't read Paseo's own font size settings, so the plugin has two of its own, on its page in Paseo's settings, in its menu under Settings → Plugins. They take the sizes Paseo's do and start at Paseo's defaults:
+
+- Diff font size, 9 to 22, 12 by default, as Paseo's code size: the diff's lines and their numbers, each line half as tall again as the font, as in Paseo's own diff.
+- Panel font size, 10 to 21, 14 by default, as Paseo's interface size: the rest of the panel, its smaller text, such as buttons and headings, scaled with it as Paseo scales its own.
+- A size chosen is saved at once, for every client of the host, and Better Diff panels already open follow it.
+- Paseo's own sizes, under Appearance, don't change Better Diff, though its code size says it sizes diffs, and ⌘+ and ⌘− zoom all of Paseo, Better Diff included. So the page names its sizes as Better Diff's, unlike Paseo's, and says all this.
+
 ### Later
 
 - Sending line comments to an agent.

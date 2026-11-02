@@ -1,10 +1,11 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import type { TextInput as NativeTextInput } from "react-native";
 import { StyleSheet, View } from "react-native";
 
+import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 
 interface FilterInputProps {
@@ -18,6 +19,7 @@ interface FilterInputProps {
 export function FilterInput({ filter, onFilter, theme }: FilterInputProps): ReactElement {
   const input = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
+  const fonts = useContext(FontSizesContext);
 
   const styles = useMemo(
     () =>
@@ -41,13 +43,13 @@ export function FilterInput({ filter, onFilter, theme }: FilterInputProps): Reac
           flex: 1,
           width: 0,
           paddingVertical: 5,
-          fontSize: 13,
+          fontSize: fonts.text,
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
         clear: { marginHorizontal: 5, padding: 3, borderRadius: 4, overflow: "hidden" },
       }),
-    [theme],
+    [theme, fonts],
   );
 
   return (

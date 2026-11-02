@@ -1,13 +1,14 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useId, useMemo } from "react";
+import { useContext, useId, useMemo } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
 import { buttonLook, buttonText, sidebarButtonName } from "./actions";
 import type { ButtonLook, Controls, SidebarAction } from "./actions";
 import type { Target } from "./apply";
+import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 import type { Look } from "./reveal";
 import { overlayId } from "./web";
@@ -16,6 +17,8 @@ import { overlayId } from "./web";
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(() => {
     // The icon's colour, or the armed button's text's, and its tint's, by how the button looks.
     const faces: Record<ButtonLook, string> = {
@@ -47,12 +50,12 @@ function useStyles(theme: PluginTheme) {
           overflow: "hidden",
           backgroundColor: theme.colors.statusDanger,
         },
-        armedText: { fontSize: 12, color: faces.armed },
+        armedText: { fontSize: fonts.small, color: faces.armed },
         hidden: { opacity: 0 },
       }),
       faces,
     };
-  }, [theme]);
+  }, [theme, fonts]);
 }
 
 type Styles = ReturnType<typeof useStyles>;

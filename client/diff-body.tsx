@@ -1,12 +1,13 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { HunkLines, UnchangedLines } from "./diff-lines";
+import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
 import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
@@ -22,17 +23,19 @@ import { clearSelection, offsetIn, scrollToOffset } from "./web";
 type Diff = RpcOutput<typeof diffRpc>;
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
         labelRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-        label: { color: theme.colors.foregroundMuted },
+        label: { fontSize: fonts.text, color: theme.colors.foregroundMuted },
         expand: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
-        expandText: { fontSize: 12, color: theme.colors.foreground },
+        expandText: { fontSize: fonts.small, color: theme.colors.foreground },
         // Under each hunk, and the unchanged lines before the first.
         spaced: { marginBottom: 8 },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 

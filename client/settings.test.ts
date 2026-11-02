@@ -5,6 +5,11 @@ import { viewSettingsOf } from "./settings";
 
 const refused = "The diff settings couldn't be changed. Try again.";
 
+// Settings as a host might have read them, none of them their defaults.
+const read: ViewValues = { sideBySide: true, diffFontSize: 16, panelFontSize: 18 };
+
+const defaults: ViewValues = { sideBySide: false, diffFontSize: 12, panelFontSize: 14 };
+
 // What saves the settings, answering whether the host saved them.
 function saver(saved = true) {
   return vi
@@ -25,16 +30,13 @@ test("the settings are as read, and a change saves them all, changed, against th
   const save = saver();
   const report = reporter();
 
-  const settings = viewSettingsOf(
-    { status: "ready", revision: "7", values: { sideBySide: true }, save },
-    report,
-  );
+  const settings = viewSettingsOf({ status: "ready", revision: "7", values: read, save }, report);
 
-  expect(settings?.values).toStrictEqual({ sideBySide: true });
+  expect(settings?.values).toStrictEqual(read);
 
   await settings?.change({ sideBySide: false });
 
-  expect(save.mock.calls).toStrictEqual([[{ sideBySide: false }, "7"]]);
+  expect(save.mock.calls).toStrictEqual([[{ ...read, sideBySide: false }, "7"]]);
   expect(report).not.toHaveBeenCalled();
 });
 
@@ -42,11 +44,11 @@ test("invalid settings are their defaults, which a change saves over them", asyn
   const save = saver();
   const settings = viewSettingsOf({ status: "invalid", revision: "3", save }, reporter());
 
-  expect(settings?.values).toStrictEqual({ sideBySide: false });
+  expect(settings?.values).toStrictEqual(defaults);
 
-  await settings?.change({ sideBySide: true });
+  await settings?.change({ diffFontSize: 16 });
 
-  expect(save.mock.calls).toStrictEqual([[{ sideBySide: true }, "3"]]);
+  expect(save.mock.calls).toStrictEqual([[{ ...defaults, diffFontSize: 16 }, "3"]]);
 });
 
 test("settings that couldn't be read are their defaults, and a change to them says it couldn't be saved", async () => {
@@ -54,7 +56,7 @@ test("settings that couldn't be read are their defaults, and a change to them sa
   const report = reporter();
   const settings = viewSettingsOf({ status: "error", save }, report);
 
-  expect(settings?.values).toStrictEqual({ sideBySide: false });
+  expect(settings?.values).toStrictEqual(defaults);
 
   await settings?.change({ sideBySide: true });
 
@@ -66,7 +68,7 @@ test("a change the host refuses to save says so", async () => {
   const report = reporter();
 
   const settings = viewSettingsOf(
-    { status: "ready", revision: "7", values: { sideBySide: true }, save: saver(false) },
+    { status: "ready", revision: "7", values: read, save: saver(false) },
     report,
   );
 

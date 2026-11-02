@@ -3,7 +3,7 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -12,6 +12,7 @@ import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
 import { FileBar } from "./file-diff";
 import type { Layout } from "./file-diff";
+import { FontSizesContext } from "./fonts";
 import { diffOf, listedFiles, measured, tallest } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
@@ -88,9 +89,14 @@ function GroupFiles({
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
   const hold = useHeldPlace(view, String(sideBySide));
 
+  const fonts = useContext(FontSizesContext);
+
   const styles = useMemo(
-    () => StyleSheet.create({ hint: { padding: 16, color: theme.colors.foregroundMuted } }),
-    [theme],
+    () =>
+      StyleSheet.create({
+        hint: { padding: 16, fontSize: fonts.text, color: theme.colors.foregroundMuted },
+      }),
+    [theme, fonts],
   );
 
   useEffect(() => {

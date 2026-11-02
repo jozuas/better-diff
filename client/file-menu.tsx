@@ -1,16 +1,19 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { copyItems, copyLabel } from "./copy";
 import type { CopyItem } from "./copy";
+import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import { menuPosition } from "./menu";
 import type { Point, Size } from "./menu";
 import { onContextMenu } from "./web";
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -30,9 +33,9 @@ function useStyles(theme: PluginTheme) {
         unmeasured: { opacity: 0 },
         item: { paddingHorizontal: 12, paddingVertical: 4 },
         hovered: { backgroundColor: theme.colors.surface2 },
-        label: { fontSize: 13, color: theme.colors.foreground },
+        label: { fontSize: fonts.text, color: theme.colors.foreground },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 

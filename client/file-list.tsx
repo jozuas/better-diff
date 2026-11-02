@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { fileActions, groupActions } from "./actions";
@@ -9,6 +9,7 @@ import type { Controls } from "./actions";
 import type { CopyItem } from "./copy";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
+import { FontSizesContext } from "./fonts";
 import { isGroupOpen, groups as kinds, isOpen, isShown, toggled } from "./groups";
 import type { GroupName, OpenFile, OpenGroup, SidebarGroup } from "./groups";
 import { Hoverable } from "./hoverable";
@@ -18,6 +19,8 @@ import { SidebarButtons } from "./sidebar-buttons";
 import { onContextMenu } from "./web";
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -48,19 +51,19 @@ function useStyles(theme: PluginTheme) {
         turned: { transform: [{ rotate: "90deg" }] },
         headingButton: { flex: 1 },
         heading: {
-          fontSize: 11,
+          fontSize: fonts.label,
           fontWeight: "600",
           letterSpacing: 0.5,
           color: theme.colors.foregroundMuted,
         },
         hoveredHeading: { color: theme.colors.foreground },
         row: { paddingLeft: 16, paddingRight: 12, paddingVertical: 3 },
-        path: { fontSize: 13, color: theme.colors.foreground },
+        path: { fontSize: fonts.text, color: theme.colors.foreground },
         plain: {},
         revealed: { backgroundColor: theme.colors.surface1 },
         open: { backgroundColor: theme.colors.surface2 },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 

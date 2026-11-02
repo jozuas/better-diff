@@ -2,7 +2,7 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useId, useMemo, useState } from "react";
+import { useContext, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -11,6 +11,7 @@ import { fileActions } from "./actions";
 import type { Controls } from "./actions";
 import { countsOf } from "./counts";
 import { DiffBody } from "./diff-body";
+import { FontSizesContext } from "./fonts";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { IconButton } from "./icon-button";
@@ -20,6 +21,8 @@ import { scrollUpTo, useHeldPlace, useSelectedLines } from "./web";
 type Diff = RpcOutput<typeof diffRpc>;
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -33,14 +36,14 @@ function useStyles(theme: PluginTheme) {
           paddingHorizontal: 12,
           paddingVertical: 6,
         },
-        status: { fontSize: 11, fontWeight: "700", color: theme.colors.foregroundMuted },
-        barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.foreground },
+        status: { fontSize: fonts.label, fontWeight: "700", color: theme.colors.foregroundMuted },
+        barPath: { flexShrink: 1, fontSize: fonts.text, color: theme.colors.foreground },
         end: { flexDirection: "row", alignItems: "center", gap: 8, marginLeft: "auto" },
-        counts: { fontSize: 12, fontWeight: "600" },
+        counts: { fontSize: fonts.small, fontWeight: "600" },
         added: { color: theme.colors.statusSuccess },
         removed: { color: theme.colors.statusDanger },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 
