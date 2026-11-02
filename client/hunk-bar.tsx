@@ -27,12 +27,10 @@ function useStyles(theme: PluginTheme) {
           flexDirection: "row",
           paddingHorizontal: 12,
           paddingVertical: 3,
-          backgroundColor: theme.colors.surface0,
-        },
-        tint: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: theme.colors.accent,
-          opacity: 0.25,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
         },
         buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
       }),
@@ -119,7 +117,6 @@ export function HunkBar({
       }}
       {...pointer}
     >
-      <View style={styles.tint} />
       <View style={styles.buttons}>
         <LineButtons
           index={index}

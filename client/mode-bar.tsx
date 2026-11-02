@@ -11,7 +11,7 @@ import type { OpenFile } from "./groups";
 
 type Mode = NonNullable<RpcOutput<typeof diffRpc>["mode"]>;
 
-// Coloured as a hunk's bar.
+// Shaded as a hunk's bar.
 function useStyles(theme: PluginTheme) {
   return useMemo(
     () =>
@@ -23,12 +23,10 @@ function useStyles(theme: PluginTheme) {
           marginBottom: 8,
           paddingHorizontal: 12,
           paddingVertical: 3,
-          backgroundColor: theme.colors.surface0,
-        },
-        tint: {
-          ...StyleSheet.absoluteFillObject,
-          backgroundColor: theme.colors.accent,
-          opacity: 0.25,
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
         },
         text: { fontSize: 12, color: theme.colors.foreground },
       }),
@@ -50,7 +48,6 @@ export function ModeBar({ mode, version, file, controls, theme }: ModeBarProps):
 
   return (
     <View style={styles.bar}>
-      <View style={styles.tint} />
       <Text style={styles.text}>
         File mode {mode.old} → {mode.new}
       </Text>

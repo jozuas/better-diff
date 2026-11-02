@@ -11,8 +11,8 @@ Replicates Sublime Merge as much as possible:
 - Changed words within a line are highlighted, as in Sublime Merge.
 - Inline and side-by-side diffs (+ a button). In side-by-side, removals and additions are separate texts.
 - Diff is shown file by file instead of as one continuously scrollable diff.
-- The very top of a file's diff is a horizontal coloured bar (Sublime Merge uses deep blue). It shows the file's status (MODIFIED, UNTRACKED, STAGED), its full path, how many lines the diff adds and removes, as GitHub shows them after the path (+12 −3), even while it's collapsed, and the file actions on the right. A file shown without lines, such as a binary file, has no counts.
-- Each hunk is delimited by a horizontal coloured bar (Sublime Merge uses blue), with the hunk actions on the right. As in Sublime Merge, they show only while the pointer is over the hunk, its bar or its lines, focus is in its bar, or lines in it are selected. On hover, its left side shows a "Show entire file" / "Show only modified hunks" toggle. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
+- The very top of a file's diff is a horizontal bar in the theme's greys (Sublime Merge's is deep blue, but some Paseo themes' accent colour is the green or red of added and removed lines). It shows the file's status (MODIFIED, UNTRACKED, STAGED), its full path, how many lines the diff adds and removes, as GitHub shows them after the path (+12 −3), even while it's collapsed, and the file actions on the right. A file shown without lines, such as a binary file, has no counts.
+- Each hunk is delimited by a horizontal bar, fainter than the file's (Sublime Merge uses blue), with the hunk actions on the right. As in Sublime Merge, they show only while the pointer is over the hunk, its bar or its lines, focus is in its bar, or lines in it are selected. On hover, its left side shows a "Show entire file" / "Show only modified hunks" toggle. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
 
 ### Actions
 
@@ -49,7 +49,7 @@ Replicates Sublime Merge as much as possible:
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
 - A triangle left of each group's heading collapses the group, hiding its files, and expands it again: it points right while the group is collapsed and down while it's expanded. Groups start expanded.
-- Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's coloured bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.
+- Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.
 - Each file's row has its file bar's actions as icons at its end (Stage +, Unstage −, Discard ↺, Delete 🗑), over the end of its path. They show while the pointer is over the row or focus is in it, and always on the open file's row, whose actions act on the diff shown.
 - Each group's heading has the actions on all its files the same way:
   - MODIFIED: Stage All, Discard All

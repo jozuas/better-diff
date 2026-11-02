@@ -23,7 +23,7 @@ function useStyles(theme: PluginTheme) {
     () =>
       StyleSheet.create({
         file: { flex: 1 },
-        fileBar: { justifyContent: "center", backgroundColor: theme.colors.accent },
+        fileBar: { justifyContent: "center", backgroundColor: theme.colors.surface2 },
         barContent: {
           flexDirection: "row",
           flexWrap: "wrap",
@@ -32,16 +32,9 @@ function useStyles(theme: PluginTheme) {
           paddingHorizontal: 12,
           paddingVertical: 6,
         },
-        status: { fontSize: 11, fontWeight: "700", color: theme.colors.accentForeground },
-        barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.accentForeground },
-        // On the page's own surface, since the bar's accent can be as green or red as the counts.
-        counts: {
-          paddingHorizontal: 6,
-          borderRadius: 4,
-          fontSize: 12,
-          fontWeight: "600",
-          backgroundColor: theme.colors.surface0,
-        },
+        status: { fontSize: 11, fontWeight: "700", color: theme.colors.foregroundMuted },
+        barPath: { flexShrink: 1, fontSize: 13, color: theme.colors.foreground },
+        counts: { fontSize: 12, fontWeight: "600" },
         added: { color: theme.colors.statusSuccess },
         removed: { color: theme.colors.statusDanger },
       }),
@@ -99,7 +92,7 @@ function FileActions({
       target={{ file, version: diff.version }}
       controls={controls}
       onRun={onRun}
-      color={theme.colors.accentForeground}
+      color={theme.colors.foreground}
       theme={theme}
     />
   );

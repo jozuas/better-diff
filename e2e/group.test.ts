@@ -65,7 +65,7 @@ test("clicking a group shows the diffs of all its files in one scrollable view, 
   expect(status(repository)).toBe(" M a.txt\nM  b.txt\n?? c.txt\n");
 });
 
-test("each file's coloured bar is a sticky header, so you always know which file you're looking at", async ({
+test("each file's bar is a sticky header, so you always know which file you're looking at", async ({
   app,
   page,
   repository,

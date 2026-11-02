@@ -35,7 +35,8 @@ function useStyles(theme: PluginTheme) {
           borderRadius: 4,
           backgroundColor: theme.colors.statusDanger,
         },
-        armedText: { fontSize: 12, color: theme.colors.accentForeground },
+        // As readable as the theme's danger colour is on its surface.
+        armedText: { fontSize: 12, color: theme.colors.surface0 },
         hidden: { opacity: 0 },
       }),
     [theme],

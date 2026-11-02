@@ -52,7 +52,7 @@ function useStyles(theme: PluginTheme) {
           lineHeight: 18,
           color: theme.colors.foregroundMuted,
         },
-        selected: { color: theme.colors.accentForeground, backgroundColor: theme.colors.accent },
+        selected: { color: theme.colors.surface0, backgroundColor: theme.colors.foregroundMuted },
         text: {
           flex: 1,
           paddingHorizontal: 8,
