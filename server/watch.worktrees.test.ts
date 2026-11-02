@@ -1,4 +1,4 @@
-import { realpathSync, rmSync, utimesSync } from "node:fs";
+import { realpathSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { expect, test, vi } from "vitest";
@@ -6,6 +6,9 @@ import { expect, test, vi } from "vitest";
 import { inDirectory, inRepository, runGit, writeFile } from "../test/repository";
 import { hiding, toldOf, watchers, watching } from "../test/watching";
 
+// The watch of the git directory tells of a change to the worktree's own directory in it as macOS
+// and Linux do: on Linux, Node watches a directory and everything in it by watching each one, and
+// never tells of a change to one already there.
 test.each<NodeJS.Platform>(["darwin", "linux"])(
   "tells of a change in a worktree of a bare repository, which its git directory holds, on %s",
   async (platform) => {
@@ -14,13 +17,13 @@ test.each<NodeJS.Platform>(["darwin", "linux"])(
       runGit(bare, ["worktree", "add", "--quiet", "--orphan", "main"]);
 
       const main = join(bare, "main");
-      const { paths, failed, stop } = await watching(main, platform);
+      const hidden = hiding(watchers().watchPath);
+      const { paths, failed, stop } = await watching(main, platform, hidden.watchPath);
 
       await toldOf(paths, main, "ready");
       await toldOf(paths, main, join("a", "b"));
+      hidden.tell(realpathSync(bare), "main", "change");
       await vi.waitFor(() => {
-        utimesSync(main, new Date(), new Date());
-
         expect(paths).toContain(realpathSync(main));
       });
       stop();
