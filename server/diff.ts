@@ -1,7 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
-import { readStatus, withIntentToAdd } from "./changes";
+import { indexOf, readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
@@ -75,15 +75,14 @@ async function renameDiff(
   return isRename(diff) ? diff : undefined;
 }
 
-// The file's changes on the side, as git status lists it in the entries. A file listed twice, as
-// deleted from the index and untracked, isn't renamed.
+// The file's changes on the side, as the entries git status lists it in say. A file listed twice,
+// as deleted from the index and untracked, isn't renamed.
 export async function changesIn(
   directory: string,
-  entries: readonly Entry[],
+  listed: readonly Entry[],
   path: string,
   side: Side,
 ): Promise<Changes> {
-  const listed = entries.filter((entry) => entry.path === path);
   const original = listed[0]?.original;
   const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
   const intentToAdd = listed[0]?.intentToAdd === true;
@@ -109,7 +108,13 @@ export async function changesIn(
 
 async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
   const entries = await readStatus(directory);
-  const changes = await changesIn(directory, entries, path, side);
+
+  const changes = await changesIn(
+    directory,
+    entries.filter((entry) => entry.path === path),
+    path,
+    side,
+  );
 
   return changes;
 }
@@ -152,22 +157,23 @@ export async function readDiff({
   side,
   expand,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
-  const changes = await changesOf(directory, path, side);
+  const [changes, generated] = await Promise.all([
+    changesOf(directory, path, side),
+    expand === true ? undefined : generatedPaths(directory, [path]),
+  ]);
+
   const diff = diffOf(changes);
 
-  if (expand === true) {
-    return diff;
-  }
-
-  const generated = await generatedPaths(directory, [path]);
-
-  return collapsed(diff, generated.has(path));
+  return generated === undefined ? diff : collapsed(diff, generated.has(path));
 }
 
-// The last apply to start.
-let applying: Promise<unknown> = Promise.resolve();
+// The last apply to start on each index.
+const applying = new Map<string, Promise<unknown>>();
 
-async function after(previous: Promise<unknown>, apply: () => Promise<Status>): Promise<Status> {
+async function after(
+  previous: Promise<unknown> | undefined,
+  apply: () => Promise<Status>,
+): Promise<Status> {
   await Promise.allSettled([previous]);
 
   const status = await apply();
@@ -175,13 +181,14 @@ async function after(previous: Promise<unknown>, apply: () => Promise<Status>): 
   return status;
 }
 
-// Applies once the previous apply has finished. Two at once could both find the diff unchanged,
-// and the second would then apply to what the first left, where `git apply` can find a patch's
-// lines in another place.
-export async function inTurn(apply: () => Promise<Status>): Promise<Status> {
-  const applied = after(applying, apply);
+// Applies once the previous apply to the directory's index has finished. Two at once could both
+// find the diff unchanged, and the second would then apply to what the first left, where
+// `git apply` can find a patch's lines in another place.
+export async function inTurn(directory: string, apply: () => Promise<Status>): Promise<Status> {
+  const index = await indexOf(directory);
+  const applied = after(applying.get(index), apply);
 
-  applying = applied;
+  applying.set(index, applied);
 
   const status = await applied;
 
@@ -194,7 +201,7 @@ async function applyToFile(
   { directory, path, operation, version }: Action,
   act: (changes: Changes) => Promise<void>,
 ): Promise<Status> {
-  const status = await inTurn(async () => {
+  const status = await inTurn(directory, async () => {
     const changes = await changesOf(directory, path, sides[operation]);
 
     if (versionOf(changes.diff) !== version) {

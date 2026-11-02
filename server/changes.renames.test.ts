@@ -8,6 +8,7 @@ import { commitTenLines, move, noteCleaned, tenLines } from "../test/renames";
 import {
   commitAll,
   deleteFile,
+  inDirectory,
   inRepository,
   runGit,
   worktreeFile,
@@ -235,6 +236,24 @@ test("pairs the same files without cleaning them again, when only a tracked file
     await listChanges({ directory: repository });
 
     expect(worktreeFile(repository, ".git/cleaned")?.toString()).toBe("b\n");
+  });
+});
+
+test("pairs files once the repository's git directory has moved since it last did", async () => {
+  await inDirectory(async (elsewhere) => {
+    await inRepository(async (repository) => {
+      commitTenLines(repository);
+      move(repository);
+      await listChanges({ directory: repository });
+      runGit(repository, ["init", "--quiet", "--separate-git-dir", join(elsewhere, "git")]);
+      writeFile(repository, "c", "c\n");
+
+      await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+        modified: ["b"],
+        untracked: ["c"],
+        staged: [],
+      });
+    });
   });
 });
 

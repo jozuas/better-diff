@@ -47,7 +47,7 @@ export function diffNoIndex(repository: string, from: string, to: string): Buffe
 export const timeout = 60_000;
 
 // Runs the test in a temporary directory, removed afterwards, and returns what it returns.
-async function inDirectory<T>(test: (directory: string) => Promise<T>): Promise<T> {
+export async function inDirectory<T>(test: (directory: string) => Promise<T>): Promise<T> {
   const directory = mkdtempSync(join(tmpdir(), "better-diff-"));
 
   try {

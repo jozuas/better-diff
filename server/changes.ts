@@ -69,30 +69,64 @@ function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
   }
 }
 
+// The index file of each directory's repository, as git names it. Those that ask at once wait for
+// one answer, in the order they asked.
+const indexes = new Map<string, Promise<string>>();
+
+async function askIndexOf(directory: string): Promise<string> {
+  // git prints the path, and then the `--` that ends the options.
+  const output = await git(directory, "rev-parse", ["--git-path", "index"]);
+  const printed = output.toString();
+
+  return resolve(directory, printed.slice(0, printed.indexOf("\n")));
+}
+
+// Forgets the directory's index where git couldn't name it, so that git is asked again.
+async function forgetFailed(directory: string, index: Promise<string>): Promise<void> {
+  try {
+    await index;
+  } catch {
+    indexes.delete(directory);
+  }
+}
+
+export async function indexOf(directory: string): Promise<string> {
+  const index = indexes.get(directory) ?? askIndexOf(directory);
+
+  indexes.set(directory, index);
+  await forgetFailed(directory, index);
+
+  return index;
+}
+
+async function copyIndex(index: string, copy: string): Promise<void> {
+  const { atime, mtime } = await stat(index);
+
+  await copyFile(index, copy);
+  await utimes(copy, atime, mtime);
+}
+
 // Runs `act` with a copy of the index in which the files are intent-to-add, as `git add -N` would
 // make them in the index itself: git then diffs them as new files, and pairs one with a deleted
 // file as a rename. The copy sits in a temporary directory, not the repository, where one left by a
 // process that was stopped would stay, and goes once `act` is done. It keeps the index's
 // modification time, by which git tells that a file changed as the index was written may look
-// unchanged. A file outside a sparse checkout is added too.
+// unchanged. Where the index git named before is gone, as once the repository's git directory has
+// moved, git is asked again. A file outside a sparse checkout is added too.
 export async function withIntentToAdd<T>(
   directory: string,
   paths: readonly string[],
   act: (index: string) => Promise<T>,
 ): Promise<T> {
-  // git prints the path, and then the `--` that ends the options.
-  const output = await git(directory, "rev-parse", ["--git-path", "index"]);
-  const printed = output.toString();
-  const index = resolve(directory, printed.slice(0, printed.indexOf("\n")));
   // Stryker disable next-line StringLiteral: the name only tells a person what the directory is for.
   const copies = await mkdtemp(join(tmpdir(), "better-diff-index-"));
   const copy = join(copies, "index");
 
   try {
-    const { atime, mtime } = await stat(index);
-
-    await copyFile(index, copy);
-    await utimes(copy, atime, mtime);
+    await copyIndex(await indexOf(directory), copy).catch(async () => {
+      indexes.delete(directory);
+      await copyIndex(await indexOf(directory), copy);
+    });
 
     await git(directory, "add", ["--intent-to-add", "--sparse"], paths, { index: copy });
 

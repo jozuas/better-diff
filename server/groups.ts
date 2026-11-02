@@ -46,12 +46,12 @@ async function readInBatches<T, R>(
 // directory together with what's in the directory.
 async function readFile(
   directory: string,
-  entries: readonly Entry[],
+  listed: readonly Entry[],
   path: string,
   group: Group,
 ): Promise<GroupFile> {
   try {
-    const changes = await changesIn(directory, entries, path, groupSides[group]);
+    const changes = await changesIn(directory, listed, path, groupSides[group]);
     const diff = diffOf(changes);
 
     return {
@@ -66,12 +66,18 @@ async function readFile(
   }
 }
 
-// The group's files, as one git status lists them.
+// The group's files, as one git status lists them, each with the entries that list it: two for a
+// file deleted from the index and untracked.
 async function filesOf(directory: string, group: Group): Promise<GroupFile[]> {
   const entries = await readStatus(directory);
+  const listings = new Map<string, Entry[]>(groupsOf(entries)[group].map((path) => [path, []]));
 
-  const files = await readInBatches(groupsOf(entries)[group], async (path) => {
-    const file = await readFile(directory, entries, path, group);
+  for (const entry of entries) {
+    listings.get(entry.path)?.push(entry);
+  }
+
+  const files = await readInBatches([...listings], async ([path, listed]) => {
+    const file = await readFile(directory, listed, path, group);
 
     return file;
   });
@@ -108,7 +114,7 @@ export async function applyGroup({
   operation,
   version,
 }: RpcInput<typeof applyGroupRpc>): Promise<RpcOutput<typeof applyGroupRpc>> {
-  const status = await inTurn(async () => {
+  const status = await inTurn(directory, async () => {
     const files = await filesOf(directory, group);
 
     if (groupVersionOf(files) !== version) {
