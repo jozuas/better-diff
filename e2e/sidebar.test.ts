@@ -1,6 +1,8 @@
+import type { Locator } from "@playwright/test";
+
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, group, line, openFile, row } from "./panel";
+import { box, button, group, line, openFile, row } from "./panel";
 
 // Commits `a.txt` and `b.txt`, then changes both.
 function changeTwo(repository: string): void {
@@ -207,4 +209,40 @@ test("an action on all of a group's files changes nothing once a file has joined
   ).toBeVisible();
   await expect(group(page, "MODIFIED FILES (2)")).toHaveText(["a.txt", "b.txt"]);
   expect(status(repository)).toBe(" M a.txt\nMM b.txt\n");
+});
+
+// Whether the triangle in the button points right or down, by its shape on the page.
+async function pointing(toggle: Locator): Promise<"right" | "down"> {
+  const { width, height } = await box(toggle.locator("div"));
+
+  return width < height ? "right" : "down";
+}
+
+test("a triangle left of each group's heading collapses the group, hiding its files, and expands it again", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+  writeFile(repository, "c.txt", "c\n");
+
+  await app.openPanel();
+  const modified = button(page, "MODIFIED FILES");
+
+  await expect(group(page, "MODIFIED FILES (2)")).toHaveText(["a.txt", "b.txt"]);
+  await expect(page.getByRole("button", { name: "MODIFIED FILES", expanded: true })).toBeVisible();
+  expect(await pointing(modified)).toBe("down");
+
+  await modified.click();
+
+  await expect(group(page, "MODIFIED FILES (2)")).toHaveCount(0);
+  await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["c.txt"]);
+  await expect(page.getByRole("button", { name: "MODIFIED FILES", expanded: false })).toBeVisible();
+  expect(await pointing(modified)).toBe("right");
+
+  await modified.click();
+
+  await expect(group(page, "MODIFIED FILES (2)")).toHaveText(["a.txt", "b.txt"]);
+  expect(await pointing(modified)).toBe("down");
+  expect(status(repository)).toBe(" M a.txt\n M b.txt\n?? c.txt\n");
 });

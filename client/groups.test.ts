@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { filePath } from "../test/file-names";
-import { groups, isOpen, openAfter, placeholder, sidebarGroups } from "./groups";
+import { groups, isOpen, openAfter, placeholder, sidebarGroups, toggled } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 
 test("heads each group with its title and number of files: modified, then untracked, then staged, and acts on all the files of each that has some", () => {
@@ -187,6 +187,24 @@ test("opens no file once the open one's group lists none", () => {
   fc.assert(
     fc.property(groupName, filePath, changes, changes, (group, path, before, after) => {
       expect(openAfter({ group, path }, before, { ...after, [group]: [] })).toBeUndefined();
+    }),
+  );
+});
+
+test("collapses each group whose triangle is pressed an odd number of times, and expands the others", () => {
+  fc.assert(
+    fc.property(fc.array(groupName), (presses) => {
+      let collapsed: GroupName[] = [];
+
+      for (const press of presses) {
+        collapsed = toggled(collapsed, press);
+      }
+
+      for (const name of ["modified", "untracked", "staged"] satisfies GroupName[]) {
+        const pressed = presses.filter((press) => press === name).length;
+
+        expect(collapsed.includes(name)).toBe(pressed % 2 === 1);
+      }
     }),
   );
 });

@@ -55,6 +55,14 @@ export function sidebarGroups(changes: Changes, filter = ""): SidebarGroup[] {
   });
 }
 
+// The groups collapsed once the group's triangle is pressed, which collapses it, or expands it if
+// it's collapsed.
+export function toggled(collapsed: GroupName[], name: GroupName): GroupName[] {
+  return collapsed.includes(name)
+    ? collapsed.filter((other) => other !== name)
+    : [...collapsed, name];
+}
+
 // What shows in place of a diff while no file is open: nothing until the changes are listed, then
 // that there are none, or else to open a file.
 export function placeholder(changes?: Changes): string {

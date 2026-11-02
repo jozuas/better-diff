@@ -9,8 +9,8 @@ import type { Controls } from "./actions";
 import type { CopyItem } from "./copy";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
-import { isOpen } from "./groups";
-import type { OpenFile, SidebarGroup } from "./groups";
+import { groups as kinds, isOpen, toggled } from "./groups";
+import type { GroupName, OpenFile, SidebarGroup } from "./groups";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
 import { SidebarButtons } from "./sidebar-buttons";
@@ -24,14 +24,33 @@ function useStyles(theme: PluginTheme) {
         list: { paddingVertical: 8 },
         group: { marginBottom: 12 },
         // Hovering it reveals its buttons, though it does nothing pressed.
-        headingRow: { paddingHorizontal: 12, paddingVertical: 4, cursor: "auto" },
+        headingRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 12,
+          paddingVertical: 4,
+          cursor: "auto",
+        },
+        // In the gutter left of the heading, which lines the heading up with the files under it.
+        toggle: { width: 16, alignSelf: "stretch", alignItems: "center", justifyContent: "center" },
+        // Drawn by its left border between transparent top and bottom ones, so it points right, and
+        // down once turned.
+        triangle: {
+          borderTopWidth: 4,
+          borderBottomWidth: 4,
+          borderLeftWidth: 6,
+          borderTopColor: "transparent",
+          borderBottomColor: "transparent",
+          borderLeftColor: theme.colors.foregroundMuted,
+        },
+        turned: { transform: [{ rotate: "90deg" }] },
         heading: {
           fontSize: 11,
           fontWeight: "600",
           letterSpacing: 0.5,
           color: theme.colors.foregroundMuted,
         },
-        row: { paddingHorizontal: 12, paddingVertical: 3 },
+        row: { paddingLeft: 16, paddingRight: 12, paddingVertical: 3 },
         path: { fontSize: 13, color: theme.colors.foreground },
         plain: {},
         revealed: { backgroundColor: theme.colors.surface1 },
@@ -126,14 +145,19 @@ function FileRow({
 
 interface GroupHeadingProps {
   group: SidebarGroup;
+  expanded: boolean;
+  onToggle: () => void;
   controls: Controls;
   styles: Styles;
   theme: PluginTheme;
 }
 
-// The group's heading, with the actions on all its files while it lists them all.
+// The group's heading, after the triangle that collapses and expands it, with the actions on all
+// its files while it lists them all.
 function GroupHeading({
   group: { name, heading, files },
+  expanded,
+  onToggle,
   controls,
   styles,
   theme,
@@ -144,6 +168,16 @@ function GroupHeading({
   return (
     <View>
       <Pressable tabIndex={-1} style={[styles.headingRow, styles[look]]} {...reveal}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={kinds[name].title}
+          aria-expanded={expanded}
+          style={styles.toggle}
+          onPress={onToggle}
+          {...reveal}
+        >
+          <View style={[styles.triangle, expanded && styles.turned]} />
+        </Pressable>
         <Text accessibilityRole="header" style={styles.heading}>
           {heading}
         </Text>
@@ -192,6 +226,7 @@ export function FileList({
 }: FileListProps): ReactElement {
   const styles = useStyles(theme);
   const [menu, setMenu] = useState<{ path: string; point: Point }>();
+  const [collapsed, setCollapsed] = useState<GroupName[]>([]);
 
   return (
     <View style={styles.fileList}>
@@ -199,9 +234,18 @@ export function FileList({
       <ScrollView contentContainerStyle={styles.list}>
         {groups.map((group) => (
           <View key={group.name} style={styles.group}>
-            <GroupHeading group={group} controls={controls} styles={styles} theme={theme} />
+            <GroupHeading
+              group={group}
+              expanded={!collapsed.includes(group.name)}
+              onToggle={() => {
+                setCollapsed((shown) => toggled(shown, group.name));
+              }}
+              controls={controls}
+              styles={styles}
+              theme={theme}
+            />
             <View accessibilityRole="list" accessibilityLabel={group.heading}>
-              {group.paths.map((path) => (
+              {(collapsed.includes(group.name) ? [] : group.paths).map((path) => (
                 <FileRow
                   key={path}
                   file={{ group: group.name, path }}
