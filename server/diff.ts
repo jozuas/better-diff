@@ -1,7 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
-import { indexOf, readStatus, withIntentToAdd } from "./changes";
+import { aloneIntentToAdd, indexOf, readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
@@ -38,8 +38,25 @@ export interface Changes {
   intentToAdd: boolean;
 }
 
+// An untracked file's diff as a new file, as git diffs one added with --intent-to-add. `git diff
+// --no-index` reads a file named `-` from its input, and `git apply` refuses one spelled `./-`, so
+// that one is diffed intent-to-add, in an index of its own.
+async function newFileDiff(directory: string, path: string): Promise<Buffer> {
+  const diff =
+    path === "-"
+      ? await aloneIntentToAdd(directory, [path], async (index) => {
+          // Stryker disable next-line ArrayDeclaration: the index has only the file, so git diffs it alone either way.
+          const added = await git(directory, "diff", [], [path], { index });
+
+          return added;
+        })
+      : await git(directory, "diff", ["--no-index"], ["/dev/null", path]);
+
+  return diff;
+}
+
 // A file's own diff on the side. `git diff` leaves an untracked file out, though its changes are
-// all of its lines, so it's diffed as a new file, as git diffs one added with --intent-to-add.
+// all of its lines, so it's diffed as a new file.
 async function ownDiff(
   directory: string,
   path: string,
@@ -47,7 +64,7 @@ async function ownDiff(
   untracked: boolean,
 ): Promise<Buffer> {
   const diff = untracked
-    ? await git(directory, "diff", ["--no-index"], ["/dev/null", path])
+    ? await newFileDiff(directory, path)
     : await git(directory, "diff", diffOptions[side], [path]);
 
   return diff;

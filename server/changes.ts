@@ -106,36 +106,67 @@ async function copyIndex(index: string, copy: string): Promise<void> {
   await utimes(copy, atime, mtime);
 }
 
-// Runs `act` with a copy of the index in which the files are intent-to-add, as `git add -N` would
-// make them in the index itself: git then diffs them as new files, and pairs one with a deleted
-// file as a rename. The copy sits in a temporary directory, not the repository, where one left by a
-// process that was stopped would stay, and goes once `act` is done. It keeps the index's
+// Runs `act` with an index of its own, as `start` writes it, or else empty, in which the files are
+// then intent-to-add, as `git add -N` would make them: git then diffs them as new files. The index
+// sits in a temporary directory, not the repository, where one left by a process that was stopped
+// would stay, and goes once `act` is done. A file outside a sparse checkout is added too.
+async function inOwnIndex<T>(
+  directory: string,
+  paths: readonly string[],
+  start: (index: string) => Promise<void>,
+  act: (index: string) => Promise<T>,
+): Promise<T> {
+  // Stryker disable next-line StringLiteral: the name only tells a person what the directory is for.
+  const temporary = await mkdtemp(join(tmpdir(), "better-diff-index-"));
+  const index = join(temporary, "index");
+
+  try {
+    await start(index);
+    await git(directory, "add", ["--intent-to-add", "--sparse"], paths, { index });
+
+    const result = await act(index);
+
+    return result;
+  } finally {
+    await rm(temporary, { recursive: true });
+  }
+}
+
+// Runs `act` with a copy of the index in which the files are intent-to-add, as they would be in the
+// index itself, where git pairs one with a deleted file as a rename. The copy keeps the index's
 // modification time, by which git tells that a file changed as the index was written may look
 // unchanged. Where the index git named before is gone, as once the repository's git directory has
-// moved, git is asked again. A file outside a sparse checkout is added too.
+// moved, git is asked again.
 export async function withIntentToAdd<T>(
   directory: string,
   paths: readonly string[],
   act: (index: string) => Promise<T>,
 ): Promise<T> {
-  // Stryker disable next-line StringLiteral: the name only tells a person what the directory is for.
-  const copies = await mkdtemp(join(tmpdir(), "better-diff-index-"));
-  const copy = join(copies, "index");
+  const result = await inOwnIndex(
+    directory,
+    paths,
+    async (copy) => {
+      await copyIndex(await indexOf(directory), copy).catch(async () => {
+        indexes.delete(directory);
+        await copyIndex(await indexOf(directory), copy);
+      });
+    },
+    act,
+  );
 
-  try {
-    await copyIndex(await indexOf(directory), copy).catch(async () => {
-      indexes.delete(directory);
-      await copyIndex(await indexOf(directory), copy);
-    });
+  return result;
+}
 
-    await git(directory, "add", ["--intent-to-add", "--sparse"], paths, { index: copy });
+// Runs `act` with an index that has only the files, intent-to-add, whether or not the repository
+// has an index yet.
+export async function aloneIntentToAdd<T>(
+  directory: string,
+  paths: readonly string[],
+  act: (index: string) => Promise<T>,
+): Promise<T> {
+  const result = await inOwnIndex(directory, paths, async () => {}, act);
 
-    const result = await act(copy);
-
-    return result;
-  } finally {
-    await rm(copies, { recursive: true });
-  }
+  return result;
 }
 
 interface Status {

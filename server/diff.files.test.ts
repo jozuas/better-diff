@@ -8,8 +8,8 @@ import {
   runGit,
   writeFile,
 } from "../test/repository";
-import { diffCommands, linesOf, operations, setUp, sides } from "../test/staging";
-import type { Operation, Side } from "../test/staging";
+import { diffCommands, fileState, linesOf, operations, setUp, sides } from "../test/staging";
+import type { FileState, Operation, Side } from "../test/staging";
 import { applyLines, readDiff } from "./diff";
 
 async function applyAll(repository: string, operation: Operation): Promise<void> {
@@ -108,6 +108,38 @@ test.each(deletions)(
       await applyAll(repository, operation);
 
       expect(diffOf(repository, sides[operation])).toBe("");
+    });
+  },
+);
+
+// What staging or discarding the second line of an untracked file named `-`, `a` then `b`, leaves.
+const dashResults: [Operation, FileState][] = [
+  ["stage", { index: Buffer.from("b\n"), worktree: Buffer.from("a\nb\n") }],
+  ["discard", { index: undefined, worktree: Buffer.from("a\n") }],
+];
+
+test.each(dashResults)(
+  "reads the lines of an untracked file named -, which git diff --no-index would read from its input, and can %s one",
+  async (operation, result) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, "-", "a\nb\n");
+
+      const diff = await readDiff({ directory: repository, path: "-", side: "unstaged" });
+
+      expect(diff.hunks.flatMap(({ lines }) => lines.map(({ text }) => text))).toStrictEqual([
+        "a",
+        "b",
+      ]);
+
+      await applyLines({
+        directory: repository,
+        path: "-",
+        operation,
+        version: diff.version,
+        lines: [{ hunk: 0, line: 1 }],
+      });
+
+      expect(fileState(repository, "-")).toStrictEqual(result);
     });
   },
 );
