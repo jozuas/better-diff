@@ -10,16 +10,28 @@ function git(args: readonly string[]): string {
 
 const root = git(["rev-parse", "--show-toplevel"]);
 
-export const gitDirectory = git(["rev-parse", "--absolute-git-dir"]);
+const gitDirectory = git(["rev-parse", "--absolute-git-dir"]);
 
 export const pluginId = z
   .object({ id: z.string() })
   .parse(JSON.parse(readFileSync(join(root, "paseo-plugin.json"), "utf8"))).id;
 
-// Runs the paseo-ui skill's script, against the daemon in PASEO_UI_HOME. Asynchronously, so a
-// test's timeout can stop a test waiting on it, and killed after a minute, since nothing stops
-// global setup waiting on a daemon that doesn't answer.
-export async function paseoUi(args: readonly string[]): Promise<string> {
+// The tests' daemons: one most tests share, and one for tests that change the plugin's settings.
+// Every tab on a daemon shares its settings, so those tests take turns on a daemon of their own,
+// where they can't change what the others show.
+export type Daemon = "shared" | "settings";
+
+export const daemons: readonly Daemon[] = ["shared", "settings"];
+
+// Where the daemon keeps its state, which stays after a run, for its logs.
+export function homeOf(daemon: Daemon): string {
+  return join(gitDirectory, daemon === "shared" ? "paseo-e2e" : "paseo-e2e-settings");
+}
+
+// Runs the paseo-ui skill's script, against the daemon. Asynchronously, so a test's timeout can
+// stop a test waiting on it, and killed after a minute, since nothing stops global setup waiting on
+// a daemon that doesn't answer.
+export async function paseoUi(daemon: Daemon, args: readonly string[]): Promise<string> {
   const output = await new Promise<string>((resolve, reject) => {
     const child = execFile(
       join(root, ".claude/skills/paseo-ui/paseo-ui.sh"),
@@ -28,7 +40,7 @@ export async function paseoUi(args: readonly string[]): Promise<string> {
         encoding: "utf8",
         timeout: 60_000,
         // Playwright forces colour in its workers, which would put escape codes in what paseo prints.
-        env: { ...process.env, FORCE_COLOR: "0" },
+        env: { ...process.env, PASEO_UI_HOME: homeOf(daemon), FORCE_COLOR: "0" },
       },
       (error, stdout) => {
         if (error === null) {
@@ -49,7 +61,23 @@ export async function paseoUi(args: readonly string[]): Promise<string> {
   return output.trim();
 }
 
-// What e2e/global-setup.ts passes the tests.
-export function setting(name: "PASEO_UI_URL" | "PASEO_UI_SERVER"): string {
-  return z.string().parse(process.env[name]);
+const address = z.object({ url: z.string(), server: z.string() });
+
+// Where a daemon serves Paseo's web UI, and its server ID.
+type Address = z.infer<typeof address>;
+
+function variableOf(daemon: Daemon): string {
+  return `PASEO_E2E_${daemon.toUpperCase()}`;
+}
+
+// Passes the tests the daemon's address, from what paseo-ui.sh start printed in
+// e2e/global-setup.ts.
+export function passAddress(daemon: Daemon, started: string): void {
+  const passed = address.parse(/^url: (?<url>.+)\nserver: (?<server>.+)$/u.exec(started)?.groups);
+
+  process.env[variableOf(daemon)] = JSON.stringify(passed);
+}
+
+export function addressOf(daemon: Daemon): Address {
+  return address.parse(JSON.parse(z.string().parse(process.env[variableOf(daemon)])));
 }

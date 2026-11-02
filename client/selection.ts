@@ -1,8 +1,12 @@
-import type { RpcInput } from "@getpaseo/plugin";
+import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
-import type { applyLinesRpc } from "../shared/diff";
+import type { applyLinesRpc, diffRpc } from "../shared/diff";
+import { shows } from "./side-by-side";
+import type { Focus, Side } from "./side-by-side";
 
 type Lines = RpcInput<typeof applyLinesRpc>["lines"];
+
+type HunkLine = RpcOutput<typeof diffRpc>["hunks"][number]["lines"][number];
 
 // A line of one of a view's files, by the file's index in the view, its hunk's index in the file's
 // diff and its own index in the hunk.
@@ -12,12 +16,14 @@ interface Line {
   line: number;
 }
 
-// Lines of one hunk of one of a view's files, from the first to the last, by their indices in it.
+// Lines of one hunk of one of a view's files, from the first to the last, by their indices in it. In
+// a side-by-side view, they're on one side, and the range has only the lines it shows.
 export interface LineRange {
   file: number;
   hunk: number;
   first: number;
   last: number;
+  side?: Side;
 }
 
 // The id of a view's file, by its index in the view, which its lines' ids start with and which no
@@ -26,9 +32,26 @@ export function fileId(view: string, file: number): string {
   return `${view}:${file}`;
 }
 
-// A line's element id, under its file's id.
-export function lineId(file: string, hunk: number, line: number): string {
-  return `${file}:${hunk}:${line}`;
+// A line's element id, under its file's id. Side by side, the side without focus has another, by
+// which a selection doesn't find it.
+export function lineId(file: string, hunk: number, line: number, focused = true): string {
+  return focused ? `${file}:${hunk}:${line}` : `${file}:${hunk}:${line}:unfocused`;
+}
+
+// The id of an element at the top of a hunk's lines, by which the view finds the hunk, whichever of
+// its lines have ids.
+export function hunkId(file: string, hunk: number): string {
+  return `${file}:${hunk}`;
+}
+
+// What the element with the id marks the place of in the view, if anything, whichever side has
+// focus: one of its files' diffs, the lines of one of their hunks, or one of those lines.
+export function markOf(view: string, id: string): string | undefined {
+  const mark = id.replace(/:unfocused$/u, "");
+
+  return mark.startsWith(`${view}:`) && /^\d+(?::\d+){0,2}$/u.test(mark.slice(view.length + 1))
+    ? mark
+    : undefined;
 }
 
 // The line an element id names, if it's one of the view's lines.
@@ -74,17 +97,37 @@ export function sameRange(range: LineRange | undefined, other: LineRange | undef
   );
 }
 
+// The range, on the side with focus, in a side-by-side view.
+export function onSide(range: LineRange | undefined, focus?: Focus): LineRange | undefined {
+  return range === undefined || focus === undefined ? range : { ...range, side: focus.side };
+}
+
+// Tells the range apart from the others of its hunk.
+export function rangeKey({ first, last, side }: LineRange): string {
+  return `${first}-${last} ${String(side)}`;
+}
+
 // The range, if it's of the view's file at the index.
 export function rangeIn(range: LineRange | undefined, file: number): LineRange | undefined {
   return range?.file === file ? range : undefined;
 }
 
-// Whether the range has the line of its file.
-export function isSelected(range: LineRange | undefined, hunk: number, line: number): boolean {
-  return range?.hunk === hunk && line >= range.first && line <= range.last;
+// Whether the range has the line of its file, as shown on the side, in a side-by-side view.
+export function isSelected(
+  range: LineRange | undefined,
+  hunk: number,
+  line: number,
+  side?: Side,
+): boolean {
+  return range?.hunk === hunk && line >= range.first && line <= range.last && range.side === side;
 }
 
-// The range's lines, as an action on its file's lines names them.
-export function rangeLines({ hunk, first, last }: LineRange): Lines {
-  return Array.from({ length: last - first + 1 }, (_, index) => ({ hunk, line: first + index }));
+// The range's lines, as an action on its file's lines names them, from those of its hunk.
+export function rangeLines(
+  { hunk, first, last, side }: LineRange,
+  lines: readonly HunkLine[],
+): Lines {
+  return lines.flatMap(({ kind }, line) =>
+    line >= first && line <= last && shows(side, kind) ? [{ hunk, line }] : [],
+  );
 }

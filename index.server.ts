@@ -15,8 +15,10 @@ import {
   diffRpc,
   groupRpc,
 } from "./shared/diff";
+import { viewSettings } from "./shared/settings";
 
 export default function contribute(server: PluginServerContext): PluginCleanup {
+  server.registerSettings(viewSettings);
   server.handle(changesRpc, listChanges);
   server.handle(waitRpc, waitForChanges);
   server.handle(diffRpc, readDiff);

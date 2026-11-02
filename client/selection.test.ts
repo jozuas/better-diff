@@ -4,13 +4,18 @@ import { expect, test } from "vitest";
 import type { LineRange } from "./selection";
 import {
   fileId,
+  hunkId,
   isSelected,
   lineId,
+  markOf,
+  onSide,
   rangeIn,
+  rangeKey,
   rangeLines,
   sameRange,
   selectedRange,
 } from "./selection";
+import type { Side } from "./side-by-side";
 
 interface Line {
   file: number;
@@ -111,6 +116,45 @@ test("selects in the first hunk touched when the selection touches no line of th
   ).toStrictEqual({ file: 2, hunk: 1, first: 4, last: 4 });
 });
 
+test("a hunk's id is no line's or file's, and tells the file's hunks apart", () => {
+  const file = fileId("«r1»", 2);
+  const ids = [hunkId(file, 0), hunkId(file, 1), file, lineId(file, 0, 0), lineId(file, 1, 0)];
+
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(selectedRange("«r1»", [hunkId(file, 1)], hunkId(file, 1))).toBeUndefined();
+});
+
+test("a line on the side without focus has an id of its own, which a selection doesn't find it by", () => {
+  const file = fileId("«r1»", 2);
+
+  expect(lineId(file, 1, 3, false)).not.toBe(lineId(file, 1, 3));
+  expect(selectedRange("«r1»", [lineId(file, 1, 3, false)], "")).toBeUndefined();
+});
+
+test("marks the places of a view's files' diffs, their hunks' lines and those lines, on either side", () => {
+  const file = fileId("«r1»", 12);
+
+  expect(markOf("«r1»", file)).toBe(file);
+  expect(markOf("«r1»", hunkId(file, 13))).toBe(hunkId(file, 13));
+  expect(markOf("«r1»", lineId(file, 13, 0))).toBe(lineId(file, 13, 0));
+  expect(markOf("«r1»", lineId(file, 13, 0, false))).toBe(lineId(file, 13, 0));
+});
+
+test.each([
+  "«r1»",
+  "«r1»:",
+  "«r1»:2:",
+  "«r1»:x2",
+  "«r1»:2:x13",
+  "«r2»:2:13",
+  "x«r1»:2",
+  "«r1»:2:13x",
+  "«r1»:2:13:0:1",
+  "«r1»:2:unfocused:13",
+])("%s marks no place in the view «r1»", (id) => {
+  expect(markOf("«r1»", id)).toBeUndefined();
+});
+
 test("selects nothing when the selection touches no line", () => {
   expect(selectedRange("«r1»", [], "")).toBeUndefined();
   expect(selectedRange("«r1»", ["sidebar"], "sidebar")).toBeUndefined();
@@ -130,6 +174,18 @@ test.each([
 
 test("no line is selected without a range", () => {
   expect(isSelected(undefined, 0, 0)).toBe(false);
+});
+
+const oldSide: LineRange = { ...range, side: "old" };
+
+test.each<[LineRange, number, Side | undefined, boolean]>([
+  [oldSide, 3, "old", true],
+  [oldSide, 3, "new", false],
+  [oldSide, 3, undefined, false],
+  [oldSide, 5, "old", false],
+  [range, 3, "old", false],
+])("%j has line 1:%i shown on the %s side: %s", (shown, line, side, selected) => {
+  expect(isSelected(shown, 1, line, side)).toBe(selected);
 });
 
 test.each<[LineRange | undefined, LineRange | undefined, boolean]>([
@@ -156,10 +212,53 @@ test("gives each of a view's files only the range of its own lines", () => {
   expect(rangeIn(undefined, 0)).toBeUndefined();
 });
 
+// A hunk's lines of each kind, in the order git gives them.
+const mixed = (
+  ["context", "removed", "removed", "added", "added", "context", "removed", "added"] as const
+).map((kind) => ({ kind, text: kind, newline: true }));
+
 test("names each of a range's lines by its hunk's index and its own", () => {
-  expect(rangeLines({ file: 1, hunk: 2, first: 3, last: 5 })).toStrictEqual([
+  expect(rangeLines({ file: 1, hunk: 2, first: 2, last: 6 }, mixed)).toStrictEqual([
+    { hunk: 2, line: 2 },
     { hunk: 2, line: 3 },
     { hunk: 2, line: 4 },
     { hunk: 2, line: 5 },
+    { hunk: 2, line: 6 },
   ]);
+});
+
+test("names only the lines its side shows of a range on one side", () => {
+  expect(rangeLines({ file: 1, hunk: 2, first: 0, last: 6, side: "old" }, mixed)).toStrictEqual([
+    { hunk: 2, line: 0 },
+    { hunk: 2, line: 1 },
+    { hunk: 2, line: 2 },
+    { hunk: 2, line: 5 },
+    { hunk: 2, line: 6 },
+  ]);
+  expect(rangeLines({ file: 1, hunk: 2, first: 1, last: 7, side: "new" }, mixed)).toStrictEqual([
+    { hunk: 2, line: 3 },
+    { hunk: 2, line: 4 },
+    { hunk: 2, line: 5 },
+    { hunk: 2, line: 7 },
+  ]);
+});
+
+test("puts a range on the side with focus, and leaves it as it is inline", () => {
+  const focus = { side: "old" as const, onFocus: () => {} };
+
+  expect(onSide(range, focus)).toStrictEqual({ ...range, side: "old" });
+  expect(onSide(range)).toBe(range);
+  expect(onSide(undefined, focus)).toBeUndefined();
+});
+
+test("tells apart ranges of a hunk with other lines, or on another side", () => {
+  const keys = [
+    rangeKey(range),
+    rangeKey({ ...range, side: "old" }),
+    rangeKey({ ...range, side: "new" }),
+    rangeKey({ ...range, first: 3 }),
+    rangeKey({ ...range, last: 5 }),
+  ];
+
+  expect(new Set(keys).size).toBe(keys.length);
 });

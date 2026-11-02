@@ -195,7 +195,8 @@ test("a hunk's actions show while focus is in its bar, so the keyboard reaches t
 
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await button(page, "Stage").focus();
+  await expect(line(page, "first")).toBeVisible();
+  await button(page, "Show side by side").focus();
   await page.keyboard.press("Tab");
 
   await expect(button(page, "Show entire file").first()).toBeFocused();

@@ -14,9 +14,10 @@ import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { fileId, lineId } from "./selection";
+import { fileId, hunkId, onSide } from "./selection";
 import type { LineRange } from "./selection";
-import { offsetIn, scrollToOffset } from "./web";
+import type { Focus, Side } from "./side-by-side";
+import { clearSelection, offsetIn, scrollToOffset } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -48,9 +49,11 @@ export interface DiffBodyProps {
   // Whether its hunks scroll in the view on their own, under bars that stay at the top, as when
   // it's the view's only diff, rather than with the view's other diffs.
   scrolls: boolean;
-  // Called just before an action on one of its hunks runs, with the id of the hunk's first line and
-  // the height of its bar.
-  onHunkRun: (line: string, barHeight: number) => void;
+  // Whether it shows the old version's lines beside the new one's, rather than inline.
+  sideBySide: boolean;
+  // Called just before an action on one of its hunks runs, with the id of the top of the hunk's
+  // lines and the height of its bar.
+  onHunkRun: (top: string, barHeight: number) => void;
   controls: Controls;
   // Asks for a collapsed diff's lines.
   onExpand: () => void;
@@ -116,15 +119,36 @@ function useHunkPlace(view: string, container: string, shown: string): (hunk: nu
 
     if (place !== undefined && place.shown !== shown) {
       held.current = undefined;
-      scrollToOffset(view, lineId(container, place.hunk, 0), place.offset);
+      scrollToOffset(view, hunkId(container, place.hunk), place.offset);
     }
   }, [view, container, shown]);
 
   return (hunk) => {
-    const offset = offsetIn(view, lineId(container, hunk, 0));
+    const offset = offsetIn(view, hunkId(container, hunk));
 
     held.current = offset === undefined ? undefined : { hunk, offset, shown };
   };
+}
+
+// Side by side, which side has focus: the one the pointer was last pressed on, the new version's
+// until it is. Undefined inline. Pressing the pointer on the other side clears the selection, which
+// the page's order of the sides' lines has that side's lines in, so the press starts a selection
+// rather than dragging the one there was.
+function useFocus(sideBySide: boolean): Focus | undefined {
+  const [side, setSide] = useState<Side>("new");
+
+  return sideBySide
+    ? {
+        side,
+        onFocus: (pressed) => {
+          if (pressed !== side) {
+            clearSelection();
+          }
+
+          setSide(pressed);
+        },
+      }
+    : undefined;
 }
 
 interface HunksProps extends DiffBodyProps {
@@ -135,7 +159,8 @@ interface HunksProps extends DiffBodyProps {
 // the toggle that shows the entire file, with the unchanged lines around the hunks, or only the
 // hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
 // the top while its lines scroll under it, until the next hunk's bar covers it. While the entire
-// file shows, the next hunk takes the place of one an action is run on.
+// file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
+// is in the side with focus.
 function Hunks({
   diff,
   file,
@@ -143,6 +168,7 @@ function Hunks({
   fileIndex,
   selection,
   scrolls,
+  sideBySide,
   onHunkRun,
   controls,
   styles,
@@ -154,6 +180,8 @@ function Hunks({
   const container = fileId(view, fileIndex);
   const hold = useHunkPlace(view, container, `${diff.version} ${String(entire)}`);
   const unchanged = entire ? unchangedLines(diff) : { before: [], after: [] };
+  const focus = useFocus(sideBySide);
+  const range = onSide(selection, focus);
 
   const hunks = diff.hunks.flatMap((hunk, index) => {
     const pointer: PointerHandlers = {
@@ -172,7 +200,7 @@ function Hunks({
         index={index}
         version={diff.version}
         file={file}
-        selection={selection}
+        selection={range}
         pointed={pointed}
         pointer={pointer}
         controls={controls}
@@ -185,7 +213,7 @@ function Hunks({
           barHeight.current = height;
         }}
         onRun={() => {
-          onHunkRun(lineId(container, index, 0), barHeight.current);
+          onHunkRun(hunkId(container, index), barHeight.current);
 
           if (entire) {
             hold(index);
@@ -194,21 +222,29 @@ function Hunks({
         theme={theme}
       />,
       <View key={`lines ${hunk.oldStart},${hunk.newStart}`} style={styles.spaced}>
+        <View nativeID={hunkId(container, index)} />
         <HunkLines
           hunk={hunk}
           index={index}
           container={container}
-          selection={selection}
+          selection={range}
           pointer={pointer}
+          focus={focus}
           theme={theme}
         />
-        <UnchangedLines lines={unchanged.after[index] ?? []} theme={theme} />
+        <UnchangedLines lines={unchanged.after[index] ?? []} focus={focus} theme={theme} />
       </View>,
     ];
   });
 
   const shown = [
-    <UnchangedLines key="before" lines={unchanged.before} style={styles.spaced} theme={theme} />,
+    <UnchangedLines
+      key="before"
+      lines={unchanged.before}
+      focus={focus}
+      style={styles.spaced}
+      theme={theme}
+    />,
     ...hunks,
   ];
 

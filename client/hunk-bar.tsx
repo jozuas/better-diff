@@ -1,5 +1,4 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useMemo, useState } from "react";
 import type { ViewProps } from "react-native";
@@ -10,10 +9,10 @@ import { ActionButtons } from "./action-buttons";
 import { hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
 import type { OpenFile } from "./groups";
-import { Hoverable, TintLayer } from "./hoverable";
+import { IconButton } from "./icon-button";
 import { entireFileIcon, onlyHunksIcon } from "./icons";
 import { hunkRevealed } from "./reveal";
-import { rangeLines } from "./selection";
+import { rangeKey, rangeLines } from "./selection";
 import type { LineRange } from "./selection";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
@@ -36,14 +35,10 @@ function useStyles(theme: PluginTheme) {
           backgroundColor: theme.colors.surface1,
         },
         buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
-        toggle: { alignSelf: "center", padding: 2, borderRadius: 4, overflow: "hidden" },
-        hidden: { opacity: 0 },
       }),
     [theme],
   );
 }
-
-type Styles = ReturnType<typeof useStyles>;
 
 // What the toggle shows the entire file with, and only the hunks.
 const toggles = {
@@ -56,43 +51,26 @@ interface EntireFileToggleProps {
   entire: boolean;
   onPress: () => void;
   hidden: boolean;
-  styles: Styles;
   theme: PluginTheme;
 }
 
-// Sublime Merge's icon for what it shows the view instead, which brightens while the pointer is over
-// it. Hidden, it can still be reached with the keyboard.
-function EntireFileToggle({
-  entire,
-  onPress,
-  hidden,
-  styles,
-  theme,
-}: EntireFileToggleProps): ReactElement {
+// Sublime Merge's icon for what it shows the view instead.
+function EntireFileToggle({ entire, onPress, hidden, theme }: EntireFileToggleProps): ReactElement {
   const toggle = entire ? toggles.hunks : toggles.entire;
 
   return (
-    <Hoverable
-      accessibilityRole="button"
-      accessibilityLabel={toggle.label}
-      style={[styles.toggle, hidden && styles.hidden]}
+    <IconButton
+      label={toggle.label}
+      icon={toggle.icon}
       onPress={onPress}
-    >
-      {({ hovered, pressed }) => {
-        const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
-
-        return (
-          <>
-            <TintLayer color={color} hovered={hovered} pressed={pressed} />
-            <Icon icon={toggle.icon} size={15} color={color} />
-          </>
-        );
-      }}
-    </Hoverable>
+      hidden={hidden}
+      theme={theme}
+    />
   );
 }
 
 interface LineButtonsProps {
+  hunk: Hunk;
   index: number;
   version: string;
   file: OpenFile;
@@ -103,6 +81,7 @@ interface LineButtonsProps {
 
 // The actions on the hunk's selected lines, while it has any.
 function LineButtons({
+  hunk,
   index,
   version,
   file,
@@ -113,8 +92,8 @@ function LineButtons({
   return selection?.hunk === index ? (
     <ActionButtons
       actions={lineActions[file.group]}
-      bar={`${version}:lines ${index}:${selection.first}-${selection.last}`}
-      target={{ file, version, lines: rangeLines(selection) }}
+      bar={`${version}:lines ${index}:${rangeKey(selection)}`}
+      target={{ file, version, lines: rangeLines(selection, hunk.lines) }}
       controls={controls}
       color={theme.colors.foreground}
       theme={theme}
@@ -178,15 +157,10 @@ export function HunkBar({
       }}
       {...pointer}
     >
-      <EntireFileToggle
-        entire={entire}
-        onPress={onToggleEntire}
-        hidden={!revealed}
-        styles={styles}
-        theme={theme}
-      />
+      <EntireFileToggle entire={entire} onPress={onToggleEntire} hidden={!revealed} theme={theme} />
       <View style={styles.buttons}>
         <LineButtons
+          hunk={hunk}
           index={index}
           version={version}
           file={file}

@@ -1,10 +1,9 @@
 import { rmSync } from "node:fs";
-import { join } from "node:path";
 
 import type { FullConfig } from "@playwright/test";
-import { z } from "zod";
 
-import { gitDirectory, paseoUi } from "./paseo";
+import { daemons, homeOf, paseoUi, passAddress } from "./paseo";
+import type { Daemon } from "./paseo";
 
 // devenv's Chromium is nixpkgs' build for one version of Playwright, and another version looks
 // for a different build.
@@ -18,28 +17,27 @@ function checkBrowsers(version: string): void {
   }
 }
 
-// A daemon of the tests' own, started fresh for each run, so nothing carries over from an earlier
-// run or from checks with the paseo-ui skill. Its home stays after the run, for its logs.
+async function stop(daemon: Daemon): Promise<void> {
+  await paseoUi(daemon, ["stop"]);
+}
+
+// Starts the daemon fresh, so nothing carries over from an earlier run or from checks with the
+// paseo-ui skill, and passes the tests its address.
+async function start(daemon: Daemon): Promise<void> {
+  // A run that was killed leaves its daemon running.
+  await stop(daemon);
+  rmSync(homeOf(daemon), { recursive: true, force: true });
+  passAddress(daemon, await paseoUi(daemon, ["start"]));
+}
+
+// The tests' own daemons, for this run.
 export default async function globalSetup(config: FullConfig): Promise<() => Promise<void>> {
   checkBrowsers(config.version);
-
-  const home = join(gitDirectory, "paseo-e2e");
-
-  process.env["PASEO_UI_HOME"] = home;
-  // A run that was killed leaves its daemon running.
-  await paseoUi(["stop"]);
-  rmSync(home, { recursive: true, force: true });
-
-  const started = await paseoUi(["start"]);
-
-  const { url, server } = z
-    .object({ url: z.string(), server: z.string() })
-    .parse(/^url: (?<url>.+)\nserver: (?<server>.+)$/u.exec(started)?.groups);
-
-  process.env["PASEO_UI_URL"] = url;
-  process.env["PASEO_UI_SERVER"] = server;
+  // One at a time: each installs the plugin from the checkout, which two at once fail to.
+  await start("shared");
+  await start("settings");
 
   return async () => {
-    await paseoUi(["stop"]);
+    await Promise.all(daemons.map(stop));
   };
 }

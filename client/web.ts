@@ -1,9 +1,11 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 import type { Point } from "./menu";
-import { sameRange, selectedRange } from "./selection";
+import { topPlace } from "./place";
+import type { Place } from "./place";
+import { markOf, sameRange, selectedRange } from "./selection";
 import type { LineRange } from "./selection";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
@@ -207,20 +209,71 @@ export function offsetIn(container: string, target: string): number | undefined 
   return element.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
 }
 
+// Scrolls the element with the id `container` down by the distance, or up by a negative one, as
+// far as it goes.
+function scrollBy(container: string, distance: number): void {
+  const scroller =
+    Platform.OS === "web" ? document.querySelector(`#${CSS.escape(container)}`) : null;
+
+  if (scroller !== null) {
+    scroller.scrollTop += distance;
+  }
+}
+
 // Scrolls the element with the id `container`, as far as it goes, to show the top of the element
 // with the id `target` `offset` below its top.
 export function scrollToOffset(container: string, target: string, offset: number): void {
   const current = offsetIn(container, target);
 
-  if (current === undefined) {
-    return;
+  if (current !== undefined) {
+    scrollBy(container, current - offset);
+  }
+}
+
+// The places of what the elements of the view with the id mark, in the page's order.
+function placesIn(view: string): Place[] {
+  const scroller = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(view)}`) : null;
+
+  if (scroller === null) {
+    return [];
   }
 
-  const scroller = document.querySelector(`#${CSS.escape(container)}`);
+  const { top } = scroller.getBoundingClientRect();
 
-  if (scroller !== null) {
-    scroller.scrollTop += current - offset;
-  }
+  return [...scroller.querySelectorAll("[id]")].flatMap((element) => {
+    const mark = markOf(view, element.id);
+
+    return mark === undefined
+      ? []
+      : [{ id: mark, offset: element.getBoundingClientRect().top - top }];
+  });
+}
+
+// Holds the place of what the view with the id shows at its top, by the line, hunk or file's diff
+// it's in, from when the returned function is called until `shown` changes, when the view scrolls to
+// show that in the same place again.
+export function useHeldPlace(view: string, shown: string): () => void {
+  const held = useRef<{ place: Place; shown: string } | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    const hold = held.current;
+
+    if (hold !== undefined && hold.shown !== shown) {
+      held.current = undefined;
+
+      const now = placesIn(view).find(({ id }) => id === hold.place.id);
+
+      if (now !== undefined) {
+        scrollBy(view, now.offset - hold.place.offset);
+      }
+    }
+  }, [view, shown]);
+
+  return () => {
+    const place = topPlace(placesIn(view));
+
+    held.current = place === undefined ? undefined : { place, shown };
+  };
 }
 
 // Scrolls the element with the id `container` up, if it has to, to show the top of the element with

@@ -11,11 +11,12 @@ import type { Controls } from "./actions";
 import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
 import { FileBar } from "./file-diff";
+import type { Layout } from "./file-diff";
 import { diffOf, listedFiles, measured, tallest } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
 import { fileId, rangeIn } from "./selection";
-import { scrollUpTo, stopScrollAnchoring, useSelectedLines } from "./web";
+import { scrollUpTo, stopScrollAnchoring, useHeldPlace, useSelectedLines } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -60,7 +61,7 @@ function GroupFileDiff({ read, expanded, theme, ...shown }: GroupFileDiffProps):
   return <DiffBody diff={read} scrolls={false} theme={theme} {...shown} />;
 }
 
-interface GroupFilesProps {
+interface GroupFilesProps extends Layout {
   read: GroupRead;
   // The query of a file's diff with its lines, though it would be collapsed.
   expanded: (file: OpenFile) => DiffQuery;
@@ -76,6 +77,8 @@ function GroupFiles({
   expanded,
   group,
   filter,
+  sideBySide,
+  onToggleSideBySide,
   controls,
   theme,
 }: GroupFilesProps): ReactElement {
@@ -83,6 +86,7 @@ function GroupFiles({
   const selection = useSelectedLines(view);
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  const hold = useHeldPlace(view, String(sideBySide));
 
   const styles = useMemo(
     () => StyleSheet.create({ hint: { padding: 16, color: theme.colors.foregroundMuted } }),
@@ -120,6 +124,11 @@ function GroupFiles({
               onRun={() => {
                 scrollUpTo(view, fileId(view, index), barHeight);
               }}
+              sideBySide={sideBySide}
+              onToggleSideBySide={() => {
+                hold();
+                onToggleSideBySide();
+              }}
               controls={controls}
               theme={theme}
             />,
@@ -132,8 +141,9 @@ function GroupFiles({
                 view={view}
                 fileIndex={index}
                 selection={rangeIn(selection, index)}
-                onHunkRun={(line, hunkBarHeight) => {
-                  scrollUpTo(view, line, barHeight + hunkBarHeight);
+                sideBySide={sideBySide}
+                onHunkRun={(top, hunkBarHeight) => {
+                  scrollUpTo(view, top, barHeight + hunkBarHeight);
                 }}
                 controls={controls}
                 onExpand={() => {
