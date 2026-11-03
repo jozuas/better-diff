@@ -49,6 +49,7 @@ Replicates Sublime Merge as much as possible:
 ### File sidebar (left)
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
+- Group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row and on one under the pointer or with focus in it.
 - A triangle left of each group's heading collapses the group, hiding its files, and expands it again: it points right while the group is collapsed and down while it's expanded. Groups start expanded.
 - Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.
 - Each file's row starts with the icon Paseo's Changes tab shows the file with in its tree: Material Icon Theme's icon for its extension, in colours as muted as Paseo's, and a plain file icon for an extension Paseo has none for.
@@ -77,7 +78,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 
 - A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A sidebar button's icon brightens too.
 - A button that asks for confirmation shows the danger colour while the pointer is over it.
-- A group's triangle and heading brighten while the pointer is over them.
+- A group's triangle brightens while the pointer is over it.
 - The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
 
 ### Font sizes

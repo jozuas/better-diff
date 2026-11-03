@@ -107,7 +107,7 @@ test("a button that asks for confirmation shows the danger colour while the poin
   );
 });
 
-test("a group's triangle and heading brighten while the pointer is over them", async ({
+test("a group's triangle brightens while the pointer is over it", async ({
   app,
   page,
   repository,
@@ -116,23 +116,16 @@ test("a group's triangle and heading brighten while the pointer is over them", a
 
   await app.openPanel();
   const triangle = button(page, "MODIFIED FILES");
-  const heading = button(page, "MODIFIED FILES (2)");
   const triangleLooks = looksOf(triangle);
-  const headingLooks = looksOf(heading);
 
-  // The pointer over either shows the heading's actions, so each is compared with how it looks while
-  // the pointer is over the other.
-  await heading.hover();
+  // The pointer over the triangle shows the heading's actions, so it's compared with how it looks
+  // while the pointer is over the heading.
+  await button(page, "MODIFIED FILES (2)").hover();
   await expect(button(page, "Stage All")).toHaveCSS("opacity", "1");
-  const triangleRevealed = await triangleLooks();
+  const revealed = await triangleLooks();
 
   await triangle.hover();
-  await expect.poll(triangleLooks).not.toBe(triangleRevealed);
-
-  const headingRevealed = await headingLooks();
-
-  await heading.hover();
-  await expect.poll(headingLooks).not.toBe(headingRevealed);
+  await expect.poll(triangleLooks).not.toBe(revealed);
 });
 
 test("the separator shows its line in the accent colour while the pointer is over it", async ({

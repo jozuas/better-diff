@@ -55,11 +55,12 @@ function useStyles(theme: PluginTheme) {
           fontSize: fonts.label,
           fontWeight: "600",
           letterSpacing: 0.5,
-          color: theme.colors.foregroundMuted,
+          color: theme.colors.foreground,
         },
-        hoveredHeading: { color: theme.colors.foreground },
         row: { paddingLeft: 16, paddingRight: 12, paddingVertical: 3 },
         path: { fontSize: fonts.text, color: theme.colors.foreground },
+        // As Paseo's Changes tab dims a file's name while it isn't hovered or selected.
+        dimmedPath: { opacity: 0.76 },
         plain: {},
         revealed: { backgroundColor: theme.colors.surface1 },
         open: { backgroundColor: theme.colors.surface2 },
@@ -135,7 +136,7 @@ function FileRow({
         onPress={onPress}
         {...reveal}
       >
-        <FileLabel path={file.path} style={styles.path} />
+        <FileLabel path={file.path} style={[styles.path, look === "plain" && styles.dimmedPath]} />
       </Pressable>
       <SidebarButtons
         actions={fileActions[file.group]}
@@ -199,7 +200,7 @@ function GroupHeading({
             />
           )}
         </Hoverable>
-        <Hoverable
+        <Pressable
           accessibilityRole="button"
           accessibilityLabel={heading}
           accessibilityState={{ selected: open }}
@@ -207,15 +208,10 @@ function GroupHeading({
           onPress={onOpen}
           {...reveal}
         >
-          {({ hovered }) => (
-            <Text
-              accessibilityRole="header"
-              style={[styles.heading, hovered && styles.hoveredHeading]}
-            >
-              {heading}
-            </Text>
-          )}
-        </Hoverable>
+          <Text accessibilityRole="header" style={styles.heading}>
+            {heading}
+          </Text>
+        </Pressable>
       </Pressable>
       {files === undefined ? null : (
         <SidebarButtons

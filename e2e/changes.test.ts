@@ -1,10 +1,10 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { z } from "zod";
 
 import { commitTenLines, move, tenLines } from "../test/renames";
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, group, line, openFile } from "./panel";
+import { box, button, group, line, openFile, row } from "./panel";
 
 test("changed files are grouped as modified, untracked and staged files, with how many each has", async ({
   app,
@@ -28,6 +28,71 @@ test("changed files are grouped as modified, untracked and staged files, with ho
     "untracked.txt",
   ]);
   await expect(group(page, "STAGED FILES (1)")).toHaveText(["staged.txt"]);
+});
+
+interface Shade {
+  color: string;
+  opacity: string;
+}
+
+// An element on the page, which the tests typecheck without the DOM library to describe.
+interface Styled {
+  ownerDocument: { defaultView: { getComputedStyle: (element: Styled) => Shade } };
+}
+
+// The element's colour and opacity, as the page's computed styles give them. Runs in the page.
+function shadeOf(element: Styled): Shade {
+  const { color, opacity } = element.ownerDocument.defaultView.getComputedStyle(element);
+
+  return { color, opacity };
+}
+
+test("group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row and on one under the pointer or with focus in it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  // Paseo's Changes tab shows nothing on a branch without commits.
+  writeFile(repository, "a.txt", "a\n");
+  commitAll(repository);
+  writeFile(repository, "b.txt", "b\n");
+  writeFile(repository, "c.txt", "c\n");
+  writeFile(repository, "d.txt", "d\n");
+
+  await app.openPanel();
+  await button(page, "Open Explorer sidebar").click();
+  await button(page, "Working tree diff").click();
+
+  const heading = page.getByRole("heading", { name: "UNTRACKED FILES (3)" });
+
+  const paseos = await page
+    .getByTestId(/^diff-tree-file-\d+-header-content$/u)
+    .getByText("b.txt", { exact: true })
+    .evaluate(shadeOf);
+
+  function path(name: string): Locator {
+    return row(page, "UNTRACKED FILES (3)", name).getByText(name, { exact: true });
+  }
+
+  expect(paseos.opacity).not.toBe("1");
+  await expect(heading).toHaveCSS("color", paseos.color);
+  await expect(heading).toHaveCSS("opacity", "1");
+  await expect(path("b.txt")).toHaveCSS("color", paseos.color);
+  await expect(path("b.txt")).toHaveCSS("opacity", paseos.opacity);
+
+  await row(page, "UNTRACKED FILES (3)", "b.txt").hover();
+  await expect(path("b.txt")).toHaveCSS("opacity", "1");
+
+  await openFile(page, "UNTRACKED FILES (3)", "c.txt");
+  await row(page, "UNTRACKED FILES (3)", "d.txt")
+    .getByRole("button", { name: "d.txt", exact: true })
+    .focus();
+  await page.mouse.move(0, 0);
+
+  await expect(path("b.txt")).toHaveCSS("opacity", paseos.opacity);
+  await expect(path("c.txt")).toHaveCSS("opacity", "1");
+  await expect(path("d.txt")).toHaveCSS("opacity", "1");
+  await expect(path("c.txt")).toHaveCSS("color", paseos.color);
 });
 
 test("a file's diff is under a bar with its status and full path", async ({
