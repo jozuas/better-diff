@@ -11,6 +11,8 @@ test("at Paseo's default font sizes, the panel's text is Paseo's sizes, and its 
     text: 14,
     small: 12,
     label: 11,
+    fileIcon: 16,
+    fileIconGap: 8,
     code: 12,
     codeLine: 18,
     number: 44,
@@ -23,6 +25,17 @@ test.each([
   [21, { text: 21, small: 18, label: 17 }],
 ])(
   "at a panel font size of %i, the smaller text scales with it, as Paseo's does",
+  (size, sizes) => {
+    expect(fontSizes({ panelFontSize: size, diffFontSize: 12 })).toMatchObject(sizes);
+  },
+);
+
+test.each([
+  [10, { fileIcon: 11, fileIconGap: 6 }],
+  [18, { fileIcon: 21, fileIconGap: 10 }],
+  [21, { fileIcon: 24, fileIconGap: 12 }],
+])(
+  "at a panel font size of %i, a file's icon, and its distance from its path, scale with it",
   (size, sizes) => {
     expect(fontSizes({ panelFontSize: size, diffFontSize: 12 })).toMatchObject(sizes);
   },
@@ -47,13 +60,19 @@ test("the panel font size sizes only the panel's text, and the diff font size on
       diffFontSize,
       diffFontSize,
       (panel, otherPanel, diff, otherDiff) => {
-        const { text, small, label } = fontSizes({ panelFontSize: panel, diffFontSize: diff });
+        const { text, small, label, fileIcon, fileIconGap } = fontSizes({
+          panelFontSize: panel,
+          diffFontSize: diff,
+        });
+
         const { codeLine, number } = fontSizes({ panelFontSize: otherPanel, diffFontSize: diff });
 
         expect(fontSizes({ panelFontSize: panel, diffFontSize: otherDiff })).toMatchObject({
           text,
           small,
           label,
+          fileIcon,
+          fileIconGap,
         });
         expect(fontSizes({ panelFontSize: panel, diffFontSize: diff })).toMatchObject({
           code: diff,
@@ -76,6 +95,18 @@ test("a larger panel font size makes no text smaller, and the labels are no larg
       expect(larger.label).toBeGreaterThanOrEqual(sizes.label);
       expect(sizes.label).toBeLessThanOrEqual(sizes.small);
       expect(sizes.small).toBeLessThan(sizes.text);
+    }),
+  );
+});
+
+test("a larger panel font size makes no file's icon, or its distance from its path, smaller", () => {
+  fc.assert(
+    fc.property(panelFontSize, fc.integer({ min: 0, max: 11 }), (panel, more) => {
+      const sizes = fontSizes({ panelFontSize: panel, diffFontSize: 12 });
+      const larger = fontSizes({ panelFontSize: Math.min(panel + more, 21), diffFontSize: 12 });
+
+      expect(larger.fileIcon).toBeGreaterThanOrEqual(sizes.fileIcon);
+      expect(larger.fileIconGap).toBeGreaterThanOrEqual(sizes.fileIconGap);
     }),
   );
 });

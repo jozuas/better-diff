@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { writeFile } from "../test/repository";
 import { changesSettings, expect, test as base } from "./fixtures";
-import { button, line, openFile } from "./panel";
+import { box, button, line, openFile } from "./panel";
 
 type Setting = "Diff font size" | "Panel font size";
 
@@ -86,7 +86,7 @@ test("the diff font size sets the size of the diff's lines and their numbers, ea
   await expect(path(page, "a.txt")).toHaveCSS("font-size", "14px");
 });
 
-test("the panel font size sets the size of the rest of the panel, its smaller text scaled with it", async ({
+test("the panel font size sets the size of the rest of the panel, its smaller text and the files' icons scaled with it", async ({
   app,
   page,
   repository,
@@ -105,6 +105,13 @@ test("the panel font size sets the size of the rest of the panel, its smaller te
     "font-size",
     "14px",
   );
+  await expect
+    .poll(async () => {
+      const icon = await box(button(page, "a.txt").locator("svg[xml]"));
+
+      return icon;
+    })
+    .toMatchObject({ width: 21, height: 21 });
   await expect(line(page, "alpha")).toHaveCSS("font-size", "12px");
 });
 
