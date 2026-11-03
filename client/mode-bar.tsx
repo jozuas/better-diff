@@ -25,7 +25,8 @@ function useStyles(theme: PluginTheme) {
           gap: 8,
           marginBottom: 8,
           paddingHorizontal: 12,
-          paddingVertical: 3,
+          // With its borders, as tall as a file's bar.
+          paddingVertical: 5,
           borderTopWidth: 1,
           borderBottomWidth: 1,
           borderColor: theme.colors.border,

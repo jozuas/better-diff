@@ -4,7 +4,7 @@ import { z } from "zod";
 import { commitTenLines, move, tenLines } from "../test/renames";
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { group, line, openFile } from "./panel";
+import { box, group, line, openFile } from "./panel";
 
 test("changed files are grouped as modified, untracked and staged files, with how many each has", async ({
   app,
@@ -42,6 +42,22 @@ test("a file's diff is under a bar with its status and full path", async ({
 
   await expect(page.getByRole("heading", { name: "UNTRACKED dir/sub/new file.txt" })).toBeVisible();
   await expect(line(page, "new line")).toBeVisible();
+});
+
+test("each hunk's bar is as tall as the file's", async ({ app, page, repository }) => {
+  writeFile(repository, "a.txt", "alpha\nbeta\ngamma\ndelta\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "alpha\nbeta\ngamma\nepsilon\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await expect(line(page, "alpha").first()).toBeVisible();
+
+  const fileBar = await box(page.getByRole("heading", { name: "MODIFIED a.txt" }));
+  const firstLine = await box(line(page, "alpha").first());
+
+  // The hunk's bar is all that's between the file's bar and the hunk's first line.
+  expect(firstLine.y - (fileBar.y + fileBar.height)).toBe(fileBar.height);
 });
 
 // How wide a line's text is, rather than the line, which fills the diff's width.
