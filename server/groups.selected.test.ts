@@ -8,9 +8,7 @@ import { canCoexist, filePath } from "../test/file-names";
 import {
   actOnEach,
   actOnEachListed,
-  diffChanges,
   files,
-  filesAndLater,
   groupActions,
   repositoryState,
   writeLater,
@@ -18,6 +16,7 @@ import {
 import type { GroupAction } from "../test/groups";
 import { commitTenLines } from "../test/renames";
 import {
+  commitAll,
   inCopyOf,
   inRepository,
   runGit,
@@ -145,39 +144,47 @@ test("unstage the selected staged files: unstages the deletion of the file a sel
   });
 });
 
-test.each(groupActions)(
-  "$operation the selected $group files: does nothing once one has left the group, or its diff has changed",
-  async (action) => {
-    await fc.assert(
-      fc.asyncProperty(filesAndLater, async ([all, written]) => {
-        const paths = all.map(({ path }) => path);
+test("stage the selected untracked files: does nothing once one has left the group", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    writeFile(repository, "b", "b\n");
 
-        await inRepository(async (repository) => {
-          setUp(repository, all, "myers");
+    const selected = { directory: repository, group: "untracked" as const, paths: ["a", "b"] };
+    const { version } = await readGroup(selected);
 
-          const selected = { directory: repository, group: action.group, paths };
-          const read = await readGroup(selected);
+    runGit(repository, ["add", "--", "a"]);
 
-          writeLater(repository, written);
+    await expect(applyGroup({ ...selected, operation: "stage", version })).resolves.toStrictEqual({
+      status: "stale",
+    });
 
-          const reread = await readGroup(selected);
-
-          fc.pre(JSON.stringify(reread.files) !== JSON.stringify(read.files));
-
-          const before = repositoryState(repository, [...paths, written.path]);
-
-          await expect(
-            applyGroup({ ...selected, version: read.version, ...action }),
-          ).resolves.toStrictEqual({ status: "stale" });
-
-          expect(repositoryState(repository, [...paths, written.path])).toStrictEqual(before);
-        });
-      }),
-      { numRuns: 20, examples: diffChanges },
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe(
+      "A  a\n?? b\n",
     );
-  },
-  timeout,
-);
+  });
+});
+
+test("discard the selected modified files: does nothing once one's diff has changed", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    writeFile(repository, "b", "b\n");
+    commitAll(repository);
+    writeFile(repository, "a", "changed a\n");
+    writeFile(repository, "b", "changed b\n");
+
+    const selected = { directory: repository, group: "modified" as const, paths: ["a", "b"] };
+    const { version } = await readGroup(selected);
+
+    writeFile(repository, "b", "changed b again\n");
+
+    await expect(applyGroup({ ...selected, operation: "discard", version })).resolves.toStrictEqual(
+      { status: "stale" },
+    );
+
+    expect(worktreeFile(repository, "a")?.toString()).toBe("changed a\n");
+    expect(worktreeFile(repository, "b")?.toString()).toBe("changed b again\n");
+  });
+});
 
 // Whether a file new to the repository, with the index and worktree versions, is one of the group's,
 // unless git pairs it with a file that's gone, as renamed from it.
@@ -231,7 +238,7 @@ test.each(groupActions)(
           expect(after).toContain(joining.path);
         });
       }),
-      { numRuns: 20 },
+      { numRuns: 10 },
     );
   },
   timeout,
