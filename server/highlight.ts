@@ -42,6 +42,18 @@ async function finish(steps: Steps): Promise<HighlightToken[][]> {
   return lines;
 }
 
+// The lines of the code highlighted, or none where Paseo's highlighter fails on it, as its Nix
+// grammar fails on code that ends in a backslash.
+async function tokensOf(code: string, path: string): Promise<HighlightToken[][]> {
+  try {
+    const tokens = await finish(highlightCodeInSteps(code, path));
+
+    return tokens;
+  } catch {
+    return [];
+  }
+}
+
 // The runs of each of the lines of a version of the file at the path, in the language its extension
 // names.
 async function highlightLines(lines: readonly string[], path: string): Promise<Runs[]> {
@@ -51,7 +63,7 @@ async function highlightLines(lines: readonly string[], path: string): Promise<R
     return [];
   }
 
-  const tokens = await finish(highlightCodeInSteps(code, path));
+  const tokens = await tokensOf(code, path);
 
   return tokens.map(runsOf);
 }

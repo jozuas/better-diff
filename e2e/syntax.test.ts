@@ -44,3 +44,16 @@ for (const { scheme, name } of themes) {
     });
   });
 }
+
+test("a file Paseo's highlighter fails on, as its Nix grammar fails on one ending in a backslash, shows its diff without highlighting", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.nix", "const{\\\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.nix");
+
+  await expect(line(page, "const{\\")).toBeVisible();
+});

@@ -1,3 +1,4 @@
+import { highlightCode } from "@getpaseo/highlight";
 import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
@@ -59,6 +60,18 @@ const knownPath = fc
   .tuple(filePath, fc.constantFrom("ts", "tsx", "py", "md", "json", "html", "rs", "nix", "swift"))
   .map(([path, extension]) => `${path}.${extension}`);
 
+// Whether Paseo's highlighter highlights the lines of a version of the file at the path, rather than
+// failing on them.
+function highlightable(version: readonly string[], path: string): boolean {
+  try {
+    highlightCode(version.join("\n"), path);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function sum(numbers: readonly number[]): number {
   let total = 0;
 
@@ -69,9 +82,11 @@ function sum(numbers: readonly number[]): number {
   return total;
 }
 
-test("each line's runs, each a character or more, make up the line", async () => {
+test("each line's runs, each a character or more, make up the line, where Paseo's highlighter highlights it", async () => {
   await fc.assert(
     fc.asyncProperty(lines, knownPath, async (code, path) => {
+      fc.pre(highlightable(code, path));
+
       const highlights = await highlightLines(code, path);
 
       expect(highlights.map((runs) => sum(runs.map(([length]) => length)))).toStrictEqual(
@@ -110,6 +125,24 @@ test.each(["a.txt", "Makefile", "a.ts.orig"])(
     await expect(highlightLines(["const a = 1;"], path)).resolves.toStrictEqual([]);
   },
 );
+
+test("leaves a version Paseo's highlighter fails on, as its Nix grammar fails on a file ending in a backslash, without highlights, and still highlights the other", async () => {
+  const { highlights } = await highlighted(
+    {
+      version: "",
+      kind: "text",
+      added: 1,
+      removed: 1,
+      hunks: [],
+      contents: { old: ["const{\\"], new: ["const a = 1;"] },
+      renamedFrom: "a.nix",
+    },
+    "a.ts",
+  );
+
+  expect(highlights.old).toStrictEqual([]);
+  expect(highlights.new[0]?.[0]).toStrictEqual([5, "keyword"]);
+});
 
 test("gives a version without lines, as of a file it doesn't have, no highlights", async () => {
   await expect(highlightLines([], "a.ts")).resolves.toStrictEqual([]);
