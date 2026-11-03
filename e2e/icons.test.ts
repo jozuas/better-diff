@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { commitAll, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, row } from "./panel";
+import { box, button, dragBy, row } from "./panel";
 
 // A file with an extension Paseo has an icon for, one in another case, a file with none, and one in
 // a directory.
@@ -47,4 +47,27 @@ test("each file's row starts with the icon Paseo's Changes tab shows the file wi
       await expectPaseosIcon(page, path);
     }),
   );
+});
+
+test("a file's icon keeps its size however narrow the file list is", async ({
+  app,
+  page,
+  repository,
+}) => {
+  const path = "some/rather/deeply/nested/directory/with-a-long-file-name.txt";
+
+  writeFile(repository, path, "a\n");
+
+  await app.openPanel();
+
+  const icon = row(page, "UNTRACKED FILES (1)", path).locator("svg[xml]");
+  const separator = page.getByRole("slider", { name: "File list width" });
+
+  await dragBy(page, separator, 200);
+  await expect(separator).toHaveAttribute("aria-valuenow", "480");
+  expect(await box(icon)).toMatchObject({ width: 16, height: 16 });
+
+  await dragBy(page, separator, -300);
+  await expect(separator).toHaveAttribute("aria-valuenow", "180");
+  expect(await box(icon)).toMatchObject({ width: 16, height: 16 });
 });

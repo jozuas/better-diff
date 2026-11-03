@@ -12,6 +12,8 @@ const iconGap = 8;
 
 const styles = StyleSheet.create({
   label: { flexDirection: "row", alignItems: "center", gap: iconGap },
+  // The SVG would shrink with the path, where it's cut short. A View doesn't.
+  icon: { width: iconSize, height: iconSize },
   path: { flexShrink: 1 },
 });
 
@@ -26,7 +28,9 @@ export function FileLabel({ path, style }: FileLabelProps): ReactElement {
 
   return (
     <View style={styles.label}>
-      <Icon icon={icon} size={iconSize} />
+      <View style={styles.icon}>
+        <Icon icon={icon} size={iconSize} />
+      </View>
       <Text numberOfLines={1} style={[styles.path, style]}>
         {path}
       </Text>
