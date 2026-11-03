@@ -2,7 +2,8 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import type { Target } from "./apply";
-import type { GroupName } from "./groups";
+import { isOpen, isShown } from "./groups";
+import type { GroupName, Open, OpenFile } from "./groups";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
 
@@ -77,6 +78,50 @@ export const groupActions: Record<GroupName, SidebarAction[]> = {
   ],
   staged: [{ operation: "unstage", label: "Unstage All", icon: "Minus" }],
 };
+
+// On the rows of the files selected in a group, acting on all of them.
+const selectionActions: Record<GroupName, SidebarAction[]> = {
+  modified: [
+    { ...discardFile, label: "Discard Selected" },
+    { ...stageFile, label: "Stage Selected" },
+  ],
+  untracked: [
+    { ...deleteFile, label: "Delete Selected" },
+    { ...stageFile, label: "Stage Selected" },
+  ],
+  staged: [{ operation: "unstage", label: "Unstage Selected", icon: "Minus" }],
+};
+
+// A file's row's actions, and what they act on: all the files selected, if it's one of them, or
+// else the file, as shown if its diff is.
+export interface RowActions {
+  actions: SidebarAction[];
+  target: Target;
+  // Tells the row's buttons apart from other rows', and from its own while other files are
+  // selected, so one armed then is no longer.
+  row: string;
+  // The file they act on, which their names say, unless they act on the files selected.
+  path?: string;
+}
+
+export function rowActions(open: Open | undefined, file: OpenFile): RowActions {
+  const { group, path } = file;
+
+  if (open !== undefined && "paths" in open && isOpen(open, group, path)) {
+    return {
+      actions: selectionActions[group],
+      target: { group, paths: open.paths, selected: true },
+      row: `selected:${group}:${JSON.stringify(open.paths)}:${path}`,
+    };
+  }
+
+  return {
+    actions: fileActions[group],
+    target: { file, shown: isShown(open, group, path) },
+    row: `file:${group}:${path}`,
+    path,
+  };
+}
 
 export const hunkActions: Record<GroupName, Action[]> = {
   modified: [discardHunk, { operation: "stage", label: "Stage Hunk" }],

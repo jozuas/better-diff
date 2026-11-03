@@ -3,6 +3,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
+import { changes, groupName, modified } from "../test/changes";
 import { filePath } from "../test/file-names";
 import {
   diffIn,
@@ -18,7 +19,7 @@ import {
   sidebarGroups,
   toggled,
 } from "./groups";
-import type { GroupName, OpenFile, OpenGroup } from "./groups";
+import type { GroupName, Open, OpenFile } from "./groups";
 
 test("heads each group with its title and number of files: modified, then untracked, then staged, and acts on all the files of each that has some", () => {
   expect(sidebarGroups({ modified: ["a", "b/c"], untracked: ["d"], staged: [] })).toStrictEqual([
@@ -133,7 +134,7 @@ test("a file is open only in the group it was opened from, under its own path", 
 });
 
 test("a group is open only once its heading opens it, not one of its files", () => {
-  const open: OpenGroup = { group: "staged" };
+  const open: Open = { group: "staged" };
 
   expect(isGroupOpen(open, "staged")).toBe(true);
   expect(isGroupOpen(open, "modified")).toBe(false);
@@ -149,10 +150,6 @@ test("shows the diff of each file of the open group, and of the open file alone"
   expect(isShown({ group: "staged", path: "a" }, "staged", "b")).toBe(false);
   expect(isShown(undefined, "staged", "a")).toBe(false);
 });
-
-function modified(...paths: string[]) {
-  return { modified: paths, untracked: [], staged: [] };
-}
 
 test("stays on a file its group still lists after an action, as after staging one of its hunks", () => {
   const open: OpenFile = { group: "modified", path: "b" };
@@ -209,14 +206,6 @@ test("stays on the open file without the list of changes from before or after th
   expect(openAfter(open, undefined, modified("b"))).toBe(open);
 });
 
-const changes = fc.record({
-  modified: fc.uniqueArray(filePath),
-  untracked: fc.uniqueArray(filePath),
-  staged: fc.uniqueArray(filePath),
-});
-
-const groupName = fc.constantFrom<GroupName>("modified", "untracked", "staged");
-
 test("opens the first file of the first group the sidebar lists one in", () => {
   fc.assert(
     fc.property(changes, groupName, filePath, (listed, group, path) => {
@@ -261,7 +250,7 @@ test("stays on the open group whatever the changes listed before and after an ac
       fc.option(changes, { nil: undefined }),
       fc.option(changes, { nil: undefined }),
       (group, before, after) => {
-        const open: OpenGroup = { group };
+        const open: Open = { group };
 
         expect(openAfter(open, before, after)).toBe(open);
       },

@@ -86,10 +86,20 @@ export interface OpenFile {
 }
 
 // A group as opened from its heading, which shows the diffs of all the files it lists.
-export interface OpenGroup {
+interface OpenGroup {
   group: GroupName;
   path?: undefined;
 }
+
+// Files selected in a group, as shift-clicking one of them selects them, which show their diffs as
+// a group's files do: two or more, from the one the selection starts at to the one it reaches.
+export interface OpenFiles {
+  group: GroupName;
+  paths: readonly string[];
+  path?: undefined;
+}
+
+export type Open = OpenFile | OpenGroup | OpenFiles;
 
 // The file the sidebar lists first, which opens once the changes are first listed, if any are.
 export function firstFile(changes: Changes): OpenFile | undefined {
@@ -98,25 +108,98 @@ export function firstFile(changes: Changes): OpenFile | undefined {
   return first;
 }
 
-export function isOpen(
-  open: OpenFile | OpenGroup | undefined,
-  group: GroupName,
-  path: string,
-): boolean {
-  return open?.group === group && open.path === path;
+// The open file's path, or those of the files selected. None while a group is open.
+function openPaths(open: Open): readonly string[] {
+  if ("paths" in open) {
+    return open.paths;
+  }
+
+  return open.path === undefined ? [] : [open.path];
 }
 
-export function isGroupOpen(open: OpenFile | OpenGroup | undefined, group: GroupName): boolean {
-  return open?.group === group && open.path === undefined;
+// Whether the file the group lists is open, or one of the files selected.
+export function isOpen(open: Open | undefined, group: GroupName, path: string): boolean {
+  return open?.group === group && openPaths(open).includes(path);
 }
 
-// Whether the diff of the file the group lists is shown: the file is open, or the group is.
-export function isShown(
-  open: OpenFile | OpenGroup | undefined,
-  group: GroupName,
-  path: string,
-): boolean {
+export function isGroupOpen(open: Open | undefined, group: GroupName): boolean {
+  return open?.group === group && openPaths(open).length === 0;
+}
+
+// Whether the diff of the file the group lists is shown: the file is open, or selected, or the group
+// is open.
+export function isShown(open: Open | undefined, group: GroupName, path: string): boolean {
   return isOpen(open, group, path) || isGroupOpen(open, group);
+}
+
+// The file the open file or the files selected reach, which Shift+↑/↓ moves on from.
+export function reachedFile(open: OpenFile | OpenFiles): string | undefined {
+  return openPaths(open).at(-1);
+}
+
+// The files from one to another in the group's list, both included: just the file, if they're the
+// same one.
+function between(
+  group: GroupName,
+  listed: readonly string[],
+  from: string,
+  to: string,
+): OpenFile | OpenFiles {
+  if (from === to) {
+    return { group, path: to };
+  }
+
+  const start = listed.indexOf(from);
+  const end = listed.indexOf(to);
+  // None if the files go up the list.
+  const down = listed.slice(start, end + 1);
+
+  return { group, paths: down.length > 0 ? down : listed.slice(end, start + 1).toReversed() };
+}
+
+// The file a selection in the group starts at and the one it reaches, from what's open: the open
+// file, or the first and last of the files selected, while the group lists them.
+function endsIn(
+  open: Open | undefined,
+  group: GroupName,
+  listed: readonly string[],
+): [string, string] | undefined {
+  if (open?.group !== group) {
+    return undefined;
+  }
+
+  const paths = openPaths(open);
+  const start = listed.find((path) => path === paths[0]);
+  const end = listed.find((path) => path === paths.at(-1));
+
+  return start === undefined || end === undefined ? undefined : [start, end];
+}
+
+// What's open once the file, of those its group lists, is shift-clicked: the files from the open
+// one, or from the one the selection starts at, to it. Just the file if neither is in its group.
+export function selectedTo(
+  open: Open | undefined,
+  file: OpenFile,
+  listed: readonly string[],
+): OpenFile | OpenFiles {
+  const [start] = endsIn(open, file.group, listed) ?? [file.path];
+
+  return between(file.group, listed, start, file.path);
+}
+
+// What's open once Shift+↓ (1) or Shift+↑ (-1) is pressed with focus in the file's row, of those its
+// group lists: the files from the open one, or from the one the selection starts at, to the file
+// after or before the one it reaches, or else from the file with focus. Past either end of the list,
+// what was.
+export function selectedBy(
+  open: Open | undefined,
+  file: OpenFile,
+  listed: readonly string[],
+  step: 1 | -1,
+): OpenFile | OpenFiles {
+  const [start, end] = endsIn(open, file.group, listed) ?? [file.path, file.path];
+
+  return between(file.group, listed, start, listed[listed.indexOf(end) + step] ?? end);
 }
 
 // The files of the group's read that the sidebar lists under the filter, each with its diff or why
@@ -138,34 +221,43 @@ export function diffIn(read: GroupRead | undefined, path: string): Diff | undefi
 }
 
 // What to show once the changes are listed again, as after an action, from the lists before and
-// after: the open group, or the open file while its group still lists it. Otherwise the next file
-// in the group's list before that it still lists, or else the closest one before it, or else the
-// first one it lists now. None if it lists none, or nothing was open, and what was open without
-// both lists.
+// after: the open group, or the open file or those of the files selected that its group still
+// lists. Otherwise the next file in the group's list before that it still lists, after the last of
+// them, or else the closest one before it, or else the first one it lists now. None if it lists
+// none, or nothing was open, and what was open without both lists.
 export function openAfter(
-  open: OpenFile | OpenGroup | undefined,
+  open: Open | undefined,
   before: Changes | undefined,
   after?: Changes,
-): OpenFile | OpenGroup | undefined {
-  if (
-    open?.path === undefined ||
-    before === undefined ||
-    after === undefined ||
-    after[open.group].includes(open.path)
-  ) {
+): Open | undefined {
+  if (open === undefined || before === undefined || after === undefined) {
     return open;
   }
 
   const listed = after[open.group];
-  const previous = before[open.group];
+  const paths = openPaths(open);
+  const kept = paths.filter((path) => listed.includes(path));
 
-  // Searched after the files that follow the open one, which are gone by then, the reversed list
+  if (kept.length === paths.length) {
+    return open;
+  }
+
+  const [first, ...rest] = kept;
+
+  if (first !== undefined) {
+    return rest.length === 0
+      ? { group: open.group, path: first }
+      : { group: open.group, paths: kept };
+  }
+
+  const previous = before[open.group];
+  const last = Math.max(...paths.map((path) => previous.indexOf(path)));
+
+  // Searched after the files that follow the last one, which are gone by then, the reversed list
   // finds the closest one before it.
-  const path = [
-    ...previous.slice(previous.indexOf(open.path) + 1),
-    ...previous.toReversed(),
-    ...listed,
-  ].find((candidate) => listed.includes(candidate));
+  const path = [...previous.slice(last + 1), ...previous.toReversed(), ...listed].find(
+    (candidate) => listed.includes(candidate),
+  );
 
   return path === undefined ? undefined : { group: open.group, path };
 }

@@ -31,7 +31,7 @@ import { FileList } from "./file-list";
 import { fontSizes, FontSizesContext } from "./fonts";
 import type { FontSizes } from "./fonts";
 import { diffIn, firstFile, groups, openAfter, placeholder, sidebarGroups } from "./groups";
-import type { GroupName, OpenFile, OpenGroup } from "./groups";
+import type { GroupName, Open, OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { defaultWidth, fileListWidth } from "./resize";
 import { Separator } from "./separator";
@@ -51,7 +51,8 @@ interface Request {
 }
 
 // The queries of a file's diff, as opened from its group, collapsed or not, whose keys start with
-// the file's, and of the diffs of all of a group's files.
+// the file's, and of the diffs of all of a group's files or of those of them at the paths, whose
+// keys start with the group's.
 function useDiffQueries(directory: string) {
   const readDiff = useRpc(diffRpc);
   const readGroup = useRpc(groupRpc);
@@ -67,11 +68,11 @@ function useDiffQueries(directory: string) {
   return {
     fileKey,
     groupKey,
-    groupQuery: (group: GroupName) =>
+    groupQuery: (group: GroupName, paths?: readonly string[]) =>
       queryOptions({
-        queryKey: groupKey(group),
+        queryKey: [...groupKey(group), ...(paths ?? [])],
         queryFn: async () => {
-          const read = await readGroup({ directory, group });
+          const read = await readGroup({ directory, group, paths });
 
           return read;
         },
@@ -233,7 +234,7 @@ interface ChangesProps {
 function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState<OpenFile | OpenGroup>();
+  const [open, setOpen] = useState<Open>();
   const [filter, setFilter] = useState("");
 
   const changesQuery = queryOptions({

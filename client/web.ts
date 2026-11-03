@@ -7,6 +7,8 @@ import { topPlace } from "./place";
 import type { Place } from "./place";
 import { markOf, sameRange, selectedRange } from "./selection";
 import type { LineRange } from "./selection";
+import { shiftStep } from "./shift";
+import type { Keys } from "./shift";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageNode {
@@ -19,10 +21,15 @@ interface PageMouseEvent {
   preventDefault: () => void;
 }
 
+interface PageKeyboardEvent extends Readonly<Keys> {
+  preventDefault: () => void;
+}
+
 // What an element's listeners hear, by the event they listen for.
 interface PageEvents {
   dblclick: PageMouseEvent;
   contextmenu: PageMouseEvent;
+  keydown: PageKeyboardEvent;
 }
 
 interface PageElement extends PageNode {
@@ -334,33 +341,48 @@ export function resizing(): () => void {
   };
 }
 
+// Calls the listener on each event of the type in the element with the id, until the returned
+// function is called.
+function listen<Type extends keyof PageEvents>(
+  id: string,
+  type: Type,
+  listener: (event: PageEvents[Type]) => void,
+): () => void {
+  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+  element?.addEventListener(type, listener);
+
+  return () => {
+    element?.removeEventListener(type, listener);
+  };
+}
+
 // Calls the listener on each double click on the element with the id, until the returned function is
 // called.
 export function onDoubleClick(id: string, listener: () => void): () => void {
-  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
-
-  element?.addEventListener("dblclick", listener);
-
-  return () => {
-    element?.removeEventListener("dblclick", listener);
-  };
+  return listen(id, "dblclick", listener);
 }
 
 // Calls the listener with where the pointer is on each right click on the element with the id, in
 // place of the page's own menu, until the returned function is called.
 export function onContextMenu(id: string, listener: (point: Point) => void): () => void {
-  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
-
-  function open(event: PageMouseEvent): void {
+  return listen(id, "contextmenu", (event) => {
     event.preventDefault();
     listener({ x: event.clientX, y: event.clientY });
-  }
+  });
+}
 
-  element?.addEventListener("contextmenu", open);
+// Calls the listener with how far each Shift+↓ or Shift+↑ in the element with the id moves the file
+// a selection reaches, in place of scrolling, until the returned function is called.
+export function onShiftArrow(id: string, listener: (step: 1 | -1) => void): () => void {
+  return listen(id, "keydown", (event) => {
+    const step = shiftStep(event);
 
-  return () => {
-    element?.removeEventListener("contextmenu", open);
-  };
+    if (step !== undefined) {
+      event.preventDefault();
+      listener(step);
+    }
+  });
 }
 
 // What ids of elements laid over the end of the row they're in start with.

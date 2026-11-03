@@ -3,47 +3,18 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { applyGroupRpc } from "../shared/diff";
-import { files, groupActions, addUnreadableFile, repositoryState } from "../test/groups";
+import {
+  actOnEachListed,
+  addUnreadableFile,
+  files,
+  groupActions,
+  repositoryState,
+} from "../test/groups";
 import type { GroupAction, RepositoryState } from "../test/groups";
 import { commitTenLines, move } from "../test/renames";
 import { inCopyOf, inRepository, runGit, timeout, writeFile } from "../test/repository";
-import { setUp, sides } from "../test/staging";
-import { listChanges } from "./changes";
-import { applyFile, readDiff } from "./diff";
+import { setUp } from "../test/staging";
 import { applyGroup, readGroup } from "./groups";
-
-// Acts on each path in turn, as its file bar would, reading its diff first.
-async function actOnEach(
-  repository: string,
-  paths: readonly string[],
-  operation: GroupAction["operation"],
-): Promise<void> {
-  const [path, ...rest] = paths;
-
-  if (path !== undefined) {
-    const { version } = await readDiff({ directory: repository, path, side: sides[operation] });
-
-    await applyFile({ directory: repository, path, operation, version });
-    await actOnEach(repository, rest, operation);
-  }
-}
-
-// Acts on each file the group lists in turn, then on each file that joined it meanwhile, until no
-// file it lists is left to act on: unstaging a renamed file leaves the deletion of the one it was
-// renamed from staged.
-async function actOnEachListed(
-  repository: string,
-  action: GroupAction,
-  done: readonly string[] = [],
-): Promise<void> {
-  const { [action.group]: listed } = await listChanges({ directory: repository });
-  const paths = listed.filter((path) => !done.includes(path));
-
-  if (paths.length > 0) {
-    await actOnEach(repository, paths, action.operation);
-    await actOnEachListed(repository, action, [...done, ...paths]);
-  }
-}
 
 interface Outcome {
   status: RpcOutput<typeof applyGroupRpc>;

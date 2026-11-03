@@ -50,7 +50,7 @@ Replicates Sublime Merge as much as possible:
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
 - Opening Better Diff opens the first file the sidebar lists, without a click: the first modified file, or else the first untracked one, or else the first staged one. With no changes it opens none, and a file changed after that waits for a click.
-- Group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row and on one under the pointer or with focus in it.
+- Group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row, the selected files' rows, and one under the pointer or with focus in it.
 - A triangle left of each group's heading collapses the group, hiding its files, and expands it again: it points right while the group is collapsed and down while it's expanded. Groups start expanded.
 - Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.
 - Each file's row starts with the icon Paseo's Changes tab shows the file with in its tree: Material Icon Theme's icon for its extension, in colours as muted as Paseo's, and a plain file icon for an extension Paseo has none for.
@@ -62,6 +62,14 @@ Replicates Sublime Merge as much as possible:
 
   They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
+- Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. Shift+↓ and Shift+↑, with focus in a file's row, select one more file or one fewer, and focus moves along with them. A selection stays within one group: shift-clicking a file in another group opens just that file.
+- The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows show their actions always, acting on all of them as a group's actions act on all its files:
+  - MODIFIED: Stage Selected, Discard Selected
+  - UNTRACKED: Stage Selected, Delete Selected
+  - STAGED: Unstage Selected
+
+  An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
+
 - "Filter files..." input to quickly find a file.
 - Right-clicking a file's row opens its menu, which closes with Escape or a click outside it:
   - Copy full path
@@ -71,7 +79,7 @@ Replicates Sublime Merge as much as possible:
 
 ### Confirmation
 
-These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
+These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard selected, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
 
 Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it.
 

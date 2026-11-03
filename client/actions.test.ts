@@ -10,8 +10,10 @@ import {
   hunkLines,
   lineActions,
   modeActions,
+  rowActions,
   sidebarButtonName,
 } from "./actions";
+import type { GroupName, OpenFiles } from "./groups";
 
 test("offers discarding and staging a modified file, deleting and staging an untracked one, and unstaging a staged one, asking before discarding or deleting", () => {
   expect(fileActions).toStrictEqual({
@@ -49,6 +51,82 @@ test("offers discarding and staging all modified files, deleting and staging all
     ],
     staged: [{ operation: "unstage", label: "Unstage All", icon: "Minus" }],
   });
+});
+
+// The actions on the row of a file selected in the group.
+function selectionActionsOf(group: GroupName): Action[] {
+  return rowActions({ group, paths: ["a", "b"] }, { group, path: "a" }).actions;
+}
+
+test("offers discarding and staging the modified files selected, deleting and staging the untracked ones, and unstaging the staged ones, asking before discarding or deleting", () => {
+  expect(selectionActionsOf("modified")).toStrictEqual([
+    {
+      operation: "discard",
+      label: "Discard Selected",
+      confirmation: "Confirm discard?",
+      icon: "Undo2",
+    },
+    { operation: "stage", label: "Stage Selected", icon: "Plus" },
+  ]);
+  expect(selectionActionsOf("untracked")).toStrictEqual([
+    {
+      operation: "discard",
+      label: "Delete Selected",
+      confirmation: "Confirm delete?",
+      icon: "Trash2",
+    },
+    { operation: "stage", label: "Stage Selected", icon: "Plus" },
+  ]);
+  expect(selectionActionsOf("staged")).toStrictEqual([
+    { operation: "unstage", label: "Unstage Selected", icon: "Minus" },
+  ]);
+});
+
+test("a file's row acts on its file, which its buttons name, as shown while it's open or its group is", () => {
+  const file = { group: "modified", path: "a" } as const;
+
+  expect(rowActions({ group: "modified", path: "b" }, file)).toStrictEqual({
+    actions: fileActions.modified,
+    target: { file, shown: false },
+    row: "file:modified:a",
+    path: "a",
+  });
+  expect(rowActions(file, file).target).toStrictEqual({ file, shown: true });
+  expect(rowActions({ group: "modified" }, file).target).toStrictEqual({ file, shown: true });
+  expect(rowActions(undefined, file).target).toStrictEqual({ file, shown: false });
+});
+
+test("a selected file's row acts on all the files selected, and its buttons name none", () => {
+  const open: OpenFiles = { group: "untracked", paths: ["b", "a"] };
+  const { actions, target, path } = rowActions(open, { group: "untracked", path: "a" });
+
+  expect(actions).toStrictEqual(selectionActionsOf("untracked"));
+  expect(target).toStrictEqual({ group: "untracked", paths: ["b", "a"], selected: true });
+  expect(path).toBeUndefined();
+});
+
+test("the row of a file not selected acts on its file while others are selected", () => {
+  const open: OpenFiles = { group: "untracked", paths: ["b", "a"] };
+
+  expect(rowActions(open, { group: "untracked", path: "c" }).target).toStrictEqual({
+    file: { group: "untracked", path: "c" },
+    shown: false,
+  });
+  expect(rowActions(open, { group: "staged", path: "a" }).actions).toBe(fileActions.staged);
+});
+
+test("tells each row's buttons apart, and a selected row's from its own while it isn't, or while other files are selected", () => {
+  const rows = [
+    rowActions(undefined, { group: "modified", path: "a" }),
+    rowActions(undefined, { group: "modified", path: "b" }),
+    rowActions(undefined, { group: "staged", path: "a" }),
+    rowActions({ group: "modified", paths: ["a", "b"] }, { group: "modified", path: "a" }),
+    rowActions({ group: "modified", paths: ["a", "b"] }, { group: "modified", path: "b" }),
+    rowActions({ group: "modified", paths: ["a", "b", "c"] }, { group: "modified", path: "a" }),
+    rowActions({ group: "staged", paths: ["a", "b"] }, { group: "staged", path: "a" }),
+  ].map(({ row }) => row);
+
+  expect(new Set(rows).size).toBe(rows.length);
 });
 
 test("offers discarding and staging a modified or untracked file's hunk, and unstaging a staged one's, asking before discarding", () => {

@@ -1,11 +1,13 @@
 import type { RpcInput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
+import { listChanges } from "../server/changes";
+import { applyFile, readDiff } from "../server/diff";
 import type { applyGroupRpc } from "../shared/diff";
 import { fileVersions } from "./file-contents";
 import { canCoexist, filePath } from "./file-names";
 import { makeUnreadable, runGit, worktreeFile, writeFile } from "./repository";
-import { file, writeVersion } from "./staging";
+import { file, sides, writeVersion } from "./staging";
 import type { File } from "./staging";
 
 // Each group, with an operation its files can have.
@@ -98,4 +100,37 @@ export function repositoryState(repository: string, paths: readonly string[]): R
     status: runGit(repository, ["status", "--porcelain=v2", "--untracked-files=all", "-z"]),
     worktree: paths.map((path) => worktreeFile(repository, path)),
   };
+}
+
+// Acts on each path in turn, as its file bar would, reading its diff first.
+export async function actOnEach(
+  repository: string,
+  paths: readonly string[],
+  operation: GroupAction["operation"],
+): Promise<void> {
+  const [path, ...rest] = paths;
+
+  if (path !== undefined) {
+    const { version } = await readDiff({ directory: repository, path, side: sides[operation] });
+
+    await applyFile({ directory: repository, path, operation, version });
+    await actOnEach(repository, rest, operation);
+  }
+}
+
+// Acts on each file the group lists in turn, then on each file that joined it meanwhile, until no
+// file it lists is left to act on: unstaging a renamed file leaves the deletion of the one it was
+// renamed from staged.
+export async function actOnEachListed(
+  repository: string,
+  action: GroupAction,
+  done: readonly string[] = [],
+): Promise<void> {
+  const { [action.group]: listed } = await listChanges({ directory: repository });
+  const paths = listed.filter((path) => !done.includes(path));
+
+  if (paths.length > 0) {
+    await actOnEach(repository, paths, action.operation);
+    await actOnEachListed(repository, action, [...done, ...paths]);
+  }
 }

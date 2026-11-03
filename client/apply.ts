@@ -31,10 +31,13 @@ interface ListedFile {
   shown: boolean;
 }
 
-// All of a group's files, as the sidebar lists them.
+// All of a group's files, as the sidebar lists them, or the files selected in it.
 interface ListedGroup {
   group: GroupName;
   paths: readonly string[];
+  // Whether they're the files selected, rather than all of the group's, so that a file joining the
+  // group leaves an action on them as it is.
+  selected?: true;
 }
 
 export type Target = ShownFile | ShownMode | ListedFile | ListedGroup;
@@ -53,22 +56,24 @@ export interface Server {
   applyGroup: (input: RpcInput<typeof applyGroupRpc>) => Promise<{ status: Status }>;
 }
 
-// Stale, and nothing changes, if a file has joined or left the group since it was listed: an
-// action on all of a group's files never reaches one the sidebar doesn't list.
+// Stale, and nothing changes, if a file has joined or left the group since it was listed, or a
+// file selected has left it: an action on all of a group's files never reaches one the sidebar
+// doesn't list, and one on the files selected reaches only them.
 async function applyToGroup(
   server: Server,
   directory: string,
   operation: Operation,
-  { group, paths }: ListedGroup,
+  { group, paths, selected }: ListedGroup,
 ): Promise<Status> {
-  const { version, files } = await server.readGroup({ directory, group });
+  const only = selected === undefined ? undefined : paths;
+  const { version, files } = await server.readGroup({ directory, group, paths: only });
 
-  if (files.length !== paths.length || files.some(({ path }, index) => path !== paths[index])) {
+  if (files.length !== paths.length || files.some(({ path }) => !paths.includes(path))) {
     return "stale";
   }
 
   const { status } = await server.applyGroup(
-    applyGroupRpc.input.parse({ directory, group, operation, version }),
+    applyGroupRpc.input.parse({ directory, group, operation, version, paths: only }),
   );
 
   return status;
@@ -141,7 +146,11 @@ export async function apply(
 
 // Why an action on the target was refused as stale.
 export function staleMessage(target: Target): string {
-  return "group" in target
+  if (!("group" in target)) {
+    return "The diff changed after it was shown, so nothing was done. It's been reloaded.";
+  }
+
+  return target.selected === undefined
     ? "The group's files changed after they were listed, so nothing was done. They've been reloaded."
-    : "The diff changed after it was shown, so nothing was done. It's been reloaded.";
+    : "The selected files changed after they were selected, so nothing was done. They've been reloaded.";
 }

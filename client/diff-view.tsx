@@ -13,7 +13,7 @@ import type { Layout } from "./diff-style";
 import { FileDiff } from "./file-diff";
 import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
-import type { GroupName, OpenFile, OpenGroup } from "./groups";
+import type { GroupName, Open, OpenFile } from "./groups";
 import { viewSettingsOf } from "./settings";
 
 type Diff = RpcOutput<typeof diffRpc>;
@@ -28,15 +28,18 @@ function useLayout(): Layout | undefined {
 }
 
 interface ShownDiffProps {
-  open: OpenFile | OpenGroup;
+  open: Open;
   layout: Layout;
   // The query of a file's diff, collapsed or not.
   fileQuery: (
     file: OpenFile,
     expand: boolean,
   ) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
-  // The query of the diffs of all of a group's files.
-  groupQuery: (group: GroupName) => UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
+  // The query of the diffs of all of a group's files, or of those of them at the paths.
+  groupQuery: (
+    group: GroupName,
+    paths?: readonly string[],
+  ) => UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
   // What the sidebar's files are filtered by.
   filter: string;
   controls: Controls;
@@ -53,6 +56,22 @@ function ShownDiff({
   theme,
 }: ShownDiffProps): ReactElement {
   const { group, path } = open;
+
+  if ("paths" in open) {
+    // All of them, whatever the filter, as the open file shows.
+    return (
+      <GroupDiff
+        key={`${group}:${JSON.stringify(open.paths)}`}
+        query={groupQuery(group, open.paths)}
+        expanded={(file) => fileQuery(file, true)}
+        group={group}
+        filter=""
+        layout={layout}
+        controls={controls}
+        theme={theme}
+      />
+    );
+  }
 
   if (path === undefined) {
     return (
@@ -82,13 +101,13 @@ function ShownDiff({
 }
 
 interface DiffViewProps extends Omit<ShownDiffProps, "layout" | "open"> {
-  open: OpenFile | OpenGroup | undefined;
+  open: Open | undefined;
   // What shows while nothing is open.
   placeholder: string;
 }
 
-// The open file's diff, or the diffs of the files the open group lists, shown as the host's
-// settings say.
+// The open file's diff, or the diffs of the files the open group lists or of the files selected,
+// shown as the host's settings say.
 export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactElement {
   const layout = useLayout();
   const fonts = useContext(FontSizesContext);

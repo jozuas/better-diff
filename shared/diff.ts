@@ -69,16 +69,21 @@ export const diffRpc = defineRpc({
 // The groups changes.list lists files in.
 const group = z.enum(["modified", "untracked", "staged"]);
 
+// Only those of the group's files at these paths, rather than all of them: the files selected in
+// it.
+const paths = z.array(z.string()).readonly().optional();
+
 export const groupRpc = defineRpc({
   name: "diff.read-group",
-  input: z.object({ directory: z.string(), group }),
+  input: z.object({ directory: z.string(), group, paths }),
   output: z.object({
-    // Changes whenever a file joins or leaves the group, or its diff, or why it can't be read,
-    // changes.
+    // Changes whenever a file joins or leaves the files read, or its diff, or why it can't be
+    // read, changes.
     version: z.string(),
-    // The group's files, in the order changes.list lists them, each with its diff, collapsed as
-    // diff.read collapses it: the staged one for a staged file, the unstaged one for the others. A
-    // file whose diff can't be read, such as one git can't open, has why in its place.
+    // The group's files, or those of them at the paths, in the order changes.list lists them, each
+    // with its diff, collapsed as diff.read collapses it: the staged one for a staged file, the
+    // unstaged one for the others. A file whose diff can't be read, such as one git can't open, has
+    // why in its place.
     files: z.array(
       z.union([
         diff.extend({ path: z.string() }),
@@ -127,14 +132,15 @@ export const applyModeRpc = defineRpc({
 
 const groupAction = {
   directory: z.string(),
-  // The group's. The action is stale, and changes nothing, if a file has joined or left the group
-  // or its diff has changed since it was read.
+  // The group's, as read with the same paths. The action is stale, and changes nothing, if a file
+  // has joined or left the group or its diff has changed since it was read.
   version: z.string(),
+  paths,
 };
 
-// All of the changes of each of the group's files, as applying them to each file would. Modified
-// and untracked files can be staged or discarded, and staged ones unstaged. A file whose diff can't
-// be read is left as it is.
+// All of the changes of each of the group's files, or of those at the paths, as applying them to
+// each file would. Modified and untracked files can be staged or discarded, and staged ones
+// unstaged. A file whose diff can't be read is left as it is.
 export const applyGroupRpc = defineRpc({
   name: "diff.apply-group",
   input: z.discriminatedUnion("group", [

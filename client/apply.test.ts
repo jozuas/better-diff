@@ -156,6 +156,35 @@ test("refuses an action on a group as stale, and applies nothing, once a file ha
   expect(server.applyGroup).not.toHaveBeenCalled();
 });
 
+test("acts on the files selected in a group, of the version read of them, while the group still lists them all, in any order", async () => {
+  const server = serverWith({ listed: ["a", "b"] });
+
+  await expect(
+    apply(server, "/repo", "stage", { group: "modified", paths: ["b", "a"], selected: true }),
+  ).resolves.toBe("applied");
+  expect(server.readGroup).toHaveBeenCalledWith({
+    directory: "/repo",
+    group: "modified",
+    paths: ["b", "a"],
+  });
+  expect(server.applyGroup).toHaveBeenCalledWith({
+    directory: "/repo",
+    group: "modified",
+    operation: "stage",
+    version: "group",
+    paths: ["b", "a"],
+  });
+});
+
+test("refuses an action on the files selected as stale, and applies nothing, once one has left the group", async () => {
+  const server = serverWith({ listed: ["a"] });
+
+  await expect(
+    apply(server, "/repo", "stage", { group: "modified", paths: ["a", "b"], selected: true }),
+  ).resolves.toBe("stale");
+  expect(server.applyGroup).not.toHaveBeenCalled();
+});
+
 test("refuses an operation a group's files can't have", async () => {
   const server = serverWith({ listed: ["a"] });
 
@@ -164,9 +193,12 @@ test("refuses an operation a group's files can't have", async () => {
   ).rejects.toThrow(/Invalid input/u);
 });
 
-test("says why an action was refused: its group's files changed, or its file's diff did", () => {
+test("says why an action was refused: its group's files changed, or the files selected, or its file's diff did", () => {
   expect(staleMessage({ group: "modified", paths: [] })).toBe(
     "The group's files changed after they were listed, so nothing was done. They've been reloaded.",
+  );
+  expect(staleMessage({ group: "modified", paths: [], selected: true })).toBe(
+    "The selected files changed after they were selected, so nothing was done. They've been reloaded.",
   );
   expect(staleMessage({ file: modified, shown: false })).toBe(
     "The diff changed after it was shown, so nothing was done. It's been reloaded.",
