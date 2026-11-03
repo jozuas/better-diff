@@ -88,13 +88,52 @@ export function selectedRange(
     : { file: kept.file, hunk: kept.hunk, first: Math.min(...indices), last: Math.max(...indices) };
 }
 
-export function sameRange(range: LineRange | undefined, other: LineRange | undefined): boolean {
+function sameRange(range: LineRange, other: LineRange): boolean {
   return (
-    range?.file === other?.file &&
-    range?.hunk === other?.hunk &&
-    range?.first === other?.first &&
-    range?.last === other?.last
+    range.file === other.file &&
+    range.hunk === other.hunk &&
+    range.first === other.first &&
+    range.last === other.last
   );
+}
+
+// What a view shows of each of its files, by the file's index in the view: what names the diff it
+// shows, such as the file's path and the diff's version, or undefined where it shows none.
+export type ShownFiles = (file: number) => string | undefined;
+
+// The lines a selection touched while the file they're in showed what `shown` names.
+export interface SelectedLines {
+  range: LineRange;
+  shown: string | undefined;
+}
+
+// What's selected of the view's lines, from the range the selection touches as the view shows its
+// files: what was before if that's the same.
+export function selectedLines(
+  before: SelectedLines | undefined,
+  range: LineRange | undefined,
+  shown: ShownFiles,
+): SelectedLines | undefined {
+  if (range === undefined) {
+    return undefined;
+  }
+
+  const now = shown(range.file);
+
+  return before !== undefined && before.shown === now && sameRange(before.range, range)
+    ? before
+    : { range, shown: now };
+}
+
+// The selected lines, while the file they're in shows what it did when they were selected. Once it
+// shows something else, none: the lines the selection touches then can be others.
+export function stillSelected(
+  selected: SelectedLines | undefined,
+  shown: ShownFiles,
+): LineRange | undefined {
+  return selected !== undefined && shown(selected.range.file) === selected.shown
+    ? selected.range
+    : undefined;
 }
 
 // The range, on the side with focus, in a side-by-side view.

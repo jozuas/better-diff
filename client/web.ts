@@ -5,8 +5,8 @@ import { Platform } from "react-native";
 import type { Point } from "./menu";
 import { topPlace } from "./place";
 import type { Place } from "./place";
-import { markOf, sameRange, selectedRange } from "./selection";
-import type { LineRange } from "./selection";
+import { markOf, selectedLines, selectedRange, stillSelected } from "./selection";
+import type { LineRange, SelectedLines, ShownFiles } from "./selection";
 import { shiftStep } from "./shift";
 import type { Keys } from "./shift";
 
@@ -76,11 +76,6 @@ interface PageSelection {
   removeAllRanges: () => void;
 }
 
-declare const window: {
-  addEventListener: (type: "focus", listener: () => void) => void;
-  removeEventListener: (type: "focus", listener: () => void) => void;
-};
-
 declare const document: {
   addEventListener: (type: "selectionchange", listener: () => void) => void;
   removeEventListener: (type: "selectionchange", listener: () => void) => void;
@@ -91,20 +86,6 @@ declare const document: {
 };
 
 declare const CSS: { escape: (identifier: string) => string };
-
-// Calls the listener whenever the app's window gains focus, as on switching back to it from
-// another app, until the returned function is called. Only on the web, where the desktop app runs.
-export function onWindowFocus(listener: () => void): () => void {
-  if (Platform.OS !== "web") {
-    return () => {};
-  }
-
-  window.addEventListener("focus", listener);
-
-  return () => {
-    window.removeEventListener("focus", listener);
-  };
-}
 
 // Whether the selection has some of the element's text, or all of it, as it has of an empty
 // element it spans. A selection can end at the start of an element, as a triple click's does at
@@ -176,27 +157,44 @@ function onSelection(
   };
 }
 
-// The lines of the diffs in the element with the id `view` that the page's text selection touches.
-export function useSelectedLines(view: string): LineRange | undefined {
-  const [range, setRange] = useState<LineRange>();
-
-  useEffect(
-    () =>
-      onSelection(view, (touched, anchor) => {
-        const next = selectedRange(view, touched, anchor);
-
-        setRange((current) => (sameRange(current, next) ? current : next));
-      }),
-    [view],
-  );
-
-  return range;
-}
-
 export function clearSelection(): void {
   if (Platform.OS === "web") {
     document.getSelection()?.removeAllRanges();
   }
+}
+
+// The lines of the diffs in the element with the id `view` that the page's text selection touches,
+// while the file they're in shows what it did when they were selected, as `shown` says. Once it
+// shows something else, the selection is cleared, since the lines it touches then can be others,
+// which an action on the lines would act on.
+export function useSelectedLines(view: string, shown: ShownFiles): LineRange | undefined {
+  const [selected, setSelected] = useState<SelectedLines>();
+  const latest = useRef(shown);
+
+  useLayoutEffect(() => {
+    latest.current = shown;
+  });
+
+  useEffect(
+    () =>
+      onSelection(view, (touched, anchor) => {
+        const range = selectedRange(view, touched, anchor);
+
+        setSelected((before) => selectedLines(before, range, latest.current));
+      }),
+    [view],
+  );
+
+  const range = stillSelected(selected, shown);
+  const moved = selected !== undefined && range === undefined;
+
+  useLayoutEffect(() => {
+    if (moved) {
+      clearSelection();
+    }
+  }, [moved]);
+
+  return range;
 }
 
 // How far below the top of the element with the id `container` the top of the element with the id

@@ -14,7 +14,7 @@ import {
 } from "../test/repository";
 import { listChanges } from "./changes";
 
-type Changes = RpcOutput<typeof changesRpc>;
+type Changes = Omit<RpcOutput<typeof changesRpc>, "version">;
 
 // A file's version in HEAD, in the index and in the worktree, null where it's absent. A file the
 // index has can instead be moved in the worktree, unchanged, as `mv` moves it.
@@ -126,7 +126,7 @@ test("lists a staged rename under its new name, and never reads the old name as 
     commitAll(repository);
     runGit(repository, ["mv", "? a", "b"]);
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: [],
       untracked: [],
       staged: ["b"],

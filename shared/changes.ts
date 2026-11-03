@@ -10,6 +10,8 @@ export const changesRpc = defineRpc({
     modified: z.array(z.string()),
     untracked: z.array(z.string()),
     staged: z.array(z.string()),
+    // The version changes.wait answers with while the files are as listed.
+    version: z.string(),
   }),
 });
 
@@ -27,4 +29,19 @@ export const waitRpc = defineRpc({
     timeout: z.int().nonnegative().max(50_000),
   }),
   output: z.object({ version: z.string() }),
+});
+
+// The version changes.wait answers with while the files are as they are now, found at once.
+export const versionRpc = defineRpc({
+  name: "changes.version",
+  input: z.object({ directory: z.string() }),
+  output: z.object({ version: z.string() }),
+});
+
+// Answers the directory's waits from the version at once, with it, as though they were over: a view
+// that no longer shows the changes can't stop the wait it asked for.
+export const releaseRpc = defineRpc({
+  name: "changes.release",
+  input: z.object({ directory: z.string(), version: z.string() }),
+  output: z.object({}),
 });

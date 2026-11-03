@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { vi } from "vitest";
 
-import { changeFrom } from "../server/wait";
+import { changeFrom, release } from "../server/wait";
 import type { Watched } from "../server/wait";
 
 // The order in which waiters ask, checks start and versions change, across things.
@@ -55,6 +55,8 @@ export interface Thing {
   // Waits for a change from the version given, and from each it's answered with as soon as it's
   // answered, until the function it gives is called.
   keepWaiting: (from: string) => () => void;
+  // Releases the waits from the version given.
+  release: (from: string) => void;
 }
 
 // How its listener does: tells of changes when the test says, fails to, or throws as it starts.
@@ -191,6 +193,9 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
       return () => {
         waiting = false;
       };
+    },
+    release: (from) => {
+      release(key, from);
     },
   };
 }

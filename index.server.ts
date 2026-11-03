@@ -1,13 +1,13 @@
 import type { PluginCleanup } from "@getpaseo/plugin";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 
-import { listChanges, waitForChanges } from "./server/changes";
+import { listChanges, readVersion, releaseWaits, waitForChanges } from "./server/changes";
 import { readContents } from "./server/contents";
 import { applyFile, applyLines, applyMode, readDiff } from "./server/diff";
 import { applyGroup, readGroup } from "./server/groups";
 import { syntaxColors } from "./server/highlight";
 import { stopWaiting } from "./server/wait";
-import { changesRpc, waitRpc } from "./shared/changes";
+import { changesRpc, releaseRpc, versionRpc, waitRpc } from "./shared/changes";
 import { contentsRpc } from "./shared/contents";
 import {
   applyFileRpc,
@@ -24,6 +24,8 @@ export default function contribute(server: PluginServerContext): PluginCleanup {
   server.registerSettings(viewSettings);
   server.handle(changesRpc, listChanges);
   server.handle(waitRpc, waitForChanges);
+  server.handle(versionRpc, readVersion);
+  server.handle(releaseRpc, releaseWaits);
   server.handle(diffRpc, readDiff);
   server.handle(applyLinesRpc, applyLines);
   server.handle(applyFileRpc, applyFile);

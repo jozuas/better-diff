@@ -2,7 +2,7 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useContext, useId, useMemo, useState } from "react";
+import { useContext, useId, useLayoutEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -17,9 +17,28 @@ import { FontSizesContext } from "./fonts";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
+import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { scrollUpTo, useSelectedLines } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
+
+// Has the file's diff, once it's read, as shown while it's rendered.
+function useShownDiff(file: OpenFile, diff: Diff | undefined): void {
+  const shown = useContext(ShownDiffsContext);
+  const key = shownFileKey(file);
+
+  useLayoutEffect(() => {
+    if (diff !== undefined) {
+      shown.set(key, diff);
+    }
+
+    return () => {
+      if (shown.get(key) === diff) {
+        shown.delete(key);
+      }
+    };
+  }, [shown, key, diff]);
+}
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -118,7 +137,7 @@ interface FileBarProps {
 }
 
 // Which file a diff is of, as opened from its group, how many lines it adds and removes, and the
-// actions on the file.
+// actions on the file. The diff it's rendered with is the one shown.
 export function FileBar({
   file,
   diff,
@@ -129,6 +148,8 @@ export function FileBar({
   theme,
 }: FileBarProps): ReactElement {
   const styles = useStyles(theme);
+
+  useShownDiff(file, diff);
 
   return (
     <View accessibilityRole="header" style={[styles.fileBar, { minHeight }]}>
@@ -166,9 +187,9 @@ interface FileDiffProps {
 export function FileDiff({ query, file, layout, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
   const view = useId();
-  const selection = useSelectedLines(view);
   const [expand, setExpand] = useState(false);
   const diff = useQuery(query(expand));
+  const selection = useSelectedLines(view, () => diff.data?.version);
 
   return (
     <View style={styles.file}>

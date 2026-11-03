@@ -12,7 +12,7 @@ import {
   rangeIn,
   rangeKey,
   rangeLines,
-  sameRange,
+  selectedLines,
   selectedRange,
 } from "./selection";
 import type { Side } from "./side-by-side";
@@ -188,18 +188,25 @@ test.each<[LineRange, number, Side | undefined, boolean]>([
   expect(isSelected(shown, 1, line, side)).toBe(selected);
 });
 
-test.each<[LineRange | undefined, LineRange | undefined, boolean]>([
-  [range, { file: 0, hunk: 1, first: 2, last: 4 }, true],
-  [range, { file: 1, hunk: 1, first: 2, last: 4 }, false],
-  [range, { file: 0, hunk: 0, first: 2, last: 4 }, false],
-  [range, { file: 0, hunk: 1, first: 3, last: 4 }, false],
-  [range, { file: 0, hunk: 1, first: 2, last: 3 }, false],
-  [range, undefined, false],
-  [undefined, range, false],
-  [undefined, undefined, true],
-])("%j is the same range as %j: %s", (one, other, same) => {
-  expect(sameRange(one, other)).toBe(same);
-});
+// What a view that shows the same of each file shows.
+function showsTheSame(): string {
+  return "a 1";
+}
+
+test.each<[LineRange, boolean]>([
+  [{ file: 0, hunk: 1, first: 2, last: 4 }, true],
+  [{ file: 1, hunk: 1, first: 2, last: 4 }, false],
+  [{ file: 0, hunk: 0, first: 2, last: 4 }, false],
+  [{ file: 0, hunk: 1, first: 3, last: 4 }, false],
+  [{ file: 0, hunk: 1, first: 2, last: 3 }, false],
+])(
+  "what's selected of lines 2 to 4 of hunk 1 of the first file stays the same once the selection touches %j, while every file shows the same: %s",
+  (next, same) => {
+    const selected = selectedLines(undefined, range, showsTheSame);
+
+    expect(selectedLines(selected, next, showsTheSame) === selected).toBe(same);
+  },
+);
 
 test("gives each of a view's files only the range of its own lines", () => {
   expect(rangeIn({ file: 1, hunk: 2, first: 3, last: 4 }, 1)).toStrictEqual({

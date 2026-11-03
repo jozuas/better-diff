@@ -1,16 +1,13 @@
 import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
-import { copyText, Loading, useToast } from "@getpaseo/plugin/client/ui";
+import { useRpc, useSettings, useWorkspace } from "@getpaseo/plugin/client";
+import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { LayoutChangeEvent } from "react-native";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { z } from "zod";
 
-import { changesRpc } from "../shared/changes";
-import { contentsRpc } from "../shared/contents";
+import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
 import {
   applyFileRpc,
   applyGroupRpc,
@@ -24,53 +21,37 @@ import type { Controls } from "./actions";
 import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
-import { copy } from "./copy";
-import type { CopyItem } from "./copy";
 import { DiffView } from "./diff-view";
-import { FileList } from "./file-list";
 import { fontSizes, FontSizesContext } from "./fonts";
 import type { FontSizes } from "./fonts";
-import { diffIn, firstFile, groups, openAfter, placeholder, sidebarGroups } from "./groups";
+import { firstFile, groups, openAfter, placeholder } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
-import { Queried } from "./queried";
-import { defaultWidth, fileListWidth } from "./resize";
-import { Separator } from "./separator";
+import { readAt, refreshOf, refreshOnChanges } from "./refresh";
+import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
+import { Sidebar } from "./sidebar";
 import { SyntaxColorsProvider } from "./syntax-colors";
-import { clearSelection, fittingWidth, onWindowFocus } from "./web";
+import { clearSelection } from "./web";
+import { onWindowFocus } from "./window-focus";
 
-// What the panel keeps of each tab across reloads.
-const tabState = z.object({ fileListWidth: z.number() });
+type Listed = RpcOutput<typeof changesRpc>;
 
 type Diff = RpcOutput<typeof diffRpc>;
-
-type GroupRead = RpcOutput<typeof groupRpc>;
 
 interface Request {
   operation: RpcInput<typeof applyFileRpc>["operation"];
   target: Target;
 }
 
-// The queries of a file's diff, as opened from its group, collapsed or not, whose keys start with
-// the file's, and of the diffs of all of a group's files or of those of them at the paths, whose
-// keys start with the group's.
+// The queries of a file's diff, as opened from its group, collapsed or not, and of the diffs of all
+// of a group's files or of those of them at the paths.
 function useDiffQueries(directory: string) {
   const readDiff = useRpc(diffRpc);
   const readGroup = useRpc(groupRpc);
 
-  function fileKey({ group, path }: OpenFile): string[] {
-    return [directory, "diff", groups[group].side, path];
-  }
-
-  function groupKey(group: GroupName): string[] {
-    return [directory, "group", group];
-  }
-
   return {
-    fileKey,
-    groupKey,
     groupQuery: (group: GroupName, paths?: readonly string[]) =>
       queryOptions({
-        queryKey: [...groupKey(group), ...(paths ?? [])],
+        queryKey: [directory, "group", group, ...(paths ?? [])],
         queryFn: async () => {
           const read = await readGroup({ directory, group, paths });
 
@@ -79,7 +60,7 @@ function useDiffQueries(directory: string) {
       }),
     query: (file: OpenFile, expand: boolean) =>
       queryOptions({
-        queryKey: [...fileKey(file), expand],
+        queryKey: [directory, "diff", groups[file.group].side, file.path, expand],
         queryFn: async () => {
           const read = await readDiff({
             directory,
@@ -151,35 +132,53 @@ function useControls(
   };
 }
 
-// Copies what a file's menu item names of the file at the path, and says why where it copies
-// nothing.
-function useCopy(directory: string): (item: CopyItem, path: string) => void {
-  const toast = useToast();
-  const readContents = useRpc(contentsRpc);
+// Shows the directory's changes as they are whenever they may have changed, as while an agent edits
+// its files, once they're first read: from `from`, the version they were read at, undefined until
+// they're read, or an empty one, which none is, if they couldn't be.
+function useRefreshOnChanges(
+  directory: string,
+  from: string | undefined,
+  refresh: (version: string) => Promise<void>,
+): void {
+  const wait = useRpc(waitRpc);
+  const release = useRpc(releaseRpc);
+  const first = useRef(from);
+  const read = from !== undefined;
 
-  const run = useMutation({
-    mutationFn: async ({ item, path }: { item: CopyItem; path: string }) => {
-      const refused = await copy(item, directory, path, { readContents, write: copyText });
-
-      return refused;
-    },
-    onSuccess: (refused) => {
-      if (refused !== undefined) {
-        toast.show(refused, { variant: "warning" });
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
+  useLayoutEffect(() => {
+    first.current = from;
   });
 
-  return (item, path) => {
-    run.mutate({ item, path });
-  };
+  useEffect(() => {
+    const stopping = new AbortController();
+
+    if (read) {
+      refreshOnChanges(
+        {
+          wait: async (input) => {
+            const answer = await wait({ directory, ...input });
+
+            return answer;
+          },
+          release: async (version) => {
+            await release({ directory, version });
+          },
+        },
+        refresh,
+        first.current ?? "",
+        stopping.signal,
+      );
+    }
+
+    return () => {
+      stopping.abort();
+    };
+  }, [directory, read, wait, release, refresh]);
 }
 
 // Calls the latest `refresh` whenever the window regains focus, as on switching back from an
-// editor.
+// editor, which may have changed what nothing tells of a change to, such as a file outside the
+// worktree that git reads.
 function useRefreshOnFocus(refresh: () => Promise<void>): void {
   const latest = useRef(refresh);
 
@@ -190,29 +189,19 @@ function useRefreshOnFocus(refresh: () => Promise<void>): void {
   useEffect(() => onWindowFocus(() => void latest.current()), []);
 }
 
-// The file list's width, as its separator is dragged, or fit to what the list with the id shows,
-// kept for the tab once it's let go, and no wider than the panel leaves room for.
-function useFileListWidth(tab: PluginTab, id: string) {
-  const [saved, save] = useTabState(tab, tabState, { fileListWidth: defaultWidth });
-  const [wanted, setWanted] = useState(saved.fileListWidth);
-  const [panel, setPanel] = useState(Number.POSITIVE_INFINITY);
+// What's open, moved on from the open file whenever the changes are listed again and its group no
+// longer lists it, as after an action on it or an agent's change: past a hunk acted on, the next
+// one is where it was.
+function useOpen(changes: Listed | undefined) {
+  const [open, setOpen] = useState<Open>();
+  const [listed, setListed] = useState(changes);
 
-  function onResized(width: number): void {
-    setWanted(fileListWidth(width, panel));
-    save({ fileListWidth: fileListWidth(width, panel) });
+  if (changes !== listed) {
+    setListed(changes);
+    setOpen(openAfter(open, listed, changes));
   }
 
-  return {
-    width: fileListWidth(wanted, panel),
-    onLayout: (event: LayoutChangeEvent) => {
-      setPanel(event.nativeEvent.layout.width);
-    },
-    onResize: setWanted,
-    onResized,
-    onFit: () => {
-      onResized(fittingWidth(id) ?? wanted);
-    },
-  };
+  return [open, setOpen] as const;
 }
 
 // The sizes the font size settings set, or their defaults until they're read, or if they can't be.
@@ -234,10 +223,9 @@ interface ChangesProps {
 function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState<Open>();
   const [filter, setFilter] = useState("");
 
-  const changesQuery = queryOptions({
+  const changes = useQuery({
     queryKey: [directory, "changes"],
     queryFn: async () => {
       const listed = await listChanges({ directory });
@@ -246,7 +234,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     },
   });
 
-  const changes = useQuery(changesQuery);
+  const [open, setOpen] = useOpen(changes.data);
   const [listed, setListed] = useState(false);
 
   if (!listed && changes.data !== undefined) {
@@ -254,42 +242,33 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     setOpen(firstFile(changes.data));
   }
 
+  const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
+  const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const diffs = useDiffQueries(directory);
-  const fileList = useId();
-  const { width, onLayout, onResize, onResized, onFit } = useFileListWidth(tab, fileList);
+  const readVersion = useRpc(versionRpc);
+  const refresh = useMemo(() => refreshOf(queryClient, directory), [queryClient, directory]);
 
-  // Reads everything again, and moves on from the open file once its group no longer lists it, as
-  // after an action on it: past a hunk acted on, the next one is where it was.
-  async function refresh(): Promise<void> {
-    const before = queryClient.getQueryData(changesQuery.queryKey);
+  // The version of the changes now, if it can be found.
+  async function versionNow(): Promise<string | undefined> {
+    try {
+      const { version } = await readVersion({ directory });
 
-    await queryClient.invalidateQueries({ queryKey: [directory] });
-
-    const after = queryClient.getQueryData(changesQuery.queryKey);
-
-    setOpen((shown) => openAfter(shown, before, after));
+      return version;
+    } catch {
+      return undefined;
+    }
   }
 
-  // The file's diff as its group's diffs show it, while they're shown.
-  function groupShown(file: OpenFile): Diff | undefined {
-    const [shown] = queryClient.getQueriesData<GroupRead>({
-      queryKey: diffs.groupKey(file.group),
-      type: "active",
-    });
-
-    return diffIn(shown?.[1], file.path);
+  // Shows the changes as they are now, unless what's shown was read since they were.
+  async function refreshNow(): Promise<void> {
+    try {
+      await refresh(await versionNow());
+    } catch {
+      // What's shown says why it couldn't be read.
+    }
   }
 
-  const controls = useControls(
-    directory,
-    // The one of the file's queries the diff shown watches, or else its group's.
-    (file) =>
-      queryClient.getQueriesData<Diff>({ queryKey: diffs.fileKey(file), type: "active" })[0]?.[1] ??
-      groupShown(file),
-    refresh,
-  );
-
-  const onCopy = useCopy(directory);
+  const controls = useControls(directory, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
 
   const styles = useMemo(
     () =>
@@ -300,46 +279,40 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
     [theme],
   );
 
-  useRefreshOnFocus(refresh);
+  useRefreshOnChanges(directory, readAt(changes), refresh);
+  useRefreshOnFocus(refreshNow);
 
   return (
-    <View style={styles.panel} onLayout={onLayout}>
-      <View nativeID={fileList} style={{ width }}>
-        <Queried query={changes} theme={theme}>
-          {(data) => (
-            <FileList
-              groups={sidebarGroups(data, filter)}
-              open={open}
-              onOpen={setOpen}
-              onOpenGroup={(group) => {
-                setOpen({ group });
-              }}
-              filter={filter}
-              onFilter={setFilter}
-              controls={controls}
-              onCopy={onCopy}
-              theme={theme}
-            />
-          )}
-        </Queried>
-      </View>
-      <Separator
-        width={width}
-        onResize={onResize}
-        onResized={onResized}
-        onFit={onFit}
+    <View
+      style={styles.panel}
+      onLayout={(event) => {
+        setPanelWidth(event.nativeEvent.layout.width);
+      }}
+    >
+      <Sidebar
+        directory={directory}
+        changes={changes}
+        open={open}
+        onOpen={setOpen}
+        filter={filter}
+        onFilter={setFilter}
+        controls={controls}
+        panelWidth={panelWidth}
+        tab={tab}
         theme={theme}
       />
       <View style={styles.diff}>
-        <DiffView
-          open={open}
-          placeholder={placeholder(changes.data)}
-          fileQuery={diffs.query}
-          groupQuery={diffs.groupQuery}
-          filter={filter}
-          controls={controls}
-          theme={theme}
-        />
+        <ShownDiffsContext value={shownDiffs}>
+          <DiffView
+            open={open}
+            placeholder={placeholder(changes.data)}
+            fileQuery={diffs.query}
+            groupQuery={diffs.groupQuery}
+            filter={filter}
+            controls={controls}
+            theme={theme}
+          />
+        </ShownDiffsContext>
       </View>
     </View>
   );

@@ -35,6 +35,15 @@ Replicates Sublime Merge as much as possible:
 - A selection stays within one hunk.
 - In side-by-side, the selection is in whichever side has focus: removals or additions.
 
+### Refreshing
+
+- The view refreshes as the worktree and the index change, as an agent changes them, within a second or so, whether or not Paseo's window has focus.
+- A change nothing tells of, as to a file outside the worktree that git reads, such as `core.excludesFile`, shows once Paseo's window regains focus, or within half a minute.
+- Once the open file leaves its group, the view moves on to the next file in it.
+- A selection of lines is cleared once their diff changes, since it can cover other lines then. In a group's view, a change to another file's diff leaves it.
+- An action on a diff that changed since it was shown changes nothing, says so, and reloads the diff.
+- A diff or file list that can't be read again stays shown, under why it couldn't be, as it may be out of date.
+
 ### Special file states
 
 - No changes: show "No changes".
@@ -114,6 +123,6 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 ### Open questions
 
-- Refreshing: the agent edits the worktree while you stage. When does the view refresh, does it keep scroll position and selection, and what happens when an action targets a diff that has changed since it was shown? (Suggestion: fail and refresh, never apply a stale patch.)
+- Refreshing: does the view keep its scroll position when an agent's change moves the lines it shows?
 - Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)

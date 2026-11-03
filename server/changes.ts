@@ -5,10 +5,10 @@ import { join, resolve } from "node:path";
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { changesRpc } from "../shared/changes";
-import type { waitRpc } from "../shared/changes";
+import type { releaseRpc, versionRpc, waitRpc } from "../shared/changes";
 import { git } from "./git";
 import { versionOf } from "./version";
-import { changeFrom } from "./wait";
+import { changeFrom, release } from "./wait";
 import { watchRepository } from "./watch";
 
 // A file git status lists.
@@ -281,8 +281,7 @@ async function renamesOf(directory: string, status: Status): Promise<Map<string,
 // the untracked files intent-to-add: those it pairs are modified, as renamed, and the files they're
 // paired with no longer are. Where that fails, as where a file is gone by then, or git won't have
 // its path in the index, what git status said first stands.
-export async function readStatus(directory: string): Promise<Entry[]> {
-  const status = await statusOf(directory);
+async function renamedIn(directory: string, status: Status): Promise<Entry[]> {
   const { entries } = status;
 
   const renames = entries.some(({ deleted }) => deleted)
@@ -307,7 +306,13 @@ export async function readStatus(directory: string): Promise<Entry[]> {
   return entries;
 }
 
-export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc> {
+export async function readStatus(directory: string): Promise<Entry[]> {
+  const entries = await renamedIn(directory, await statusOf(directory));
+
+  return entries;
+}
+
+export function groupsOf(entries: readonly Entry[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
   return {
     modified: pathsOf(entries, ({ modified }) => modified),
     untracked: pathsOf(entries, ({ untracked, modified }) => untracked && !modified),
@@ -315,14 +320,19 @@ export function groupsOf(entries: readonly Entry[]): RpcOutput<typeof changesRpc
   };
 }
 
-// Changes whenever the files listed, or their diffs, could have: with what git status says, or a
-// listed file's content. Not with the config, such as diff.algorithm. git status stops once the
-// signal says to.
-async function worktreeVersionOf(directory: string, signal: AbortSignal): Promise<string> {
-  const status = await statusOf(directory, undefined, signal);
+// Changes whenever the files listed, or their diffs, could have: with what git status says, or the
+// content of a file it lists. Not with the config, such as diff.algorithm.
+async function versionFrom(directory: string, status: Status): Promise<string> {
   const sources = await sourcesOf(directory, status, () => true);
 
   return versionOf(sources);
+}
+
+// The version now. git status stops once the signal says to.
+async function worktreeVersionOf(directory: string, signal?: AbortSignal): Promise<string> {
+  const version = await versionFrom(directory, await statusOf(directory, undefined, signal));
+
+  return version;
 }
 
 export async function waitForChanges({
@@ -351,10 +361,29 @@ export async function waitForChanges({
   return { version: current };
 }
 
+export async function readVersion({
+  directory,
+}: RpcInput<typeof versionRpc>): Promise<RpcOutput<typeof versionRpc>> {
+  const version = await worktreeVersionOf(directory);
+
+  return { version };
+}
+
+export function releaseWaits({
+  directory,
+  version,
+}: RpcInput<typeof releaseRpc>): RpcOutput<typeof releaseRpc> {
+  release(directory, version);
+
+  return {};
+}
+
 export async function listChanges({
   directory,
 }: RpcInput<typeof changesRpc>): Promise<RpcOutput<typeof changesRpc>> {
-  const entries = await readStatus(directory);
+  const status = await statusOf(directory);
+  const version = await versionFrom(directory, status);
+  const entries = await renamedIn(directory, status);
 
-  return groupsOf(entries);
+  return { ...groupsOf(entries), version };
 }

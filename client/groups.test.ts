@@ -6,7 +6,6 @@ import type { diffRpc } from "../shared/diff";
 import { changes, groupName, modified } from "../test/changes";
 import { filePath } from "../test/file-names";
 import {
-  diffIn,
   diffOf,
   firstFile,
   groups,
@@ -287,16 +286,10 @@ test("shows the files of a group's read that the sidebar lists under the filter,
   );
 });
 
-test("finds the diff of a file of a group's read, unless the read couldn't read it", () => {
-  const read = {
-    version: "group",
-    files: [Object.assign(diffVersioned("1"), { path: "a" }), { path: "b", error: "unreadable" }],
-  };
+test("a group's read has the diff of a file it could read, and none of one it couldn't", () => {
+  const read = Object.assign(diffVersioned("1"), { path: "a" });
 
-  expect(diffIn(read, "a")).toStrictEqual({ ...diffVersioned("1"), path: "a" });
-  expect(diffIn(read, "b")).toBeUndefined();
-  expect(diffIn(read, "c")).toBeUndefined();
-  expect(diffIn(undefined, "a")).toBeUndefined();
+  expect(diffOf(read)).toBe(read);
   expect(diffOf({ path: "b", error: "unreadable" })).toBeUndefined();
 });
 

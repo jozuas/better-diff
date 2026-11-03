@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, group, openFile, row } from "./panel";
+import { button, group, line, openFile, row } from "./panel";
 
 // Commits `a.txt` and `b.txt`, then changes both.
 function changeTwo(repository: string): void {
@@ -137,6 +137,8 @@ test("the separator shows its line in the accent colour while the pointer is ove
 
   await app.openPanel();
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["a.txt"]);
+  // The first file opens with Better Diff, and its diff shows beside the separator once it's read.
+  await expect(line(page, "a")).toBeVisible();
   const separator = page.getByRole("slider", { name: "File list width" });
   const looks = looksOf(separator);
   const plain = await looks();

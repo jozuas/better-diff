@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
-import { useQuery } from "@tanstack/react-query";
-import type { UseQueryOptions } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -30,12 +30,10 @@ type DiffQuery = UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
 type ShownDiffProps = Omit<DiffBodyProps, "diff" | "scrolls">;
 
 interface ExpandedDiffProps extends ShownDiffProps {
-  query: DiffQuery;
+  diff: UseQueryResult<Diff>;
 }
 
-function ExpandedDiff({ query, theme, ...shown }: ExpandedDiffProps): ReactElement {
-  const diff = useQuery(query);
-
+function ExpandedDiff({ diff, theme, ...shown }: ExpandedDiffProps): ReactElement {
   return (
     <Queried query={diff} theme={theme}>
       {(data) => <DiffBody diff={data} scrolls={false} theme={theme} {...shown} />}
@@ -46,15 +44,15 @@ function ExpandedDiff({ query, theme, ...shown }: ExpandedDiffProps): ReactEleme
 interface GroupFileDiffProps extends ShownDiffProps {
   // The file as the group's read has it.
   read: GroupRead["files"][number];
-  // The query of its diff with its lines, once they're asked for.
-  expanded: DiffQuery | undefined;
+  // Its diff read again with its lines, once they're asked for.
+  expanded: UseQueryResult<Diff> | undefined;
 }
 
 // The file's diff as the group's read has it, or why it couldn't be read, or as read again with its
 // lines once they're asked for.
 function GroupFileDiff({ read, expanded, theme, ...shown }: GroupFileDiffProps): ReactElement {
   if (expanded !== undefined) {
-    return <ExpandedDiff query={expanded} theme={theme} {...shown} />;
+    return <ExpandedDiff diff={expanded} theme={theme} {...shown} />;
   }
 
   if ("error" in read) {
@@ -89,9 +87,27 @@ function GroupFiles({
   controls,
   theme,
 }: GroupFilesProps): ReactElement {
-  const selection = useSelectedLines(view);
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  const files = listedFiles(read, filter);
+  const shownExpanded = files.filter(({ path }) => expandedPaths.includes(path));
+
+  const expandedDiffs = useQueries({
+    queries: shownExpanded.map(({ path }) => expanded({ group, path })),
+  });
+
+  // The file's diff read again with its lines, once they're asked for.
+  function expandedDiff(path: string): UseQueryResult<Diff> | undefined {
+    return expandedDiffs[shownExpanded.findIndex((file) => file.path === path)];
+  }
+
+  // Each file's diff as shown: read again with its lines, once it is, or else as the group's read
+  // has it.
+  const shownDiffs = files.map((file) => expandedDiff(file.path)?.data ?? diffOf(file));
+
+  const selection = useSelectedLines(view, (index) =>
+    JSON.stringify([files[index]?.path, shownDiffs[index]?.version]),
+  );
 
   const fonts = useContext(FontSizesContext);
 
@@ -106,8 +122,6 @@ function GroupFiles({
   useEffect(() => {
     stopScrollAnchoring(view);
   }, [view]);
-
-  const files = listedFiles(read, filter);
 
   const barHeight = tallest(
     heights,
@@ -126,7 +140,7 @@ function GroupFiles({
             <FileBar
               key={`bar ${shown.path}`}
               file={file}
-              diff={diffOf(shown)}
+              diff={shownDiffs[index]}
               minHeight={barHeight}
               onHeight={(height) => {
                 setHeights((current) => measured(current, shown.path, height));
@@ -141,7 +155,7 @@ function GroupFiles({
               <View nativeID={fileId(view, index)} />
               <GroupFileDiff
                 read={shown}
-                expanded={expandedPaths.includes(shown.path) ? expanded(file) : undefined}
+                expanded={expandedDiff(shown.path)}
                 file={file}
                 view={view}
                 fileIndex={index}

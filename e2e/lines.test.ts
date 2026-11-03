@@ -39,6 +39,101 @@ test("selecting lines shows their actions only while they're selected, and the t
   await expect(button(page, "Stage Lines")).toBeHidden();
 });
 
+test("a selection of lines is cleared once their diff changes, since it can cover other lines then", async ({
+  app,
+  page,
+  repository,
+}) => {
+  addThree(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await selectLines(page, "bravo", "charlie");
+
+  await expect(button(page, "Stage Lines")).toBeVisible();
+
+  writeFile(repository, "a.txt", "kept\nadded\nalpha\nbravo\ncharlie\n");
+
+  await expect(line(page, "added")).toBeVisible();
+  await expect(button(page, "Stage Lines")).toBeHidden();
+  await expect
+    .poll(async () => {
+      const selected = await page.evaluate("window.getSelection().toString()");
+
+      return selected;
+    })
+    .toBe("");
+});
+
+// Commits `a.txt` and `b.txt` as one line each, then adds three lines to `a.txt` and one to
+// `b.txt`.
+function changeTwo(repository: string): void {
+  writeFile(repository, "a.txt", "kept\n");
+  writeFile(repository, "b.txt", "b\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "kept\nalpha\nbravo\ncharlie\n");
+  writeFile(repository, "b.txt", "b\nchanged b\n");
+}
+
+test("in a group's view, a selection of lines is cleared once their diff changes", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+
+  await app.openPanel();
+  await button(page, "MODIFIED FILES (2)").click();
+  await selectLines(page, "bravo", "charlie");
+
+  await expect(button(page, "Stage Lines")).toBeVisible();
+
+  writeFile(repository, "a.txt", "kept\nadded\nalpha\nbravo\ncharlie\n");
+
+  await expect(line(page, "added")).toBeVisible();
+  await expect(button(page, "Stage Lines")).toBeHidden();
+  await expect
+    .poll(async () => {
+      const selected = await page.evaluate("window.getSelection().toString()");
+
+      return selected;
+    })
+    .toBe("");
+});
+
+test("in a group's view, a selection of lines stays while another file's diff changes, and acts on its lines", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+
+  await app.openPanel();
+  await button(page, "MODIFIED FILES (2)").click();
+  await selectLines(page, "bravo", "charlie");
+
+  await expect(button(page, "Stage Lines")).toBeVisible();
+
+  writeFile(repository, "b.txt", "b\nchanged b again\n");
+
+  await expect(line(page, "changed b again")).toBeVisible();
+  await expect(button(page, "Stage Lines")).toBeVisible();
+  await expect
+    .poll(async () => {
+      const selected = await page.evaluate("window.getSelection().toString()");
+
+      return selected;
+    })
+    .toBe("bravo\ncharlie");
+
+  await button(page, "Stage Lines").click();
+
+  await expect
+    .poll(() => runGit(repository, ["diff", "--cached", "--", "a.txt"]))
+    .toContain("+bravo\n+charlie\n");
+  expect(runGit(repository, ["diff", "--cached", "--", "a.txt"])).not.toContain("+alpha");
+});
+
 test("staging selected lines stages only them", async ({ app, page, repository }) => {
   addThree(repository);
 

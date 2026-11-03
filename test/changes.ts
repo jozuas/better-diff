@@ -15,6 +15,6 @@ export const changes = fc.record({
 export const groupName = fc.constantFrom<GroupName>("modified", "untracked", "staged");
 
 // The changes of only modified files, at the paths.
-export function modified(...paths: string[]): RpcOutput<typeof changesRpc> {
+export function modified(...paths: string[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
   return { modified: paths, untracked: [], staged: [] };
 }

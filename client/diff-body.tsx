@@ -15,6 +15,8 @@ import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
 import { ModeBar } from "./mode-bar";
+import { placeHeld, placeToShow } from "./place";
+import type { HunkPlace } from "./place";
 import { fileId, hunkId, onSide } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
@@ -102,29 +104,28 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
   );
 }
 
-// Where a hunk was in a view, by how far below its top the hunk's first line was, while it showed
-// what `shown` says.
-interface Place {
-  hunk: number;
-  offset: number;
-  shown: string;
-}
-
-// Holds a hunk's place in the view with the id `view`. Once what the view shows of the diff,
+// Holds a hunk's place in the view with the id `view`. Each time what the view shows of the diff,
 // `shown`, changes, the view scrolls to show the hunk with the same index in that place: the hunk
 // itself, once the view shows more or less of the file around it, or the next one, once an action
-// has taken it out of the diff.
-function useHunkPlace(view: string, container: string, shown: string): (hunk: number) => void {
-  const held = useRef<Place | undefined>(undefined);
+// has taken it out of the diff. It's held until an action that's `busy` is done, so that an agent's
+// change shown before the action's doesn't end it.
+function useHunkPlace(
+  view: string,
+  container: string,
+  shown: string,
+  busy: boolean,
+): (hunk: number) => void {
+  const held = useRef<HunkPlace | undefined>(undefined);
 
   useLayoutEffect(() => {
-    const place = held.current;
+    const place = placeToShow(held.current, shown);
 
-    if (place !== undefined && place.shown !== shown) {
-      held.current = undefined;
+    held.current = placeHeld(held.current, shown, busy);
+
+    if (place !== undefined) {
       scrollToOffset(view, hunkId(container, place.hunk), place.offset);
     }
-  }, [view, container, shown]);
+  }, [view, container, shown, busy]);
 
   return (hunk) => {
     const offset = offsetIn(view, hunkId(container, hunk));
@@ -181,7 +182,7 @@ function Hunks({
   const [entire, setEntire] = useState(false);
   const barHeight = useRef(0);
   const container = fileId(view, fileIndex);
-  const hold = useHunkPlace(view, container, `${diff.version} ${String(entire)}`);
+  const hold = useHunkPlace(view, container, `${diff.version} ${String(entire)}`, controls.busy);
   const unchanged = entire ? unchangedLines(diff) : { before: [], after: [] };
   const focus = useFocus(sideBySide);
   const range = onSide(selection, focus);

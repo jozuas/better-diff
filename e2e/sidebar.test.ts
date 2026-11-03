@@ -130,6 +130,7 @@ test("an action from the open file's row on a diff that changed since it was sho
 }) => {
   changeTwo(repository);
 
+  await app.holdWaits();
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (2)", "a.txt");
   await expect(line(page, "changed a")).toBeVisible();
@@ -212,6 +213,7 @@ test("an action on all of a group's files changes nothing once a file has joined
   changeTwo(repository);
   runGit(repository, ["add", "b.txt"]);
 
+  await app.holdWaits();
   await app.openPanel();
   await expect(group(page, "MODIFIED FILES (1)")).toHaveText(["a.txt"]);
 

@@ -186,25 +186,36 @@ test('with no changes and no file open, the view says "No changes"', async ({
   await expect(page.getByText("No changes", { exact: true })).toBeVisible();
 
   writeFile(repository, "new.txt", "a\n");
-  await app.focus();
 
   await expect(page.getByText("Select a file to see its changes.", { exact: true })).toBeVisible();
   await expect(page.getByText("No changes", { exact: true })).toBeHidden();
 });
 
-test("changes made while the window was in the background show once it regains focus", async ({
+test("the view refreshes as the worktree and the index change, as an agent changes them", async ({
   app,
   page,
   repository,
 }) => {
+  writeFile(repository, "a.txt", "one\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "two\n");
+
   await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
 
-  await expect(page.getByRole("heading", { name: "UNTRACKED FILES (0)" })).toBeVisible();
+  await expect(line(page, "two")).toBeVisible();
 
+  writeFile(repository, "a.txt", "three\n");
   writeFile(repository, "new.txt", "a\n");
-  await app.focus();
 
+  await expect(line(page, "three")).toBeVisible();
+  await expect(line(page, "two")).toBeHidden();
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["new.txt"]);
+
+  runGit(repository, ["add", "new.txt"]);
+
+  await expect(group(page, "STAGED FILES (1)")).toHaveText(["new.txt"]);
+  await expect(page.getByRole("heading", { name: "UNTRACKED FILES (0)" })).toBeVisible();
 });
 
 test('once the open file\'s changes are gone and no file has any, the view closes it and says "No changes"', async ({
@@ -222,7 +233,6 @@ test('once the open file\'s changes are gone and no file has any, the view close
   await expect(line(page, "two")).toBeVisible();
 
   commitAll(repository);
-  await app.focus();
 
   await expect(page.getByText("No changes", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "MODIFIED a.txt" })).toBeHidden();
@@ -245,7 +255,6 @@ test("once the open file leaves its group, the view moves on to the next file in
   await expect(line(page, "two")).toBeVisible();
 
   runGit(repository, ["checkout", "--", "a.txt"]);
-  await app.focus();
 
   await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
   await expect(line(page, "next")).toBeVisible();

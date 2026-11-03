@@ -24,7 +24,7 @@ test("pairs a moved file through a copy of the index, which it leaves as it was"
     const git = join(repository, ".git");
     const before = { files: readdirSync(git), index: readFileSync(join(git, "index")) };
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["b"],
       untracked: [],
       staged: [],
@@ -54,7 +54,7 @@ test("finds a file changed as the index was written, while pairing a moved file"
     deleteFile(repository, "c");
     writeFile(repository, "d", "c\n");
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a", "d"],
       untracked: [],
       staged: [],
@@ -72,7 +72,7 @@ test("pairs a moved file in a linked worktree", async () => {
 
     move(linked);
 
-    await expect(listChanges({ directory: linked })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: linked })).resolves.toMatchObject({
       modified: ["b"],
       untracked: [],
       staged: [],
@@ -87,7 +87,7 @@ test("lists a deleted file as deleted, not staged, where an untracked file takes
     deleteFile(repository, "a");
     writeFile(repository, "a/b", "b\n");
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["a/b"],
       staged: [],
@@ -107,7 +107,7 @@ test("lists a nested repository as untracked, beside a deleted file", async () =
     writeFile(nested, "b", "b\n");
     commitAll(nested);
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["nested/"],
       staged: [],
@@ -123,7 +123,7 @@ test("lists a file deleted from the index but not the worktree as untracked, tho
     runGit(repository, ["rm", "--cached", "--quiet", "--", "b"]);
     move(repository);
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["b"],
       staged: ["b"],
@@ -146,7 +146,7 @@ test("keeps the renames git status finds for files added intent-to-add, which an
     deleteFile(repository, "a");
     deleteFile(repository, "c");
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["b", "c"],
       untracked: ["0"],
       staged: ["a"],
@@ -162,7 +162,7 @@ test("lists a moved file as deleted and untracked where git won't add an untrack
     move(repository);
     writeFile(repository, "git~1/b", "b\n");
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["b", "git~1/b"],
       staged: [],
@@ -179,7 +179,7 @@ test("pairs a file moved out of a sparse checkout", async () => {
     deleteFile(repository, "in/a");
     writeFile(repository, "out/a", tenLines);
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["out/a"],
       untracked: [],
       staged: [],
@@ -215,7 +215,7 @@ test("pairs the same files without cleaning them again, while they don't change"
       first,
       second,
       cleaned: worktreeFile(repository, ".git/cleaned")?.toString(),
-    }).toStrictEqual({
+    }).toMatchObject({
       first: { modified: ["b"], untracked: [], staged: [] },
       second: { modified: ["b"], untracked: [], staged: [] },
       cleaned: "b\n",
@@ -248,7 +248,7 @@ test("pairs files once the repository's git directory has moved since it last di
       runGit(repository, ["init", "--quiet", "--separate-git-dir", join(elsewhere, "git")]);
       writeFile(repository, "c", "c\n");
 
-      await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+      await expect(listChanges({ directory: repository })).resolves.toMatchObject({
         modified: ["b"],
         untracked: ["c"],
         staged: [],
@@ -264,7 +264,7 @@ test("pairs files again once a new one changes", async () => {
     await listChanges({ directory: repository });
     writeFile(repository, "b", "b\n");
 
-    await expect(listChanges({ directory: repository })).resolves.toStrictEqual({
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["b"],
       staged: [],

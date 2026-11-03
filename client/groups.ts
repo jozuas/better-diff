@@ -3,7 +3,8 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { changesRpc } from "../shared/changes";
 import type { diffRpc, groupRpc } from "../shared/diff";
 
-type Changes = RpcOutput<typeof changesRpc>;
+// The files changes.list lists in each group.
+type Changes = Omit<RpcOutput<typeof changesRpc>, "version">;
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -211,13 +212,6 @@ export function listedFiles(read: GroupRead, filter: string): GroupRead["files"]
 // The file's diff, if the group's read could read it.
 export function diffOf(file: GroupRead["files"][number]): Diff | undefined {
   return "error" in file ? undefined : file;
-}
-
-// The diff of the file at the path in the group's read, if it has the file and could read its diff.
-export function diffIn(read: GroupRead | undefined, path: string): Diff | undefined {
-  const file = read?.files.find((other) => other.path === path);
-
-  return file === undefined ? undefined : diffOf(file);
 }
 
 // What to show once the changes are listed again, as after an action, from the lists before and

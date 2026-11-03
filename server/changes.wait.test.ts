@@ -4,11 +4,11 @@ import { setTimeout } from "node:timers/promises";
 import * as fc from "fast-check";
 import { afterEach, expect, test } from "vitest";
 
-import { waitRpc } from "../shared/changes";
+import { releaseRpc, versionRpc, waitRpc } from "../shared/changes";
 import { diffChanges, filesAndLater, writeLater } from "../test/groups";
 import { inDirectory, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { setUp } from "../test/staging";
-import { waitForChanges } from "./changes";
+import { listChanges, readVersion, releaseWaits, waitForChanges } from "./changes";
 import { readGroup } from "./groups";
 import { stopWaiting } from "./wait";
 
@@ -142,6 +142,59 @@ test(
   },
   timeout,
 );
+
+test(
+  "changes.list and changes.version answer with the version a wait answers with while the files are as they are",
+  async () => {
+    await fc.assert(
+      fc.asyncProperty(filesAndLater, async ([all, written]) => {
+        await inRepository(async (repository) => {
+          setUp(repository, all, "myers");
+          writeLater(repository, written);
+
+          const { version: listed } = await listChanges({ directory: repository });
+          const { version: now } = await readVersion({ directory: repository });
+
+          await expect(versionNow(repository)).resolves.toBe(listed);
+          expect(now).toBe(listed);
+        });
+      }),
+      { numRuns: 20, examples: diffChanges },
+    );
+  },
+  timeout,
+);
+
+test("releasing the waits from a version answers them at once, with it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+
+    const version = await versionNow(repository);
+    const waiting = waitForChanges({ directory: repository, version, timeout: 20_000 });
+
+    releaseWaits(releaseRpc.input.parse({ directory: repository, version }));
+
+    await expect(Promise.race([waiting, setTimeout(5000, "still waiting")])).resolves.toStrictEqual(
+      { version },
+    );
+  });
+}, 10_000);
+
+test("changes.version and changes.release answer the same through the RPCs' input and output validation", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+
+    const input = { directory: repository };
+    const answer = await readVersion(input);
+
+    expect(versionRpc.output.parse(await readVersion(versionRpc.input.parse(input)))).toStrictEqual(
+      answer,
+    );
+    expect(
+      releaseRpc.output.parse(releaseWaits(releaseRpc.input.parse({ ...input, version: "" }))),
+    ).toStrictEqual({});
+  });
+});
 
 test("answers the same through the RPC's input and output validation", async () => {
   await inRepository(async (repository) => {

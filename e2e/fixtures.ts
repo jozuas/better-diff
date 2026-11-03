@@ -27,6 +27,9 @@ interface App {
   saveLineLength: (length: number) => Promise<void>;
   // Has the page's window regain focus, as switching back to Paseo from another app does.
   focus: () => Promise<void>;
+  // Keeps the plugin's waits for changes from reaching the daemon, so the panel finds a change only
+  // once an action reads everything again, as in the moment before it finds one. Before openPanel.
+  holdWaits: () => Promise<void>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
@@ -39,6 +42,30 @@ interface Fixtures extends Record<"pageErrors" | "pluginLogs", void> {
   // daemon isn't left watching a directory that's gone.
   workspace: string;
   app: App;
+}
+
+const waitRequest = z.object({
+  message: z.object({
+    type: z.literal("plugin.rpc.invoke.request"),
+    pluginId: z.literal(pluginId),
+    method: z.literal("changes.wait"),
+  }),
+});
+
+// Whether what the page sends the daemon asks the plugin's server to wait for changes. Text that
+// isn't JSON doesn't.
+function isWait(message: string | Buffer): boolean {
+  const text = z.string().safeParse(message);
+
+  if (!text.success) {
+    return false;
+  }
+
+  try {
+    return waitRequest.safeParse(JSON.parse(text.data)).success;
+  } catch {
+    return false;
+  }
 }
 
 async function show(page: Page, path: string): Promise<void> {
@@ -127,6 +154,17 @@ export const test = base.extend<Fixtures>({
       focus: async () => {
         // A string, since the tests typecheck without the DOM library.
         await page.evaluate("window.dispatchEvent(new Event('focus'))");
+      },
+      holdWaits: async () => {
+        await page.routeWebSocket(/./u, (socket) => {
+          const server = socket.connectToServer();
+
+          socket.onMessage((message) => {
+            if (!isWait(message)) {
+              server.send(message);
+            }
+          });
+        });
       },
     });
   },

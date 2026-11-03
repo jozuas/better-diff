@@ -343,6 +343,24 @@ export async function changeFrom(
   return changed;
 }
 
+// Answers the waits for what `key` names from the version at once, with it, as though they were
+// over.
+export function release(key: string, version: string): void {
+  const watch = watches.get(key);
+
+  if (watch === undefined) {
+    return;
+  }
+
+  for (const waiter of watch.waiters) {
+    if (waiter.version === version) {
+      answer(watch, waiter, version);
+    }
+  }
+
+  watch.wake();
+}
+
 // Answers every wait with its own version, and stops listening, as the plugin stops.
 export function stopWaiting(): void {
   for (const watch of watches.values()) {
