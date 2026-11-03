@@ -24,8 +24,8 @@ const test = base.extend<Record<"defaultSizes", void>>({
     async ({ app, page }, provide) => {
       await provide();
       await app.openSettings();
-      await choose(page, "Diff font size", 12);
-      await choose(page, "Panel font size", 14);
+      await choose(page, "Diff font size", 13);
+      await choose(page, "Panel font size", 13);
     },
     { auto: true },
   ],
@@ -48,7 +48,7 @@ test("Better Diff's page in Paseo's settings says, by its font sizes' heading, t
   ).toBeVisible();
 });
 
-test("Better Diff's font sizes start at Paseo's defaults: 12 for the diff and 14 for the rest of the panel", async ({
+test("Better Diff's font sizes start at 13, for the diff and the rest of the panel", async ({
   app,
   page,
   repository,
@@ -57,15 +57,15 @@ test("Better Diff's font sizes start at Paseo's defaults: 12 for the diff and 14
 
   await app.openSettings();
 
-  await expect(page.getByRole("button", { name: "Diff font size: 12" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Panel font size: 14" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Diff font size: 13" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Panel font size: 13" })).toBeVisible();
 
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
 
-  await expect(line(page, "alpha")).toHaveCSS("font-size", "12px");
-  await expect(line(page, "alpha")).toHaveCSS("line-height", "18px");
-  await expect(path(page, "a.txt")).toHaveCSS("font-size", "14px");
+  await expect(line(page, "alpha")).toHaveCSS("font-size", "13px");
+  await expect(line(page, "alpha")).toHaveCSS("line-height", "20px");
+  await expect(path(page, "a.txt")).toHaveCSS("font-size", "13px");
 });
 
 test("the diff font size sets the size of the diff's lines and their numbers, each line half as tall again", async ({
@@ -83,7 +83,7 @@ test("the diff font size sets the size of the diff's lines and their numbers, ea
   await expect(line(page, "alpha")).toHaveCSS("font-size", "16px");
   await expect(line(page, "alpha")).toHaveCSS("line-height", "24px");
   await expect(line(page, "1")).toHaveCSS("font-size", "16px");
-  await expect(path(page, "a.txt")).toHaveCSS("font-size", "14px");
+  await expect(path(page, "a.txt")).toHaveCSS("font-size", "13px");
 });
 
 test("the panel font size sets the size of the rest of the panel, its smaller text and the files' icons scaled with it", async ({
@@ -112,7 +112,7 @@ test("the panel font size sets the size of the rest of the panel, its smaller te
       return icon;
     })
     .toMatchObject({ width: 21, height: 21 });
-  await expect(line(page, "alpha")).toHaveCSS("font-size", "12px");
+  await expect(line(page, "alpha")).toHaveCSS("font-size", "13px");
 });
 
 test("a size chosen on one client of the host shows at once in a Better Diff panel open on another", async ({
@@ -128,7 +128,7 @@ test("a size chosen on one client of the host shows at once in a Better Diff pan
 
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
-  await expect(line(page, "alpha")).toHaveCSS("font-size", "12px");
+  await expect(line(page, "alpha")).toHaveCSS("font-size", "13px");
 
   const other = await page.context().newPage();
 

@@ -10,12 +10,12 @@ function valid(values: Record<string, number>): boolean {
 // Halfway between two whole sizes.
 const fraction = fc.integer({ min: 0, max: 30 }).map((size) => size + 0.5);
 
-test("without a document, diffs show in the auto style with room for lines of 80 characters, and the font sizes are Paseo's defaults: 12 for the diff and 14 for the rest of the panel", () => {
+test("without a document, diffs show in the auto style with room for lines of 80 characters, and the font sizes are 13, for the diff and the rest of the panel", () => {
   expect(viewSettings.schema.parse({})).toStrictEqual({
     diffStyle: "auto",
     lineLength: 80,
-    diffFontSize: 12,
-    panelFontSize: 14,
+    diffFontSize: 13,
+    panelFontSize: 13,
   });
 });
 
@@ -51,7 +51,7 @@ test("the panel font size takes each whole size Paseo's interface size does, 10 
     fc.property(fc.integer({ min: 10, max: 21 }), (panelFontSize) => {
       expect(viewSettings.schema.parse({ panelFontSize })).toMatchObject({
         panelFontSize,
-        diffFontSize: 12,
+        diffFontSize: 13,
       });
     }),
     { examples: [[10], [21]] },
@@ -74,7 +74,7 @@ test("the diff font size takes each whole size Paseo's code size does, 9 to 22, 
   fc.assert(
     fc.property(fc.integer({ min: 9, max: 22 }), (diffFontSize) => {
       expect(viewSettings.schema.parse({ diffFontSize })).toMatchObject({
-        panelFontSize: 14,
+        panelFontSize: 13,
         diffFontSize,
       });
     }),

@@ -7,11 +7,11 @@ interface Range {
   default: number;
 }
 
-// The sizes Paseo's own font sizes take, and its defaults: the diff's as its code size, the rest of
-// the panel's as its interface size.
+// The sizes Paseo's own font sizes take, the diff's as its code size and the rest of the panel's as its
+// interface size, and the ones Better Diff's start at.
 export const fontSizeRanges = {
-  panel: { min: 10, max: 21, default: 14 },
-  diff: { min: 9, max: 22, default: 12 },
+  panel: { min: 10, max: 21, default: 13 },
+  diff: { min: 9, max: 22, default: 13 },
 } satisfies Record<string, Range>;
 
 // The line lengths the settings take, in characters, and the one they start at.

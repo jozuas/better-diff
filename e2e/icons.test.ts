@@ -65,9 +65,9 @@ test("a file's icon keeps its size however narrow the file list is", async ({
 
   await dragBy(page, separator, 200);
   await expect(separator).toHaveAttribute("aria-valuenow", "480");
-  expect(await box(icon)).toMatchObject({ width: 16, height: 16 });
+  expect(await box(icon)).toMatchObject({ width: 15, height: 15 });
 
   await dragBy(page, separator, -300);
   await expect(separator).toHaveAttribute("aria-valuenow", "180");
-  expect(await box(icon)).toMatchObject({ width: 16, height: 16 });
+  expect(await box(icon)).toMatchObject({ width: 15, height: 15 });
 });

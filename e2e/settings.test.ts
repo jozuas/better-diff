@@ -18,7 +18,7 @@ const test = base.extend<Record<"defaultSettings", void>>({
       await provide();
       await app.pickDiffStyle("Auto");
       await app.saveLineLength(80);
-      await pickDiffFontSize(page, 12);
+      await pickDiffFontSize(page, 13);
     },
     { auto: true },
   ],
@@ -26,9 +26,9 @@ const test = base.extend<Record<"defaultSettings", void>>({
 
 changesSettings();
 
-// At the diff font size's default, 12 pixels, wide enough that every line length up to 80
+// At the diff font size's default, 13 pixels, wide enough that every line length up to 80
 // characters fits on each side, and narrow enough that none from 40 does.
-const wide = { width: 1920, height: 720 };
+const wide = { width: 2048, height: 720 };
 const narrow = { width: 1280, height: 720 };
 
 // Commits `a.txt`, then changes the line after an unchanged one.

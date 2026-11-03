@@ -17,8 +17,8 @@ const read: ViewValues = {
 const defaults: ViewValues = {
   diffStyle: "auto",
   lineLength: 80,
-  diffFontSize: 12,
-  panelFontSize: 14,
+  diffFontSize: 13,
+  panelFontSize: 13,
 };
 
 // What saves the settings, answering whether the host saved them.
