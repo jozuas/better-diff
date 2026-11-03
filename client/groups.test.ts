@@ -7,16 +7,15 @@ import { filePath } from "../test/file-names";
 import {
   diffIn,
   diffOf,
+  firstFile,
   groups,
   isGroupOpen,
   isOpen,
   isShown,
   listedFiles,
-  measured,
   openAfter,
   placeholder,
   sidebarGroups,
-  tallest,
   toggled,
 } from "./groups";
 import type { GroupName, OpenFile, OpenGroup } from "./groups";
@@ -103,6 +102,25 @@ test.each(["modified", "untracked", "staged"] as const)(
 
 test("says nothing in place of a diff until the changes are listed", () => {
   expect(placeholder()).toBe("");
+});
+
+test("opens a modified file first, or else an untracked one, or else a staged one", () => {
+  expect(firstFile({ modified: ["b", "a"], untracked: ["c"], staged: ["d"] })).toStrictEqual({
+    group: "modified",
+    path: "b",
+  });
+  expect(firstFile({ modified: [], untracked: ["c", "a"], staged: ["d"] })).toStrictEqual({
+    group: "untracked",
+    path: "c",
+  });
+  expect(firstFile({ modified: [], untracked: [], staged: ["d", "a"] })).toStrictEqual({
+    group: "staged",
+    path: "d",
+  });
+});
+
+test("opens no file while no group lists one", () => {
+  expect(firstFile({ modified: [], untracked: [], staged: [] })).toBeUndefined();
 });
 
 test("a file is open only in the group it was opened from, under its own path", () => {
@@ -199,6 +217,17 @@ const changes = fc.record({
 
 const groupName = fc.constantFrom<GroupName>("modified", "untracked", "staged");
 
+test("opens the first file of the first group the sidebar lists one in", () => {
+  fc.assert(
+    fc.property(changes, groupName, filePath, (listed, group, path) => {
+      const some = { ...listed, [group]: [path, ...listed[group]] };
+      const first = sidebarGroups(some).find(({ paths }) => paths.length > 0);
+
+      expect(firstFile(some)).toStrictEqual({ group: first?.name, path: first?.paths[0] });
+    }),
+  );
+});
+
 test("opens a file the open one's group lists after the action, if it lists any", () => {
   fc.assert(
     fc.property(
@@ -280,54 +309,6 @@ test("finds the diff of a file of a group's read, unless the read couldn't read 
   expect(diffIn(read, "c")).toBeUndefined();
   expect(diffIn(undefined, "a")).toBeUndefined();
   expect(diffOf({ path: "b", error: "unreadable" })).toBeUndefined();
-});
-
-// Bars measured one after another, by their files' paths, some more than once.
-const measures = fc.array(fc.tuple(fc.constantFrom("a", "b", "c", "d"), fc.nat()));
-
-function measuredAll(all: readonly (readonly [string, number])[]): ReadonlyMap<string, number> {
-  let heights: ReadonlyMap<string, number> = new Map();
-
-  for (const [path, height] of all) {
-    heights = measured(heights, path, height);
-  }
-
-  return heights;
-}
-
-test("keeps the height each file's bar was measured at last", () => {
-  fc.assert(
-    fc.property(measures, (all) => {
-      const heights = measuredAll(all);
-
-      for (const path of ["a", "b", "c", "d"]) {
-        expect(heights.get(path)).toBe(all.findLast(([other]) => other === path)?.[1]);
-      }
-    }),
-  );
-});
-
-test("keeps the same heights when a bar is measured at the height it has", () => {
-  const heights = measured(new Map(), "a", 20);
-
-  expect(measured(heights, "a", 20)).toBe(heights);
-  expect(measured(heights, "a", 21)).not.toBe(heights);
-});
-
-test("makes the bars of the files listed as tall as the tallest of them, ignoring others'", () => {
-  fc.assert(
-    fc.property(measures, fc.subarray(["a", "b", "c", "d"]), (all, paths) => {
-      const heights = measuredAll(all);
-      const listed = [...heights].filter(([path]) => paths.includes(path));
-      const height = tallest(heights, paths);
-
-      expect([0, ...new Map(listed).values()]).toContain(height);
-
-      for (const [, other] of listed) {
-        expect(height).toBeGreaterThanOrEqual(other);
-      }
-    }),
-  );
 });
 
 test("collapses each group whose triangle is pressed an odd number of times, and expands the others", () => {

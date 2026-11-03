@@ -8,13 +8,14 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import { measured, tallest } from "./bar-heights";
 import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
 import { DiffLayout } from "./diff-layout";
 import type { Layout } from "./diff-style";
 import { FileBar } from "./file-diff";
 import { FontSizesContext } from "./fonts";
-import { diffOf, listedFiles, measured, tallest } from "./groups";
+import { diffOf, listedFiles } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
 import { fileId, rangeIn } from "./selection";

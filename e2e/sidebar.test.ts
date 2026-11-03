@@ -17,6 +17,21 @@ function status(repository: string): string {
   return runGit(repository, ["status", "--porcelain", "--untracked-files=all"]);
 }
 
+test("opening Better Diff opens the first file the sidebar lists, without a click", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+  writeFile(repository, "c.txt", "c\n");
+  runGit(repository, ["add", "c.txt"]);
+
+  await app.openPanel();
+
+  await expect(page.getByRole("heading", { name: "MODIFIED a.txt" })).toBeVisible();
+  await expect(line(page, "changed a")).toBeVisible();
+});
+
 test("a file's actions show at the end of its row while the pointer is over it, and always on the open file's", async ({
   app,
   page,
@@ -25,9 +40,9 @@ test("a file's actions show at the end of its row while the pointer is over it, 
   changeTwo(repository);
 
   await app.openPanel();
-  await expect(button(page, "Stage a.txt")).toHaveCSS("opacity", "0");
-  await row(page, "MODIFIED FILES (2)", "a.txt").hover();
-  await expect(button(page, "Stage a.txt")).toHaveCSS("opacity", "1");
+  await expect(button(page, "Stage b.txt")).toHaveCSS("opacity", "0");
+  await row(page, "MODIFIED FILES (2)", "b.txt").hover();
+  await expect(button(page, "Stage b.txt")).toHaveCSS("opacity", "1");
   await openFile(page, "MODIFIED FILES (2)", "b.txt");
   await page.mouse.move(0, 0);
 

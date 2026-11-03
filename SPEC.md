@@ -49,6 +49,7 @@ Replicates Sublime Merge as much as possible:
 ### File sidebar (left)
 
 - Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
+- Opening Better Diff opens the first file the sidebar lists, without a click: the first modified file, or else the first untracked one, or else the first staged one. With no changes it opens none, and a file changed after that waits for a click.
 - Group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row and on one under the pointer or with focus in it.
 - A triangle left of each group's heading collapses the group, hiding its files, and expands it again: it points right while the group is collapsed and down while it's expanded. Groups start expanded.
 - Clicking a group shows the diffs of all its files in one scrollable view, instead of file by file. Each file's bar is a sticky header, so you always know which file you're looking at. While the filter hides some of the group's files, it shows only those it lists.

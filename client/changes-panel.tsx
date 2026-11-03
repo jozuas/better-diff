@@ -30,7 +30,7 @@ import { DiffView } from "./diff-view";
 import { FileList } from "./file-list";
 import { fontSizes, FontSizesContext } from "./fonts";
 import type { FontSizes } from "./fonts";
-import { diffIn, groups, openAfter, placeholder, sidebarGroups } from "./groups";
+import { diffIn, firstFile, groups, openAfter, placeholder, sidebarGroups } from "./groups";
 import type { GroupName, OpenFile, OpenGroup } from "./groups";
 import { Queried } from "./queried";
 import { defaultWidth, fileListWidth } from "./resize";
@@ -246,6 +246,13 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   });
 
   const changes = useQuery(changesQuery);
+  const [listed, setListed] = useState(false);
+
+  if (!listed && changes.data !== undefined) {
+    setListed(true);
+    setOpen(firstFile(changes.data));
+  }
+
   const diffs = useDiffQueries(directory);
   const fileList = useId();
   const { width, onLayout, onResize, onResized, onFit } = useFileListWidth(tab, fileList);

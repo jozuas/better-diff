@@ -91,6 +91,13 @@ export interface OpenGroup {
   path?: undefined;
 }
 
+// The file the sidebar lists first, which opens once the changes are first listed, if any are.
+export function firstFile(changes: Changes): OpenFile | undefined {
+  const [first] = order.flatMap((group) => changes[group].map((path) => ({ group, path })));
+
+  return first;
+}
+
 export function isOpen(
   open: OpenFile | OpenGroup | undefined,
   group: GroupName,
@@ -128,22 +135,6 @@ export function diffIn(read: GroupRead | undefined, path: string): Diff | undefi
   const file = read?.files.find((other) => other.path === path);
 
   return file === undefined ? undefined : diffOf(file);
-}
-
-// The heights of the files' bars by their paths, once the bar of the file at the path is measured:
-// the same heights if they have its height already.
-export function measured(
-  heights: ReadonlyMap<string, number>,
-  path: string,
-  height: number,
-): ReadonlyMap<string, number> {
-  return heights.get(path) === height ? heights : new Map(heights).set(path, height);
-}
-
-// The height of the tallest of the bars of the files at the paths, by their heights, or 0 if none
-// has been measured.
-export function tallest(heights: ReadonlyMap<string, number>, paths: readonly string[]): number {
-  return Math.max(0, ...paths.map((path) => heights.get(path) ?? 0));
 }
 
 // What to show once the changes are listed again, as after an action, from the lists before and

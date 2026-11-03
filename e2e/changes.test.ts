@@ -77,11 +77,11 @@ test("group headings are in the theme's text colour, and files' paths dimmed fro
   expect(paseos.opacity).not.toBe("1");
   await expect(heading).toHaveCSS("color", paseos.color);
   await expect(heading).toHaveCSS("opacity", "1");
-  await expect(path("b.txt")).toHaveCSS("color", paseos.color);
-  await expect(path("b.txt")).toHaveCSS("opacity", paseos.opacity);
+  await expect(path("c.txt")).toHaveCSS("color", paseos.color);
+  await expect(path("c.txt")).toHaveCSS("opacity", paseos.opacity);
 
-  await row(page, "UNTRACKED FILES (3)", "b.txt").hover();
-  await expect(path("b.txt")).toHaveCSS("opacity", "1");
+  await row(page, "UNTRACKED FILES (3)", "c.txt").hover();
+  await expect(path("c.txt")).toHaveCSS("opacity", "1");
 
   await openFile(page, "UNTRACKED FILES (3)", "c.txt");
   await row(page, "UNTRACKED FILES (3)", "d.txt")
