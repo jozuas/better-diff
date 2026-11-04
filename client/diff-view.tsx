@@ -1,31 +1,20 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import { useSettings } from "@getpaseo/plugin/client";
-import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useContext, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
-import { viewSettings } from "../shared/settings";
 import type { Controls } from "./actions";
 import type { Layout } from "./diff-style";
 import { FileDiff } from "./file-diff";
 import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
 import type { GroupName, Open, OpenFile } from "./groups";
-import { viewSettingsOf } from "./settings";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
 type GroupRead = RpcOutput<typeof groupRpc>;
-
-// How diffs show, as the host's settings say. Undefined until the host says.
-function useLayout(): Layout | undefined {
-  const toast = useToast();
-
-  return viewSettingsOf(useSettings(viewSettings), toast.error)?.values;
-}
 
 interface ShownDiffProps {
   open: Open;
@@ -100,7 +89,7 @@ function ShownDiff({
   );
 }
 
-interface DiffViewProps extends Omit<ShownDiffProps, "layout" | "open"> {
+interface DiffViewProps extends Omit<ShownDiffProps, "open"> {
   open: Open | undefined;
   // What shows while nothing is open.
   placeholder: string;
@@ -109,7 +98,6 @@ interface DiffViewProps extends Omit<ShownDiffProps, "layout" | "open"> {
 // The open file's diff, or the diffs of the files the open group lists or of the files selected,
 // shown as the host's settings say.
 export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactElement {
-  const layout = useLayout();
   const fonts = useContext(FontSizesContext);
 
   const styles = useMemo(
@@ -124,5 +112,5 @@ export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactE
     return <Text style={styles.hint}>{placeholder}</Text>;
   }
 
-  return layout === undefined ? <Loading /> : <ShownDiff open={open} layout={layout} {...shown} />;
+  return <ShownDiff open={open} {...shown} />;
 }

@@ -3,7 +3,7 @@ import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/clie
 import { useRpc, useSettings, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -17,16 +17,18 @@ import {
   groupRpc,
 } from "../shared/diff";
 import { viewSettings } from "../shared/settings";
+import type { ViewValues } from "../shared/settings";
 import type { Controls } from "./actions";
 import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
+import type { Layout } from "./diff-style";
 import { DiffView } from "./diff-view";
 import { fontSizes, FontSizesContext } from "./fonts";
-import type { FontSizes } from "./fonts";
 import { firstFile, groups, openAfter, placeholder } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
+import { viewSettingsOf } from "./settings";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
 import { SyntaxColorsProvider } from "./syntax-colors";
@@ -204,23 +206,38 @@ function useOpen(changes: Listed | undefined) {
   return [open, setOpen] as const;
 }
 
-// The sizes the font size settings set, or their defaults until they're read, or if they can't be.
-function useSettingsFontSizes(): FontSizes {
-  const settings = useSettings(viewSettings);
+interface FontSizesProviderProps {
+  settings: ViewValues;
+  children: ReactNode;
+}
 
-  const { panelFontSize, diffFontSize } =
-    settings.status === "ready" ? settings.values : viewSettings.schema.parse({});
+// Gives what's in it the sizes the font size settings set.
+function FontSizesProvider({ settings, children }: FontSizesProviderProps): ReactElement {
+  const { panelFontSize, diffFontSize } = settings;
 
-  return useMemo(() => fontSizes({ panelFontSize, diffFontSize }), [panelFontSize, diffFontSize]);
+  const sizes = useMemo(
+    () => fontSizes({ panelFontSize, diffFontSize }),
+    [panelFontSize, diffFontSize],
+  );
+
+  return <FontSizesContext value={sizes}>{children}</FontSizesContext>;
+}
+
+// The settings once they're read.
+function useViewValues(): ViewValues | undefined {
+  const toast = useToast();
+
+  return viewSettingsOf(useSettings(viewSettings), toast.error)?.values;
 }
 
 interface ChangesProps {
   directory: string;
+  layout: Layout;
   tab: PluginTab;
   theme: PluginTheme;
 }
 
-function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
+function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("");
@@ -306,6 +323,7 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
           <DiffView
             open={open}
             placeholder={placeholder(changes.data)}
+            layout={layout}
             fileQuery={diffs.query}
             groupQuery={diffs.groupQuery}
             filter={filter}
@@ -318,20 +336,21 @@ function Changes({ directory, tab, theme }: ChangesProps): ReactElement {
   );
 }
 
-// The workspace's changed files, and the diff of the one opened.
+// The workspace's changed files, and the diff of the one opened, shown as the host's settings say
+// once it says.
 export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelProps): ReactElement {
   const directory = useWorkspace(workspaceId, (workspace) => workspace.directory);
-  const sizes = useSettingsFontSizes();
+  const settings = useViewValues();
 
-  if (directory === null) {
+  if (directory === null || settings === undefined) {
     return <Loading />;
   }
 
   return (
-    <FontSizesContext value={sizes}>
+    <FontSizesProvider settings={settings}>
       <SyntaxColorsProvider theme={theme}>
-        <Changes directory={directory} tab={tab} theme={theme} />
+        <Changes directory={directory} layout={settings} tab={tab} theme={theme} />
       </SyntaxColorsProvider>
-    </FontSizesContext>
+    </FontSizesProvider>
   );
 }
