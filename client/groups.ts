@@ -96,14 +96,14 @@ interface OpenGroup {
 // a group's files do: two or more, from the one the selection starts at to the one it reaches.
 export interface OpenFiles {
   group: GroupName;
-  paths: readonly string[];
+  paths: string[];
   path?: undefined;
 }
 
 export type Open = OpenFile | OpenGroup | OpenFiles;
 
 // The file the sidebar lists first, which opens once the changes are first listed, if any are.
-export function firstFile(changes: Changes): OpenFile | undefined {
+function firstFile(changes: Changes): OpenFile | undefined {
   const [first] = order.flatMap((group) => changes[group].map((path) => ({ group, path })));
 
   return first;
@@ -214,21 +214,9 @@ export function diffOf(file: GroupRead["files"][number]): Diff | undefined {
   return "error" in file ? undefined : file;
 }
 
-// What to show once the changes are listed again, as after an action, from the lists before and
-// after: the open group, or the open file or those of the files selected that its group still
-// lists. Otherwise the next file in the group's list before that it still lists, after the last of
-// them, or else the closest one before it, or else the first one it lists now. None if it lists
-// none, or nothing was open, and what was open without both lists.
-export function openAfter(
-  open: Open | undefined,
-  before: Changes | undefined,
-  after?: Changes,
-): Open | undefined {
-  if (open === undefined || before === undefined || after === undefined) {
-    return open;
-  }
-
-  const listed = after[open.group];
+// What's open of what was, once its group lists the files: the group, or the open file or all the
+// files selected while it lists them, or else those of them it lists. None if it lists none of them.
+function stillOpen(open: Open, listed: readonly string[]): Open | undefined {
   const paths = openPaths(open);
   const kept = paths.filter((path) => listed.includes(path));
 
@@ -238,12 +226,51 @@ export function openAfter(
 
   const [first, ...rest] = kept;
 
-  if (first !== undefined) {
-    return rest.length === 0
-      ? { group: open.group, path: first }
-      : { group: open.group, paths: kept };
+  if (first === undefined) {
+    return undefined;
   }
 
+  return rest.length === 0
+    ? { group: open.group, path: first }
+    : { group: open.group, paths: kept };
+}
+
+// What opens once the changes are first listed, from what the tab showed before Paseo reloaded:
+// what's still open of it, or else the first file listed, as when nothing was shown.
+function reopened(shown: Open | undefined, changes: Changes): Open | undefined {
+  return (
+    (shown === undefined ? undefined : stillOpen(shown, changes[shown.group])) ?? firstFile(changes)
+  );
+}
+
+// What to show once the changes are listed, from what was open and the lists before, if they were
+// listed before, and after. Once they're first listed, what's still open of what the tab showed
+// before Paseo reloaded, or else the first file listed. After that, as after an action, the open
+// group, or the open file or those of the files selected that its group still lists. Otherwise the
+// next file in the group's list before that it still lists, after the last of them, or else the
+// closest one before it, or else the first one it lists now. None if it lists none, or nothing was
+// open.
+export function openAfter(
+  open: Open | undefined,
+  before: Changes | undefined,
+  after: Changes,
+): Open | undefined {
+  if (before === undefined) {
+    return reopened(open, after);
+  }
+
+  if (open === undefined) {
+    return undefined;
+  }
+
+  const listed = after[open.group];
+  const kept = stillOpen(open, listed);
+
+  if (kept !== undefined) {
+    return kept;
+  }
+
+  const paths = openPaths(open);
   const previous = before[open.group];
   const last = Math.max(...paths.map((path) => previous.indexOf(path)));
 

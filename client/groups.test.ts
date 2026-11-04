@@ -7,7 +7,6 @@ import { changes, groupName, modified } from "../test/changes";
 import { filePath } from "../test/file-names";
 import {
   diffOf,
-  firstFile,
   groups,
   isGroupOpen,
   isOpen,
@@ -104,23 +103,31 @@ test("says nothing in place of a diff until the changes are listed", () => {
   expect(placeholder()).toBe("");
 });
 
-test("opens a modified file first, or else an untracked one, or else a staged one", () => {
-  expect(firstFile({ modified: ["b", "a"], untracked: ["c"], staged: ["d"] })).toStrictEqual({
+test("once the changes are first listed, opens a modified file first, or else an untracked one, or else a staged one", () => {
+  expect(
+    openAfter(undefined, undefined, { modified: ["b", "a"], untracked: ["c"], staged: ["d"] }),
+  ).toStrictEqual({
     group: "modified",
     path: "b",
   });
-  expect(firstFile({ modified: [], untracked: ["c", "a"], staged: ["d"] })).toStrictEqual({
+  expect(
+    openAfter(undefined, undefined, { modified: [], untracked: ["c", "a"], staged: ["d"] }),
+  ).toStrictEqual({
     group: "untracked",
     path: "c",
   });
-  expect(firstFile({ modified: [], untracked: [], staged: ["d", "a"] })).toStrictEqual({
+  expect(
+    openAfter(undefined, undefined, { modified: [], untracked: [], staged: ["d", "a"] }),
+  ).toStrictEqual({
     group: "staged",
     path: "d",
   });
 });
 
-test("opens no file while no group lists one", () => {
-  expect(firstFile({ modified: [], untracked: [], staged: [] })).toBeUndefined();
+test("once the changes are first listed, opens no file while no group lists one", () => {
+  expect(
+    openAfter(undefined, undefined, { modified: [], untracked: [], staged: [] }),
+  ).toBeUndefined();
 });
 
 test("a file is open only in the group it was opened from, under its own path", () => {
@@ -198,20 +205,16 @@ test("opens no file when none was open", () => {
   expect(openAfter(undefined, modified("a"), modified("a", "b"))).toBeUndefined();
 });
 
-test("stays on the open file without the list of changes from before or after the action", () => {
-  const open: OpenFile = { group: "modified", path: "a" };
-
-  expect(openAfter(open, modified("a"))).toBe(open);
-  expect(openAfter(open, undefined, modified("b"))).toBe(open);
-});
-
-test("opens the first file of the first group the sidebar lists one in", () => {
+test("once the changes are first listed, opens the first file of the first group the sidebar lists one in", () => {
   fc.assert(
     fc.property(changes, groupName, filePath, (listed, group, path) => {
       const some = { ...listed, [group]: [path, ...listed[group]] };
       const first = sidebarGroups(some).find(({ paths }) => paths.length > 0);
 
-      expect(firstFile(some)).toStrictEqual({ group: first?.name, path: first?.paths[0] });
+      expect(openAfter(undefined, undefined, some)).toStrictEqual({
+        group: first?.name,
+        path: first?.paths[0],
+      });
     }),
   );
 });
@@ -242,12 +245,12 @@ test("opens no file once the open one's group lists none", () => {
   );
 });
 
-test("stays on the open group whatever the changes listed before and after an action", () => {
+test("stays on the open group whatever the changes listed before and after an action, or once they're first listed", () => {
   fc.assert(
     fc.property(
       groupName,
       fc.option(changes, { nil: undefined }),
-      fc.option(changes, { nil: undefined }),
+      changes,
       (group, before, after) => {
         const open: Open = { group };
 

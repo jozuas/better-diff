@@ -1,9 +1,9 @@
 import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { useRpc, useSettings, useWorkspace } from "@getpaseo/plugin/client";
+import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
@@ -24,14 +24,16 @@ import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
 import type { Layout } from "./diff-style";
 import { DiffView } from "./diff-view";
-import { fontSizes, FontSizesContext } from "./fonts";
-import { firstFile, groups, openAfter, placeholder } from "./groups";
+import { FontSizesProvider } from "./font-sizes";
+import { groups, openAfter, placeholder, toggled } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { viewSettingsOf } from "./settings";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
+import type { SidebarState } from "./sidebar";
 import { SyntaxColorsProvider } from "./syntax-colors";
+import { startingTab, tabState } from "./tab-state";
 import { clearSelection } from "./text-selection";
 import { useLatest } from "./web";
 import { useWindowFocus } from "./window-focus";
@@ -177,14 +179,15 @@ function useRefreshOnChanges(
   }, [directory, read, wait, release, refresh, first]);
 }
 
-// What's open, moved on from the open file whenever the changes are listed again and its group no
-// longer lists it, as after an action on it or an agent's change: past a hunk acted on, the next
-// one is where it was.
-function useOpen(changes: Listed | undefined) {
-  const [open, setOpen] = useState<Open>();
-  const [listed, setListed] = useState(changes);
+// What's open, from what the tab kept: once the changes are first listed, what's still open of it,
+// or else the first file listed, and after that, moved on from the open file whenever the changes
+// are listed again and its group no longer lists it, as after an action on it or an agent's change:
+// past a hunk acted on, the next one is where it was.
+function useOpen(kept: Open | undefined, changes: Listed | undefined) {
+  const [open, setOpen] = useState(kept);
+  const [listed, setListed] = useState<Listed>();
 
-  if (changes !== listed) {
+  if (changes !== undefined && changes !== listed) {
     setListed(changes);
     setOpen(openAfter(open, listed, changes));
   }
@@ -192,21 +195,32 @@ function useOpen(changes: Listed | undefined) {
   return [open, setOpen] as const;
 }
 
-interface FontSizesProviderProps {
-  settings: ViewValues;
-  children: ReactNode;
-}
+// What the sidebar shows, as the tab kept it before Paseo reloaded, if it did, and kept in the tab
+// whenever it changes, so that the tab shows it again once Paseo reloads.
+function useSidebarState(tab: PluginTab, changes: Listed | undefined): SidebarState {
+  const [kept, keep] = useTabState(tab, tabState, startingTab);
+  const [open, setOpen] = useOpen(kept.open ?? undefined, changes);
+  const [filter, setFilter] = useState(kept.filter);
+  const [collapsed, setCollapsed] = useState(kept.collapsed);
+  const [width, setWidth] = useState(kept.fileListWidth);
+  const latestKeep = useLatest(keep);
 
-// Gives what's in it the sizes the font size settings set.
-function FontSizesProvider({ settings, children }: FontSizesProviderProps): ReactElement {
-  const { panelFontSize, diffFontSize } = settings;
+  useEffect(() => {
+    latestKeep.current({ fileListWidth: width, open: open ?? null, collapsed, filter });
+  }, [latestKeep, width, open, collapsed, filter]);
 
-  const sizes = useMemo(
-    () => fontSizes({ panelFontSize, diffFontSize }),
-    [panelFontSize, diffFontSize],
-  );
-
-  return <FontSizesContext value={sizes}>{children}</FontSizesContext>;
+  return {
+    open,
+    onOpen: setOpen,
+    filter,
+    onFilter: setFilter,
+    collapsed,
+    onToggle: (group) => {
+      setCollapsed((current) => toggled(current, group));
+    },
+    width,
+    onWidth: setWidth,
+  };
 }
 
 // The settings once they're read.
@@ -226,7 +240,6 @@ interface ChangesProps {
 function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
-  const [filter, setFilter] = useState("");
 
   const changes = useQuery({
     queryKey: [directory, "changes"],
@@ -237,14 +250,7 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
     },
   });
 
-  const [open, setOpen] = useOpen(changes.data);
-  const [listed, setListed] = useState(false);
-
-  if (!listed && changes.data !== undefined) {
-    setListed(true);
-    setOpen(firstFile(changes.data));
-  }
-
+  const sidebar = useSidebarState(tab, changes.data);
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const diffs = useDiffQueries(directory);
@@ -298,26 +304,22 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
       }}
     >
       <Sidebar
+        {...sidebar}
         directory={directory}
         changes={changes}
-        open={open}
-        onOpen={setOpen}
-        filter={filter}
-        onFilter={setFilter}
         controls={controls}
         panelWidth={panelWidth}
-        tab={tab}
         theme={theme}
       />
       <View style={styles.diff}>
         <ShownDiffsContext value={shownDiffs}>
           <DiffView
-            open={open}
+            open={sidebar.open}
             placeholder={placeholder(changes.data)}
             layout={layout}
             fileQuery={diffs.query}
             groupQuery={diffs.groupQuery}
-            filter={filter}
+            filter={sidebar.filter}
             controls={controls}
             theme={theme}
           />

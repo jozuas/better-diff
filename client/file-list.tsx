@@ -9,7 +9,6 @@ import type { CopyItem } from "./copy";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { GroupSection } from "./group-section";
-import { toggled } from "./groups";
 import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
 import type { Point } from "./menu";
 
@@ -26,6 +25,9 @@ interface FileListProps {
   // What the groups' files are filtered by.
   filter: string;
   onFilter: (filter: string) => void;
+  // The groups whose files are hidden, and what collapses a group, or expands it if it's collapsed.
+  collapsed: readonly GroupName[];
+  onToggle: (group: GroupName) => void;
   controls: Controls;
   // Copies what a file's menu item names of the file at the path.
   onCopy: (item: CopyItem, path: string) => void;
@@ -43,12 +45,13 @@ export function FileList({
   onOpenGroup,
   filter,
   onFilter,
+  collapsed,
+  onToggle,
   controls,
   onCopy,
   theme,
 }: FileListProps): ReactElement {
   const [menu, setMenu] = useState<{ path: string; point: Point }>();
-  const [collapsed, setCollapsed] = useState<GroupName[]>([]);
 
   return (
     <View style={styles.fileList}>
@@ -65,7 +68,7 @@ export function FileList({
             }}
             expanded={!collapsed.includes(group.name)}
             onToggle={() => {
-              setCollapsed((shown) => toggled(shown, group.name));
+              onToggle(group.name);
             }}
             onMenu={(path, point) => {
               setMenu({ path, point });

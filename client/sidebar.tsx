@@ -1,13 +1,11 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { PluginTab } from "@getpaseo/plugin/client";
-import { useRpc, useTabState } from "@getpaseo/plugin/client";
+import { useRpc } from "@getpaseo/plugin/client";
 import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useId, useState } from "react";
 import { View } from "react-native";
-import { z } from "zod";
 
 import type { changesRpc } from "../shared/changes";
 import { contentsRpc } from "../shared/contents";
@@ -16,14 +14,28 @@ import { copy } from "./copy";
 import type { CopyItem } from "./copy";
 import { FileList } from "./file-list";
 import { sidebarGroups } from "./groups";
-import type { Open } from "./groups";
+import type { GroupName, Open } from "./groups";
 import { Queried } from "./queried";
-import { defaultWidth, fileListWidth } from "./resize";
+import { fileListWidth } from "./resize";
 import { Separator } from "./separator";
 import { fittingWidth } from "./web";
 
-// What the panel keeps of each tab across reloads.
-const tabState = z.object({ fileListWidth: z.number() });
+type Listed = RpcOutput<typeof changesRpc>;
+
+// What the sidebar shows, which the panel keeps in its tab.
+export interface SidebarState {
+  open: Open | undefined;
+  onOpen: (open: Open) => void;
+  // What the files are filtered by.
+  filter: string;
+  onFilter: (filter: string) => void;
+  // The groups whose files are hidden, and what collapses a group, or expands it if it's collapsed.
+  collapsed: readonly GroupName[];
+  onToggle: (group: GroupName) => void;
+  // The file list's width as it was last let go of, and what hears it each time it's let go.
+  width: number;
+  onWidth: (width: number) => void;
+}
 
 // Copies what a file's menu item names of the file at the path, and says why where it copies
 // nothing.
@@ -52,15 +64,19 @@ function useCopy(directory: string): (item: CopyItem, path: string) => void {
   };
 }
 
-// The file list's width, as its separator is dragged, or fit to what the list with the id shows,
-// kept for the tab once it's let go, and no wider than the panel's width leaves room for.
-function useFileListWidth(tab: PluginTab, id: string, panel: number) {
-  const [saved, save] = useTabState(tab, tabState, { fileListWidth: defaultWidth });
-  const [wanted, setWanted] = useState(saved.fileListWidth);
+// The file list's width, from the one kept, as its separator is dragged, or fit to what the list
+// with the id shows, kept once it's let go, and no wider than the panel's width leaves room for.
+function useFileListWidth(
+  kept: number,
+  onKept: (width: number) => void,
+  id: string,
+  panel: number,
+) {
+  const [wanted, setWanted] = useState(kept);
 
   function onResized(width: number): void {
     setWanted(fileListWidth(width, panel));
-    save({ fileListWidth: fileListWidth(width, panel) });
+    onKept(fileListWidth(width, panel));
   }
 
   return {
@@ -73,18 +89,12 @@ function useFileListWidth(tab: PluginTab, id: string, panel: number) {
   };
 }
 
-interface SidebarProps {
+interface SidebarProps extends SidebarState {
   directory: string;
-  changes: UseQueryResult<RpcOutput<typeof changesRpc>>;
-  open: Open | undefined;
-  onOpen: (open: Open) => void;
-  // What the files are filtered by.
-  filter: string;
-  onFilter: (filter: string) => void;
+  changes: UseQueryResult<Listed>;
   controls: Controls;
   // How wide the panel it's in is.
   panelWidth: number;
-  tab: PluginTab;
   theme: PluginTheme;
 }
 
@@ -96,14 +106,23 @@ export function Sidebar({
   onOpen,
   filter,
   onFilter,
+  collapsed,
+  onToggle,
+  width: kept,
+  onWidth,
   controls,
   panelWidth,
-  tab,
   theme,
 }: SidebarProps): ReactElement {
   const fileList = useId();
-  const { width, onResize, onResized, onFit } = useFileListWidth(tab, fileList, panelWidth);
   const onCopy = useCopy(directory);
+
+  const { width, onResize, onResized, onFit } = useFileListWidth(
+    kept,
+    onWidth,
+    fileList,
+    panelWidth,
+  );
 
   return (
     <>
@@ -119,6 +138,8 @@ export function Sidebar({
               }}
               filter={filter}
               onFilter={onFilter}
+              collapsed={collapsed}
+              onToggle={onToggle}
               controls={controls}
               onCopy={onCopy}
               theme={theme}
