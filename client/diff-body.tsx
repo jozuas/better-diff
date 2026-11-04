@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -15,12 +15,10 @@ import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { placeHeld, placeToShow } from "./place";
-import type { HunkPlace } from "./place";
 import { fileId, hunkId, onSide } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
-import { clearSelection, offsetIn, scrollToOffset } from "./web";
+import { clearSelection, useHeldPlace } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -104,36 +102,6 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
   );
 }
 
-// Holds a hunk's place in the view with the id `view`. Each time what the view shows of the diff,
-// `shown`, changes, the view scrolls to show the hunk with the same index in that place: the hunk
-// itself, once the view shows more or less of the file around it, or the next one, once an action
-// has taken it out of the diff. It's held until an action that's `busy` is done, so that an agent's
-// change shown before the action's doesn't end it.
-function useHunkPlace(
-  view: string,
-  container: string,
-  shown: string,
-  busy: boolean,
-): (hunk: number) => void {
-  const held = useRef<HunkPlace | undefined>(undefined);
-
-  useLayoutEffect(() => {
-    const place = placeToShow(held.current, shown);
-
-    held.current = placeHeld(held.current, shown, busy);
-
-    if (place !== undefined) {
-      scrollToOffset(view, hunkId(container, place.hunk), place.offset);
-    }
-  }, [view, container, shown, busy]);
-
-  return (hunk) => {
-    const offset = offsetIn(view, hunkId(container, hunk));
-
-    held.current = offset === undefined ? undefined : { hunk, offset, shown };
-  };
-}
-
 // Side by side, which side has focus: the one the pointer was last pressed on, the new version's
 // until it is. Undefined inline. Pressing the pointer on the other side clears the selection, which
 // the page's order of the sides' lines has that side's lines in, so the press starts a selection
@@ -182,7 +150,7 @@ function Hunks({
   const [entire, setEntire] = useState(false);
   const barHeight = useRef(0);
   const container = fileId(view, fileIndex);
-  const hold = useHunkPlace(view, container, `${diff.version} ${String(entire)}`, controls.busy);
+  const hold = useHeldPlace(view, `${diff.version} ${String(entire)}`, controls.busy);
   const unchanged = entire ? unchangedLines(diff) : { before: [], after: [] };
   const focus = useFocus(sideBySide);
   const range = onSide(selection, focus);
@@ -210,7 +178,7 @@ function Hunks({
         controls={controls}
         entire={entire}
         onToggleEntire={() => {
-          hold(index);
+          hold(hunkId(container, index));
           setEntire(!entire);
         }}
         onHeight={(height) => {
@@ -220,7 +188,7 @@ function Hunks({
           onHunkRun(hunkId(container, index), barHeight.current);
 
           if (entire) {
-            hold(index);
+            hold(hunkId(container, index));
           }
         }}
         theme={theme}

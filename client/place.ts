@@ -11,26 +11,23 @@ export function topPlace(places: readonly Place[]): Place | undefined {
   return places.findLast(({ offset }) => offset <= 0) ?? places[0];
 }
 
-// Where a hunk was in a view, by its index in its diff and how far below the view's top its first
-// line was, while the view showed what `shown` says of the diff.
-export interface HunkPlace {
-  hunk: number;
-  offset: number;
+// Where what an element of a view marks was, while the view showed what `shown` says.
+export interface HeldPlace extends Place {
   shown: string;
 }
 
-// The place the view should show the hunk with its index in again, once it shows what `shown` says:
-// the one held, unless that's what it showed then.
-export function placeToShow(place: HunkPlace | undefined, shown: string): HunkPlace | undefined {
+// The place the view should show what it marks in again, once it shows what `shown` says: the one
+// held, unless that's what it showed then.
+export function placeToShow(place: HeldPlace | undefined, shown: string): HeldPlace | undefined {
   return place?.shown === shown ? undefined : place;
 }
 
 // The place still held once the view shows what `shown` says, as of then: while an action is
 // `busy`, and none once none is.
 export function placeHeld(
-  place: HunkPlace | undefined,
+  place: HeldPlace | undefined,
   shown: string,
   busy: boolean,
-): HunkPlace | undefined {
+): HeldPlace | undefined {
   return busy && place !== undefined ? { ...place, shown } : undefined;
 }

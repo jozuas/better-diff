@@ -24,7 +24,7 @@ export function DiffLayout({ layout, view, children }: DiffLayoutProps): ReactEl
 
   const sideBySide = width === undefined ? undefined : showsSideBySide(layout, width, fonts);
 
-  const hold = useHeldPlace(view, String(sideBySide));
+  const hold = useHeldPlace(view, String(sideBySide), false);
 
   return (
     <View

@@ -3,8 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 import type { Point } from "./menu";
-import { topPlace } from "./place";
-import type { Place } from "./place";
+import { placeHeld, placeToShow, topPlace } from "./place";
+import type { HeldPlace, Place } from "./place";
 import { markOf, selectedLines, selectedRange, stillSelected } from "./selection";
 import type { LineRange, SelectedLines, ShownFiles } from "./selection";
 import { shiftStep } from "./shift";
@@ -199,7 +199,7 @@ export function useSelectedLines(view: string, shown: ShownFiles): LineRange | u
 
 // How far below the top of the element with the id `container` the top of the element with the id
 // `target` is, if both are on the page.
-export function offsetIn(container: string, target: string): number | undefined {
+function offsetIn(container: string, target: string): number | undefined {
   if (Platform.OS !== "web") {
     return undefined;
   }
@@ -227,7 +227,7 @@ function scrollBy(container: string, distance: number): void {
 
 // Scrolls the element with the id `container`, as far as it goes, to show the top of the element
 // with the id `target` `offset` below its top.
-export function scrollToOffset(container: string, target: string, offset: number): void {
+function scrollToOffset(container: string, target: string, offset: number): void {
   const current = offsetIn(container, target);
 
   if (current !== undefined) {
@@ -254,30 +254,33 @@ function placesIn(view: string): Place[] {
   });
 }
 
-// Holds the place of what the view with the id shows at its top, by the line, hunk or file's diff
-// it's in, from when the returned function is called until `shown` changes, when the view scrolls to
-// show that in the same place again.
-export function useHeldPlace(view: string, shown: string): () => void {
-  const held = useRef<{ place: Place; shown: string } | undefined>(undefined);
+// Holds the place in the view with the id `view` of what an element of it marks, from when the
+// returned function is called with the mark, or without one for the line, hunk or file's diff the
+// view shows at its top, until `shown` changes, when the view scrolls to show that in the same place
+// again. It's held until an action that's `busy` is done, so that an agent's change shown before the
+// action's doesn't end it.
+export function useHeldPlace(view: string, shown: string, busy: boolean): (mark?: string) => void {
+  const held = useRef<HeldPlace | undefined>(undefined);
 
   useLayoutEffect(() => {
-    const hold = held.current;
+    const place = placeToShow(held.current, shown);
 
-    if (hold !== undefined && hold.shown !== shown) {
-      held.current = undefined;
+    held.current = placeHeld(held.current, shown, busy);
 
-      const now = placesIn(view).find(({ id }) => id === hold.place.id);
+    if (place !== undefined) {
+      const now = placesIn(view).find(({ id }) => id === place.id);
 
       if (now !== undefined) {
-        scrollBy(view, now.offset - hold.place.offset);
+        scrollBy(view, now.offset - place.offset);
       }
     }
-  }, [view, shown]);
+  }, [view, shown, busy]);
 
-  return () => {
-    const place = topPlace(placesIn(view));
+  return (mark) => {
+    const places = placesIn(view);
+    const place = mark === undefined ? topPlace(places) : places.find(({ id }) => id === mark);
 
-    held.current = place === undefined ? undefined : { place, shown };
+    held.current = place === undefined ? undefined : { ...place, shown };
   };
 }
 
