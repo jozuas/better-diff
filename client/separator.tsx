@@ -4,9 +4,9 @@ import { useEffect, useId, useMemo, useState } from "react";
 import type { GestureResponderEvent, GestureResponderHandlers } from "react-native";
 import { StyleSheet, View } from "react-native";
 
-import { draggedWidth } from "./resize";
+import { draggedWidth, keyedStep } from "./resize";
 import type { DragStart } from "./resize";
-import { resizing, showResizeCursor, useDoubleClick } from "./web";
+import { resizing, showResizeCursor, useDoubleClick, useKeys } from "./web";
 
 // The pixels either side of the separator's line that grab it too.
 const grab = 6;
@@ -49,13 +49,38 @@ function useDrag({ width, onResize, onResized }: Resize) {
   return { dragging: drag !== null, handlers };
 }
 
+// Whether the pointer is over the separator or it has focus, and what hears each.
+function useNoticed() {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+
+  return {
+    noticed: hovered || focused,
+    notice: {
+      onPointerEnter: () => {
+        setHovered(true);
+      },
+      onPointerLeave: () => {
+        setHovered(false);
+      },
+      onFocus: () => {
+        setFocused(true);
+      },
+      onBlur: () => {
+        setFocused(false);
+      },
+    },
+  };
+}
+
 interface SeparatorProps extends Resize {
   // Fits the file list to what it lists, on a double click.
   onFit: () => void;
   theme: PluginTheme;
 }
 
-// The line between the file list and the diff, which resizes the file list as it's dragged.
+// The line between the file list and the diff, which resizes the file list as it's dragged, or with
+// ← and → while it has focus.
 export function Separator({
   width,
   onResize,
@@ -65,9 +90,12 @@ export function Separator({
 }: SeparatorProps): ReactElement {
   const id = useId();
   const { dragging, handlers } = useDrag({ width, onResize, onResized });
-  const [hovered, setHovered] = useState(false);
+  const { noticed, notice } = useNoticed();
 
   useDoubleClick(id, onFit);
+  useKeys(id, keyedStep, (step) => {
+    onResized(width + step);
+  });
 
   const styles = useMemo(
     () =>
@@ -83,7 +111,7 @@ export function Separator({
           alignItems: "center",
         },
         line: { flex: 1, width: 1, backgroundColor: theme.colors.border },
-        // While it's dragged or the pointer is over it.
+        // While it's dragged, the pointer is over it or it has focus.
         highlighted: { flex: 1, width: 1, backgroundColor: theme.colors.accent },
       }),
     [theme],
@@ -99,16 +127,12 @@ export function Separator({
       accessibilityRole="adjustable"
       accessibilityLabel="File list width"
       aria-valuenow={Math.round(width)}
+      focusable
       style={styles.separator}
-      onPointerEnter={() => {
-        setHovered(true);
-      }}
-      onPointerLeave={() => {
-        setHovered(false);
-      }}
+      {...notice}
       {...handlers}
     >
-      <View style={dragging || hovered ? styles.highlighted : styles.line} />
+      <View style={dragging || noticed ? styles.highlighted : styles.line} />
     </View>
   );
 }

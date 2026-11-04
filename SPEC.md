@@ -80,6 +80,7 @@ Replicates Sublime Merge as much as possible:
   An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
 
 - "Filter files..." input to quickly find a file.
+- Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its paths. With focus on it, → widens the list by 10 pixels and ← narrows it by 10, or by 50 with Shift.
 - Right-clicking a file's row opens its menu, which closes with Escape or a click outside it:
   - Copy full path
   - Copy relative path: from the repository's root, as git status lists it.
@@ -97,7 +98,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A sidebar button's icon brightens too.
 - A button that asks for confirmation shows the danger colour while the pointer is over it.
 - A group's triangle brightens while the pointer is over it.
-- The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
+- The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged or has focus.
 
 ### Font sizes
 

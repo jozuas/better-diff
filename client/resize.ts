@@ -1,3 +1,5 @@
+import type { Keys } from "./shift";
+
 // The file list's width before it's resized.
 export const defaultWidth = 280;
 
@@ -21,4 +23,22 @@ export interface DragStart {
 // or the width as it is without a drag.
 export function draggedWidth(start: DragStart | null, width: number, x: number): number {
   return start === null ? width : start.width + x - start.x;
+}
+
+// Which way each key that resizes the file list moves the separator.
+const directions = new Map([
+  ["ArrowLeft", -1],
+  ["ArrowRight", 1],
+]);
+
+// How far the key, pressed with focus on the separator, widens the file list: → by 10 pixels, and
+// by 50 with Shift, and ← narrows it as far. None for another key, or with another modifier.
+export function keyedStep({ key, shiftKey, altKey, ctrlKey, metaKey }: Keys): number | undefined {
+  const direction = directions.get(key);
+
+  if (direction === undefined || altKey || ctrlKey || metaKey) {
+    return undefined;
+  }
+
+  return direction * (shiftKey ? 50 : 10);
 }

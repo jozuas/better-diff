@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { defaultWidth, draggedWidth, fileListWidth } from "./resize";
+import { defaultWidth, draggedWidth, fileListWidth, keyedStep } from "./resize";
 
 const width = fc.integer({ min: -2000, max: 4000 });
 
@@ -56,3 +56,24 @@ test.each([
 test("wants the width as it is without a drag", () => {
   expect(draggedWidth(null, 300, 150)).toBe(300);
 });
+
+const plain = { shiftKey: false, altKey: false, ctrlKey: false, metaKey: false };
+
+test("→ widens the file list by 10 pixels and ← narrows it by 10, or by 50 with Shift", () => {
+  expect(keyedStep({ ...plain, key: "ArrowRight" })).toBe(10);
+  expect(keyedStep({ ...plain, key: "ArrowLeft" })).toBe(-10);
+  expect(keyedStep({ ...plain, shiftKey: true, key: "ArrowRight" })).toBe(50);
+  expect(keyedStep({ ...plain, shiftKey: true, key: "ArrowLeft" })).toBe(-50);
+});
+
+test.each(["ArrowUp", "ArrowDown", "Enter", "a"])("%s doesn't resize the file list", (key) => {
+  expect(keyedStep({ ...plain, key })).toBeUndefined();
+});
+
+test.each([{ altKey: true }, { ctrlKey: true }, { metaKey: true }])(
+  "← and → don't resize the file list with another modifier: %o",
+  (modifier) => {
+    expect(keyedStep({ ...plain, ...modifier, key: "ArrowRight" })).toBeUndefined();
+    expect(keyedStep({ ...plain, ...modifier, key: "ArrowLeft" })).toBeUndefined();
+  },
+);

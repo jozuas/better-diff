@@ -33,6 +33,36 @@ test("dragging the separator between the file list and the diff resizes the file
   await expect(separator).toHaveAttribute("aria-valuenow", "380");
 });
 
+test("with focus on the separator, → widens the file list by 10 pixels and ← narrows it by 10, or by 50 with Shift", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+
+  await app.openPanel();
+
+  const separator = page.getByRole("slider", { name: "File list width" });
+
+  await separator.focus();
+  await expect(separator).toBeFocused();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(separator).toHaveAttribute("aria-valuenow", "290");
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(separator).toHaveAttribute("aria-valuenow", "340");
+  await page.keyboard.press("ArrowLeft");
+  await expect(separator).toHaveAttribute("aria-valuenow", "330");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(separator).toHaveAttribute("aria-valuenow", "280");
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(separator).toHaveAttribute("aria-valuenow", "230");
+
+  await page.reload();
+
+  await expect(separator).toHaveAttribute("aria-valuenow", "230");
+});
+
 test("the file list is no narrower than 160, and leaves the diff no narrower than 240", async ({
   app,
   page,

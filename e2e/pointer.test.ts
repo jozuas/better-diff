@@ -149,3 +149,25 @@ test("the separator shows its line in the accent colour while the pointer is ove
   await page.mouse.move(0, 0);
   await expect.poll(looks).toBe(plain);
 });
+
+test("the separator shows its line in the accent colour while it has focus", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+
+  await app.openPanel();
+  await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["a.txt"]);
+  // The first file opens with Better Diff, and its diff shows beside the separator once it's read.
+  await expect(line(page, "a")).toBeVisible();
+  const separator = page.getByRole("slider", { name: "File list width" });
+  const looks = looksOf(separator);
+  const plain = await looks();
+
+  await separator.focus();
+  await expect.poll(looks).not.toBe(plain);
+
+  await separator.blur();
+  await expect.poll(looks).toBe(plain);
+});
