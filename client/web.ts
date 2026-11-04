@@ -34,6 +34,8 @@ interface PageElement {
     cursor: string;
     overflowAnchor: string;
     paddingRight: string;
+    position: string;
+    top: string;
     userSelect: string;
     width: string;
   };
@@ -166,6 +168,24 @@ export function stopScrollAnchoring(id: string): void {
   if (element !== null) {
     element.style.overflowAnchor = "none";
   }
+}
+
+// Has the element with the id, once it scrolls up to `top` below the top of the view it's in, stay
+// there while what it's in scrolls under it, until the end of what it's in reaches it, as a sticky
+// header of the view does. React Native's styles have no sticky position. Nothing while `top` is
+// undefined.
+export function useStuckAt(id: string, top: number | undefined): void {
+  useLayoutEffect(() => {
+    const element =
+      Platform.OS === "web" && top !== undefined
+        ? document.querySelector(`#${CSS.escape(id)}`)
+        : null;
+
+    if (element !== null) {
+      element.style.position = "sticky";
+      element.style.top = `${top}px`;
+    }
+  }, [id, top]);
 }
 
 // Has the element with the id show the cursor for resizing what's either side of it.

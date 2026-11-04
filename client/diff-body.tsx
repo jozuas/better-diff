@@ -56,6 +56,9 @@ export interface DiffBodyProps {
   // Whether its hunks scroll in the view on their own, under bars that stay at the top, as when
   // it's the view's only diff, rather than with the view's other diffs.
   scrolls: boolean;
+  // While they scroll with the view's other diffs, how far below the view's top their bars stay as
+  // their lines scroll under them: under the file's bar, which stays at the top.
+  barsBelow?: number;
   // The query of its diff with every line of the file, which showing the entire file reads.
   entireQuery: UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   // Whether it shows the old version's lines beside the new one's, rather than inline.
@@ -201,8 +204,9 @@ interface HunksProps extends DiffBodyProps {
 
 // Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions, and
 // the toggle that shows the entire file, with the unchanged lines around the hunks, once the diff is
-// read again with them, or only the hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
-// the top while its lines scroll under it, until the next hunk's bar covers it. While the entire
+// read again with them, or only the hunks again, which keeps the hunk in place. Each bar stays at
+// the top while its lines scroll under it, or under the file's bar while the hunks scroll with the
+// view's other diffs, until the next hunk's bar covers it or the file's diff ends. While the entire
 // file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
 // again, and the selection changing only the hunks it leaves or reaches.
@@ -213,6 +217,7 @@ function Hunks({
   fileIndex,
   selection,
   scrolls,
+  barsBelow,
   entireQuery,
   sideBySide,
   onHunkRun,
@@ -254,6 +259,7 @@ function Hunks({
         onToggleEntire={bars.onToggleEntire}
         onHeight={bars.onHeight}
         onRun={bars.onRun}
+        stuckBelow={barsBelow}
         theme={theme}
       />,
       <View key={`lines ${hunk.oldStart},${hunk.newStart}`} style={styles.spaced}>

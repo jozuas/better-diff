@@ -1,6 +1,6 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { memo, useMemo, useState, useSyncExternalStore } from "react";
+import { memo, useId, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -14,6 +14,7 @@ import type { PointedHunk } from "./pointed";
 import { hunkRevealed } from "./reveal";
 import { rangeKey, rangeLines } from "./selection";
 import type { LineRange } from "./selection";
+import { useStuckAt } from "./web";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -29,8 +30,9 @@ function useStyles(theme: PluginTheme) {
   return useMemo(
     () =>
       StyleSheet.create({
-        // Opaque, since it stays over the hunk's lines as they scroll under it.
+        // Opaque, and over the hunk's lines, since it stays over them as they scroll under it.
         bar: {
+          zIndex: 1,
           flexDirection: "row",
           paddingHorizontal: 12,
           // With its borders, as tall as a file's bar.
@@ -125,6 +127,9 @@ interface HunkBarProps {
   onHeight: (height: number) => void;
   // Called with the hunk's index just before an action on the hunk runs.
   onRun: (hunk: number) => void;
+  // How far below the top of the view the bar stays while the hunk's lines scroll under it, while
+  // they scroll with the view's other diffs, whose view keeps only the files' bars at its top.
+  stuckBelow: number | undefined;
   theme: PluginTheme;
 }
 
@@ -143,14 +148,19 @@ function BarOfHunk({
   onToggleEntire,
   onHeight,
   onRun,
+  stuckBelow,
   theme,
 }: HunkBarProps): ReactElement {
   const styles = useStyles(theme);
   const [focused, setFocused] = useState(false);
   const revealed = hunkRevealed(index, usePointedAt(pointed, index), focused, selection?.hunk);
+  const id = useId();
+
+  useStuckAt(id, stuckBelow);
 
   return (
     <View
+      nativeID={id}
       style={styles.bar}
       onLayout={
         index === 0

@@ -111,6 +111,50 @@ test("each file's bar is a sticky header, so you always know which file you're l
   expect(status(repository)).toBe("?? a.txt\n?? b.txt\n");
 });
 
+// The name of the button in the middle of where the box is, if one shows there, over whatever is
+// under it.
+async function buttonAt(
+  page: Page,
+  { x, y, width, height }: { x: number; y: number; width: number; height: number },
+): Promise<string> {
+  const name = await page.evaluate(
+    `document.elementFromPoint(${x + width / 2}, ${y + height / 2})?.closest('[role="button"]')?.getAttribute("aria-label") ?? ""`,
+  );
+
+  return z.string().parse(name);
+}
+
+test("in a group's view, each hunk's bar stays under its file's bar while the hunk's lines scroll under them both", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeLong(repository, "a.txt", "a");
+  writeLong(repository, "b.txt", "b");
+
+  await app.openPanel();
+  await button(page, "UNTRACKED FILES (2)").click();
+
+  const top = await box(page.getByRole("heading", { name: "UNTRACKED a.txt" }));
+
+  await line(page, "a 40").scrollIntoViewIfNeeded();
+  await expect(line(page, "a 1")).not.toBeInViewport();
+
+  const fileBar = await box(page.getByRole("heading", { name: "UNTRACKED a.txt" }));
+  const hunkBar = await box(button(page, "Stage Hunk").first());
+
+  expect(fileBar.y).toBe(top.y);
+  expect(hunkBar.y).toBeGreaterThanOrEqual(fileBar.y + fileBar.height);
+  expect(hunkBar.y).toBeLessThan(fileBar.y + fileBar.height + 10);
+  expect(await buttonAt(page, hunkBar)).toBe("Stage Hunk");
+
+  await line(page, "b 40").scrollIntoViewIfNeeded();
+  await expect(line(page, "b 1")).not.toBeInViewport();
+
+  expect(await barAt(page, top)).toMatch(/^UNTRACKEDb\.txt/u);
+  expect(status(repository)).toBe("?? a.txt\n?? b.txt\n");
+});
+
 test("staging a file from its bar in a group's view moves the view to the start of the next file", async ({
   app,
   page,

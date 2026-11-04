@@ -255,6 +255,7 @@ function GroupFiles({
                   fileIndex={index}
                   selection={rangeIn(selection, index)}
                   sideBySide={sideBySide}
+                  barsBelow={barHeight}
                   onHunkRun={onHunkRun}
                   controls={controls}
                   onExpand={onExpand}
@@ -276,11 +277,12 @@ interface GroupDiffProps extends Omit<GroupFilesProps, "read" | "view" | "sideBy
 }
 
 // The diffs of the files the group lists, one after another in one view, each under its file's
-// bar, which stays at the top while the diff scrolls under it, until the next file's bar covers it.
-// The bars are as tall as the tallest, so none shows from under the one that covers it. A collapsed
-// diff shows its lines once asked to, until another file or group is opened. Just before an action
-// on a file or a hunk runs, the view scrolls up to its start if it's above, so what then takes its
-// place shows from its start.
+// bar, which stays at the top while the diff scrolls under it, until the next file's bar covers it,
+// with each hunk's bar under it while the hunk's lines scroll under them both. The files' bars are
+// as tall as the tallest, so none shows from under the one that covers it. A collapsed diff shows
+// its lines once asked to, until another file or group is opened. Just before an action on a file
+// or a hunk runs, the view scrolls up to its start if it's above, so what then takes its place
+// shows from its start.
 export function GroupDiff({ query, layout, theme, ...files }: GroupDiffProps): ReactElement {
   const read = useQuery(query);
   const view = useId();
