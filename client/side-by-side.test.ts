@@ -1,30 +1,13 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import { hunkLines } from "../test/hunk-lines";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { numbersOf, rowsOf, shows } from "./side-by-side";
 import type { Row, Side } from "./side-by-side";
 
 type Kind = NumberedLine["kind"];
-
-// A hunk's lines, numbered. Each has text no other line has.
-const hunkLines = fc
-  .array(
-    fc.record({
-      kind: fc.constantFrom<Kind>("context", "removed", "added"),
-      text: fc.string({ unit: "binary" }),
-      newline: fc.boolean(),
-    }),
-    { maxLength: 20 },
-  )
-  .map((lines) =>
-    numberLines({
-      oldStart: 1,
-      newStart: 1,
-      lines: lines.map((line, index) => ({ ...line, text: `${index} ${line.text}` })),
-    }),
-  );
 
 // The kind of line each side doesn't show.
 const without: Record<Side, Kind> = { old: "added", new: "removed" };

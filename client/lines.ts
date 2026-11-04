@@ -37,6 +37,46 @@ export function numberLines({ oldStart, newStart, lines }: Hunk): NumberedLine[]
   return numbered;
 }
 
+// A line with its index among the lines it's shown from.
+export interface IndexedLine {
+  index: number;
+  line: NumberedLine;
+}
+
+// The removed and added lines of a run of changes between unchanged lines.
+export interface Run {
+  removed: IndexedLine[];
+  added: IndexedLine[];
+}
+
+// The lines in order, each unchanged one on its own, and the removed and added lines of each run of
+// changes between them together.
+export function blocksOf(lines: readonly NumberedLine[]): (IndexedLine | Run)[] {
+  const blocks: (IndexedLine | Run)[] = [];
+  let run: Run = { removed: [], added: [] };
+
+  function endRun(): void {
+    if (run.removed.length + run.added.length > 0) {
+      blocks.push(run);
+    }
+
+    run = { removed: [], added: [] };
+  }
+
+  for (const [index, line] of lines.entries()) {
+    if (line.kind === "context") {
+      endRun();
+      blocks.push({ index, line });
+    } else {
+      run[line.kind].push({ index, line });
+    }
+  }
+
+  endRun();
+
+  return blocks;
+}
+
 // The lines of each version before a place in the file.
 interface Counts {
   old: number;

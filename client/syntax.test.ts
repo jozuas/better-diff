@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import type { TextRange } from "./changed-text";
 import { numberLines } from "./lines";
 import { runsOf, schemeOf, segmentsOf } from "./syntax";
 import type { Highlights, Segment, SyntaxColors } from "./syntax";
@@ -18,6 +19,18 @@ const colors: fc.Arbitrary<SyntaxColors> = fc.dictionary(
   fc.constantFrom(...styles),
   fc.constantFrom("#111111", "#222222"),
 );
+
+// Ranges of changed text, in order, apart from each other, some of them past the text's end.
+const changes: fc.Arbitrary<TextRange[]> = fc
+  .uniqueArray(fc.nat({ max: 12 }), { maxLength: 6 })
+  .map((bounds) => {
+    const sorted = bounds.toSorted((one, other) => one - other);
+
+    return Array.from({ length: Math.floor(sorted.length / 2) }, (_, index) => ({
+      start: sorted[2 * index] ?? 0,
+      end: sorted[2 * index + 1] ?? 0,
+    }));
+  });
 
 // The colour of each of the text's characters, by JavaScript's count: its run's style's, or none
 // past the runs.
@@ -37,10 +50,27 @@ function colorsOfCharacters(
   return Array.from({ length: text.length }, (_, index) => characters[index]);
 }
 
+function isChangedAt(ranges: readonly TextRange[], at: number): boolean {
+  return ranges.some(({ start, end }) => start <= at && at < end);
+}
+
+// The segments with both the colour of the one before them and whether it's changed.
+function likeTheOneBefore(segments: readonly Segment[]): Segment[] {
+  return segments
+    .slice(1)
+    .filter(
+      ({ color, changed }, index) =>
+        color === segments[index]?.color && changed === segments[index]?.changed,
+    );
+}
+
+// Text, runs, colours and changed text to make segments of.
+const segmented = fc.tuple(fc.string({ unit: "binary" }), runs, colors, changes);
+
 test("the segments make up the text, each starting where the ones before it end", () => {
   fc.assert(
-    fc.property(fc.string({ unit: "binary" }), runs, colors, (text, textRuns, styleColors) => {
-      const segments = segmentsOf(text, textRuns, styleColors);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges);
 
       expect(segments.map((segment) => segment.text).join("")).toBe(text);
       expect(segments.map((segment) => segment.start)).toStrictEqual(
@@ -58,8 +88,8 @@ test("the segments make up the text, each starting where the ones before it end"
 
 test("each of the text's characters is in the colour of its run's style, or the text's own past the runs or where the style has none", () => {
   fc.assert(
-    fc.property(fc.string({ unit: "binary" }), runs, colors, (text, textRuns, styleColors) => {
-      const segments = segmentsOf(text, textRuns, styleColors);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges);
 
       expect(
         segments.flatMap(({ text: piece, color }) =>
@@ -70,16 +100,29 @@ test("each of the text's characters is in the colour of its run's style, or the 
   );
 });
 
-test("no segment is empty, and none has the colour of the one before it", () => {
+test("each of the text's characters is changed where a range of changed text has it", () => {
   fc.assert(
-    fc.property(fc.string({ unit: "binary" }), runs, colors, (text, textRuns, styleColors) => {
-      const segments: Segment[] = segmentsOf(text, textRuns, styleColors);
-      const segmentColors = segments.map((segment) => segment.color);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges);
+
+      expect(
+        segments.flatMap(({ start, text: piece, changed }) =>
+          Array.from({ length: piece.length }, (_, index) => [start + index, changed]),
+        ),
+      ).toStrictEqual(
+        Array.from({ length: text.length }, (_, at) => [at, isChangedAt(ranges, at)]),
+      );
+    }),
+  );
+});
+
+test("no segment is empty, and none has both the colour of the one before it and whether it's changed", () => {
+  fc.assert(
+    fc.property(segmented, ([text, textRuns, styleColors, ranges]) => {
+      const segments: Segment[] = segmentsOf(text, textRuns, styleColors, ranges);
 
       expect(segments.filter((segment) => segment.text === "")).toStrictEqual([]);
-      expect(
-        segmentColors.slice(1).filter((color, index) => color === segmentColors[index]),
-      ).toStrictEqual([]);
+      expect(likeTheOneBefore(segments)).toStrictEqual([]);
     }),
   );
 });

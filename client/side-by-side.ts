@@ -1,4 +1,5 @@
-import type { NumberedLine } from "./lines";
+import { blocksOf } from "./lines";
+import type { IndexedLine, NumberedLine } from "./lines";
 
 type Kind = NumberedLine["kind"];
 
@@ -45,46 +46,21 @@ export function numbersOf(line: NumberedLine, side?: Side): LineNumber[] {
   );
 }
 
-// A line a side shows, with its index among the lines it's shown from.
-interface SideLine {
-  index: number;
-  line: NumberedLine;
-}
-
 // What each side shows level with the other: a line, or nothing, where the other side has more.
 export interface Row {
-  old: SideLine | undefined;
-  new: SideLine | undefined;
+  old: IndexedLine | undefined;
+  new: IndexedLine | undefined;
 }
 
 // The lines side by side, an unchanged one level with itself, and the removed lines of each run of
 // changes between unchanged ones level with its added lines, from the top of the run.
 export function rowsOf(lines: readonly NumberedLine[]): Row[] {
-  const rows: Row[] = [];
-  let removed: SideLine[] = [];
-  let added: SideLine[] = [];
-
-  function endRun(): void {
-    for (let row = 0; row < Math.max(removed.length, added.length); row += 1) {
-      rows.push({ old: removed[row], new: added[row] });
-    }
-
-    removed = [];
-    added = [];
-  }
-
-  for (const [index, line] of lines.entries()) {
-    if (line.kind === "removed") {
-      removed.push({ index, line });
-    } else if (line.kind === "added") {
-      added.push({ index, line });
-    } else {
-      endRun();
-      rows.push({ old: { index, line }, new: { index, line } });
-    }
-  }
-
-  endRun();
-
-  return rows;
+  return blocksOf(lines).flatMap((block) =>
+    "removed" in block
+      ? Array.from({ length: Math.max(block.removed.length, block.added.length) }, (_, row) => ({
+          old: block.removed[row],
+          new: block.added[row],
+        }))
+      : [{ old: block, new: block }],
+  );
 }

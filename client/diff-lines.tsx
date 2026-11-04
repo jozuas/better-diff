@@ -1,149 +1,31 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useContext, useMemo } from "react";
+import { useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
-import { FontSizesContext, textPadding } from "./fonts";
+import type { TextRange } from "./changed-text";
+import { changedWordsOf } from "./changed-words";
+import { DiffLine } from "./diff-line";
+import { useStyles } from "./diff-styles";
+import type { Styles } from "./diff-styles";
 import type { PointerHandlers } from "./hunk-bar";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { isSelected, lineId } from "./selection";
 import type { LineRange } from "./selection";
-import { numbersOf, rowsOf, sides } from "./side-by-side";
+import { rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
-import { runsOf, segmentsOf, SyntaxColorsContext } from "./syntax";
 import type { Highlights } from "./syntax";
-
-declare module "react-native" {
-  interface ViewProps {
-    // React Native Web's: each entry becomes a data- attribute of the element.
-    dataSet?: Readonly<Record<string, string>>;
-  }
-}
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
-// Paseo's own monospace fonts.
-const monospace =
-  "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
-
-// Paseo sets its UI font on everything in the app but what's marked data-pmono, and inside it, over
-// any font family the plugin gives.
-const paseoMonospace = { pmono: "" };
-
-function useStyles(theme: PluginTheme) {
-  const fonts = useContext(FontSizesContext);
-
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        line: { flexDirection: "row" },
-        // Under a line, tinting it as removed or added.
-        tint: { ...StyleSheet.absoluteFillObject, opacity: 0.15 },
-        context: { backgroundColor: "transparent" },
-        removed: { backgroundColor: theme.colors.statusDanger },
-        added: { backgroundColor: theme.colors.statusSuccess },
-        number: {
-          width: fonts.number,
-          paddingRight: 8,
-          textAlign: "right",
-          fontFamily: monospace,
-          fontSize: fonts.code,
-          lineHeight: fonts.codeLine,
-          color: theme.colors.foregroundMuted,
-        },
-        selected: { color: theme.colors.surface0, backgroundColor: theme.colors.foregroundMuted },
-        text: {
-          flex: 1,
-          paddingHorizontal: textPadding,
-          fontFamily: monospace,
-          fontSize: fonts.code,
-          lineHeight: fonts.codeLine,
-          color: theme.colors.foreground,
-        },
-        noNewline: {
-          fontSize: fonts.code,
-          lineHeight: fonts.codeLine,
-          color: theme.colors.foregroundMuted,
-        },
-        // Each side of a side-by-side row, with a line between them.
-        half: { flex: 1, minWidth: 0 },
-        old: {},
-        new: { borderLeftWidth: 1, borderColor: theme.colors.border },
-        // Where a side has no line level with the other's.
-        filler: { flex: 1, backgroundColor: theme.colors.surface1 },
-      }),
-    [theme, fonts],
-  );
-}
-
-type Styles = ReturnType<typeof useStyles>;
-
-interface DiffLineProps {
-  // A hunk's line's, by which a selection finds it.
-  id: string | undefined;
-  line: NumberedLine;
-  selected: boolean;
-  // The side it shows on, with only that version's number, or undefined inline, with both.
-  side: Side | undefined;
-  selectable: boolean;
-  highlights: Highlights;
-  styles: Styles;
-}
-
-// Only the line's text can be selected, so copying a selection copies what the lines say. The
-// numbers of a selected line stand out. Its text is in its syntax's colours.
-function DiffLine({
-  id,
-  line,
-  selected,
-  side,
-  selectable,
-  highlights,
-  styles,
-}: DiffLineProps): ReactElement {
-  const numbers = numbersOf(line, side);
-  const fonts = useContext(FontSizesContext);
-  const colors = useContext(SyntaxColorsContext);
-  const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
-
-  return (
-    <View>
-      <View dataSet={paseoMonospace} style={styles.line}>
-        <View style={[styles.tint, styles[line.kind]]} />
-        {numbers.map(({ side: version, number }) => (
-          <Text key={version} selectable={false} style={numberStyle}>
-            {number}
-          </Text>
-        ))}
-        <Text nativeID={id} selectable={selectable} style={styles.text}>
-          {segmentsOf(line.text, runsOf(line, highlights), colors).map(({ start, text, color }) =>
-            color === undefined ? (
-              text
-            ) : (
-              <Text key={start} style={{ color }}>
-                {text}
-              </Text>
-            ),
-          )}
-        </Text>
-      </View>
-      {line.newline ? null : (
-        <Text
-          selectable={false}
-          style={[styles.noNewline, { paddingLeft: numbers.length * fonts.number + textPadding }]}
-        >
-          No newline at end of file
-        </Text>
-      )}
-    </View>
-  );
-}
-
 // Which lines are selected, by their indices among those shown and, side by side, their side.
 type Selected = (index: number, side?: Side) => boolean;
+
+// The changed text of each line, by its index among those shown.
+type ChangedText = (index: number) => readonly TextRange[];
 
 // The id of a line's text, by its index and whether its side has focus. One without focus has an
 // id a selection doesn't find it by.
@@ -159,6 +41,7 @@ interface HalfProps {
   selected: Selected;
   focus: Focus;
   highlights: Highlights;
+  changes: ChangedText;
   styles: Styles;
 }
 
@@ -171,6 +54,7 @@ function Half({
   selected,
   focus,
   highlights,
+  changes,
   styles,
 }: HalfProps): ReactElement {
   return (
@@ -190,6 +74,7 @@ function Half({
           side={side}
           selectable={focused}
           highlights={highlights}
+          changes={changes(shown.index)}
           styles={styles}
         />
       )}
@@ -203,6 +88,7 @@ interface SideBySideRowProps {
   selected: Selected;
   focus: Focus;
   highlights: Highlights;
+  changes: ChangedText;
   styles: Styles;
 }
 
@@ -214,6 +100,7 @@ function SideBySideRow({
   selected,
   focus,
   highlights,
+  changes,
   styles,
 }: SideBySideRowProps): ReactElement {
   return (
@@ -228,6 +115,7 @@ function SideBySideRow({
           selected={selected}
           focus={focus}
           highlights={highlights}
+          changes={changes}
           styles={styles}
         />
       ))}
@@ -243,11 +131,20 @@ interface LinesProps {
   // Undefined for an inline view.
   focus: Focus | undefined;
   highlights: Highlights;
+  changes: ChangedText;
   styles: Styles;
 }
 
 // The lines one under the other, or side by side.
-function Lines({ lines, idOf, selected, focus, highlights, styles }: LinesProps): ReactElement[] {
+function Lines({
+  lines,
+  idOf,
+  selected,
+  focus,
+  highlights,
+  changes,
+  styles,
+}: LinesProps): ReactElement[] {
   if (focus === undefined) {
     return lines.map((line, index) => (
       <DiffLine
@@ -258,6 +155,7 @@ function Lines({ lines, idOf, selected, focus, highlights, styles }: LinesProps)
         side={undefined}
         selectable
         highlights={highlights}
+        changes={changes(index)}
         styles={styles}
       />
     ));
@@ -271,6 +169,7 @@ function Lines({ lines, idOf, selected, focus, highlights, styles }: LinesProps)
       selected={selected}
       focus={focus}
       highlights={highlights}
+      changes={changes}
       styles={styles}
     />
   ));
@@ -300,15 +199,18 @@ export function HunkLines({
   theme,
 }: HunkLinesProps): ReactElement {
   const styles = useStyles(theme);
+  const lines = useMemo(() => numberLines(hunk), [hunk]);
+  const changes = useMemo(() => changedWordsOf(lines), [lines]);
 
   return (
     <View {...pointer}>
       <Lines
-        lines={numberLines(hunk)}
+        lines={lines}
         idOf={(line, focused) => lineId(container, index, line, focused)}
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
         highlights={highlights}
+        changes={(line) => changes[line] ?? []}
         styles={styles}
       />
     </View>
@@ -344,6 +246,7 @@ export function UnchangedLines({
         selected={() => false}
         focus={focus}
         highlights={highlights}
+        changes={() => []}
         styles={styles}
       />
     </View>
