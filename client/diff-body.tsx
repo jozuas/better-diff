@@ -18,7 +18,8 @@ import { ModeBar } from "./mode-bar";
 import { fileId, hunkId, onSide } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
-import { clearSelection, useHeldPlace } from "./web";
+import { clearSelection } from "./text-selection";
+import { useHeldPlace } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 

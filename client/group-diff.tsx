@@ -19,7 +19,8 @@ import { diffOf, listedFiles } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
 import { fileId, rangeIn } from "./selection";
-import { scrollUpTo, stopScrollAnchoring, useSelectedLines } from "./web";
+import { useSelectedLines } from "./text-selection";
+import { scrollUpTo, stopScrollAnchoring } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 

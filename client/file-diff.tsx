@@ -18,7 +18,8 @@ import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
-import { scrollUpTo, useSelectedLines } from "./web";
+import { useSelectedLines } from "./text-selection";
+import { scrollUpTo } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 

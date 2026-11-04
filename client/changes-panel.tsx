@@ -32,7 +32,7 @@ import { viewSettingsOf } from "./settings";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
 import { SyntaxColorsProvider } from "./syntax-colors";
-import { clearSelection } from "./web";
+import { clearSelection } from "./text-selection";
 import { onWindowFocus } from "./window-focus";
 
 type Listed = RpcOutput<typeof changesRpc>;
