@@ -30,6 +30,17 @@ export const lineText = fc.oneof(
   fc.string({ unit: "binary", maxLength: 8 }),
 );
 
+// Lines with text no other line has, `name`'s, so that a version they're in has only one alignment
+// with another.
+export function uniqueLines(
+  name: string,
+  { minLength = 0, maxLength = 20 }: { minLength?: number; maxLength?: number } = {},
+): fc.Arbitrary<string[]> {
+  return fc
+    .array(lineText, { minLength, maxLength })
+    .map((lines) => lines.map((text, index) => `${name} ${index}: ${text}`));
+}
+
 // The removed or added lines of a run of changes.
 export const runLines = fc.array(lineText, { maxLength: 4 });
 

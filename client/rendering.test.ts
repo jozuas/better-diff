@@ -3,7 +3,8 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
-import { filesToRender, linesShown } from "./rendering";
+import { filePath } from "../test/file-names";
+import { filesToRender, linesShown, stillRendered } from "./rendering";
 
 function sum(lines: readonly number[]): number {
   let total = 0;
@@ -60,6 +61,49 @@ test("renders one more file at least, though it shows no lines", () => {
 test("renders no more once all the files are", () => {
   expect(filesToRender([1, 2], 2, 10)).toBe(2);
   expect(filesToRender([1, 2], 3, 10)).toBe(3);
+});
+
+// A view's files' paths, how many of them are rendered, and its files once some of those join it and
+// others leave, in the same order as before.
+const listedAgain = fc
+  .uniqueArray(fc.record({ path: filePath, before: fc.boolean(), after: fc.boolean() }), {
+    selector: ({ path }) => path,
+    maxLength: 20,
+  })
+  .chain((files) => {
+    const before = files.flatMap(({ path, before: listed }) => (listed ? [path] : []));
+
+    return fc.record({
+      before: fc.constant(before),
+      rendered: fc.nat(before.length),
+      after: fc.constant(files.flatMap(({ path, after: listed }) => (listed ? [path] : []))),
+    });
+  });
+
+test("once files join a view or leave it, those rendered before still are, and as many as before at least, and no more than that takes", () => {
+  fc.assert(
+    fc.property(listedAgain, ({ before, rendered, after }) => {
+      const still = stillRendered(
+        before.map((path) => ({ path })),
+        rendered,
+        after.map((path) => ({ path })),
+      );
+
+      const kept = before.slice(0, rendered).filter((path) => after.includes(path));
+
+      expect(after.slice(0, still)).toStrictEqual(expect.arrayContaining(kept));
+      expect(still).toBeGreaterThanOrEqual(rendered);
+      expect([rendered, ...kept.map((path) => after.indexOf(path) + 1)]).toContain(still);
+    }),
+  );
+});
+
+test("works out how many files are rendered still in a group of more of them than a function can take as arguments", () => {
+  const before = Array.from({ length: 200_000 }, (_, index) => ({ path: String(index) }));
+
+  expect(stillRendered(before, before.length, [{ path: "added" }, ...before])).toBe(
+    before.length + 1,
+  );
 });
 
 type Diff = RpcOutput<typeof diffRpc>;

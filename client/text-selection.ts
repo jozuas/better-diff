@@ -1,9 +1,10 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useEffect, useLayoutEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 
 import { selectedLines, selectedRange, stillSelected } from "./selection";
 import type { LineRange, SelectedLines, ShownFiles } from "./selection";
+import type { Focus, Side } from "./side-by-side";
 import { useLatest } from "./web";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
@@ -183,6 +184,31 @@ export function clearSelection(): void {
   if (Platform.OS === "web") {
     document.getSelection()?.removeAllRanges();
   }
+}
+
+// Side by side, which side has focus: the one the pointer was last pressed on, the new version's
+// until it is. Undefined inline. Pressing the pointer on the other side clears the selection, which
+// the page's order of the sides' lines has that side's lines in, so the press starts a selection
+// rather than dragging the one there was.
+export function useFocus(sideBySide: boolean): Focus | undefined {
+  const [side, setSide] = useState<Side>("new");
+
+  return useMemo(
+    () =>
+      sideBySide
+        ? {
+            side,
+            onFocus: (pressed) => {
+              if (pressed !== side) {
+                clearSelection();
+              }
+
+              setSide(pressed);
+            },
+          }
+        : undefined,
+    [sideBySide, side],
+  );
 }
 
 // The lines of the diffs in the element with the id `view` that the page's text selection touches,

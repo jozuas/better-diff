@@ -3,7 +3,7 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -15,14 +15,14 @@ import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
-import type { NumberedLine } from "./lines";
+import type { NumberedLine, Unchanged } from "./lines";
 import { ModeBar } from "./mode-bar";
+import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
 import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
-import type { Focus, Side } from "./side-by-side";
-import { clearSelection } from "./text-selection";
-import { scrollToOffset, useHeldPlace, useLatest } from "./web";
+import { useFocus } from "./text-selection";
+import { KeptPlaceContext, scrollToOffset, stopScrollAnchoring, useLatest } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -113,31 +113,6 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
   );
 }
 
-// Side by side, which side has focus: the one the pointer was last pressed on, the new version's
-// until it is. Undefined inline. Pressing the pointer on the other side clears the selection, which
-// the page's order of the sides' lines has that side's lines in, so the press starts a selection
-// rather than dragging the one there was.
-function useFocus(sideBySide: boolean): Focus | undefined {
-  const [side, setSide] = useState<Side>("new");
-
-  return useMemo(
-    () =>
-      sideBySide
-        ? {
-            side,
-            onFocus: (pressed) => {
-              if (pressed !== side) {
-                clearSelection();
-              }
-
-              setSide(pressed);
-            },
-          }
-        : undefined,
-    [sideBySide, side],
-  );
-}
-
 // What a diff's hunks' bars do, with their hunk's index.
 interface BarActions {
   onToggleEntire: (hunk: number) => void;
@@ -149,8 +124,6 @@ interface BarActions {
 // What the bars act with, as the latest render gives it.
 interface BarState {
   entire: boolean;
-  // Holds the place of what the element with the id marks.
-  hold: (mark: string) => void;
   onHunkRun: DiffBodyProps["onHunkRun"];
   view: string;
   barsBelow: number | undefined;
@@ -168,23 +141,24 @@ function useBarActions(
 ): BarActions {
   const latest = useLatest(state);
   const barHeight = useRef(0);
+  const kept = useContext(KeptPlaceContext);
 
   return useMemo(
     () => ({
       onToggleEntire: (hunk) => {
-        latest.current.hold(hunkId(container, hunk));
+        kept.hold(container, hunkId(container, hunk));
         setEntire((entire) => !entire);
       },
       onHeight: (height) => {
         barHeight.current = height;
       },
       onRun: (hunk) => {
-        const { entire, hold, onHunkRun } = latest.current;
+        const { entire, onHunkRun } = latest.current;
 
         onHunkRun(hunkId(container, hunk), barHeight.current);
 
         if (entire) {
-          hold(hunkId(container, hunk));
+          kept.hold(container, hunkId(container, hunk));
         }
       },
       onShow: (hunk) => {
@@ -193,8 +167,31 @@ function useBarActions(
         scrollToOffset(view, hunkId(container, hunk), barsBelow + barHeight.current);
       },
     }),
-    [container, setEntire, latest],
+    [container, setEntire, latest, kept],
   );
+}
+
+// Has the view keep the places of the lines it shows of the file at the path, at the container, and
+// settle, keeping its place, each time it renders, with whether an action is running.
+function useKeptLines(
+  path: string,
+  hunks: Diff["hunks"],
+  unchanged: Unchanged,
+  container: string,
+  busy: boolean,
+): void {
+  const kept = useContext(KeptPlaceContext);
+
+  const lines = useMemo(
+    () => shownFileOf(path, hunks, unchanged, container),
+    [path, hunks, unchanged, container],
+  );
+
+  useLayoutEffect(() => kept.show(container, lines), [kept, container, lines]);
+
+  useLayoutEffect(() => {
+    kept.settle(busy);
+  });
 }
 
 // The diff to show: read again with every line of the file while the entire file is asked for, once
@@ -242,14 +239,20 @@ function Hunks({
   const shownDiff = useEntireDiff(diff, entireQuery, entire);
   const showsEntire = shownDiff !== diff;
   const container = fileId(view, fileIndex);
-  const key = `${shownDiff.version} ${String(showsEntire)}`;
-  const hold = useHeldPlace(view, key, controls.busy);
-  const bars = useBarActions(container, { entire, hold, onHunkRun, view, barsBelow }, setEntire);
+  const bars = useBarActions(container, { entire, onHunkRun, view, barsBelow }, setEntire);
 
   const unchanged = useMemo(
     () => (showsEntire ? unchangedLines(shownDiff) : { before: noLines, after: [] }),
     [shownDiff, showsEntire],
   );
+
+  useKeptLines(file.path, shownDiff.hunks, unchanged, container, controls.busy);
+
+  useEffect(() => {
+    if (scrolls) {
+      stopScrollAnchoring(view);
+    }
+  }, [scrolls, view]);
 
   const focus = useFocus(sideBySide);
   const range = useMemo(() => onSide(selection, focus), [selection, focus]);
@@ -292,6 +295,7 @@ function Hunks({
         />
         <UnchangedLines
           lines={unchanged.after[index] ?? noLines}
+          container={container}
           focus={focus}
           highlights={shownDiff.highlights}
           theme={theme}
@@ -304,6 +308,7 @@ function Hunks({
     <UnchangedLines
       key="before"
       lines={unchanged.before}
+      container={container}
       focus={focus}
       highlights={shownDiff.highlights}
       style={styles.spaced}

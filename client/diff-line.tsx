@@ -37,8 +37,8 @@ function SegmentText({
 }
 
 interface DiffLineProps {
-  // A hunk's line's, by which a selection finds it.
-  id: string | undefined;
+  // By which a selection finds a hunk's line, and the view keeps its place.
+  id: string;
   line: NumberedLine;
   selected: boolean;
   // The side it shows on, with only that version's number, or undefined inline, with both.

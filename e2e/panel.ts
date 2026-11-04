@@ -24,6 +24,20 @@ export function button(page: Page, name: string): Locator {
   return page.getByRole("button", { name, exact: true });
 }
 
+// An element on the page, which the tests typecheck without the DOM library to describe.
+interface Scrollable {
+  scrollIntoView: (options: { block: "start" }) => void;
+}
+
+// Scrolls the line's view to show the line at its top.
+export async function scrollToTop(page: Page, text: string): Promise<void> {
+  await line(page, text)
+    .first()
+    .evaluate((shown: Scrollable) => {
+      shown.scrollIntoView({ block: "start" });
+    });
+}
+
 // Drags across the lines' text, from the start of the first to the end of the last, as selecting
 // them does.
 export async function selectLines(page: Page, first: string, last = first): Promise<void> {

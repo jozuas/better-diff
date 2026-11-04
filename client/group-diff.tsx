@@ -10,6 +10,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useState,
 } from "react";
@@ -27,10 +28,10 @@ import { FontSizesContext } from "./fonts";
 import { diffOf, listedFiles } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
-import { filesToRender, linesShown } from "./rendering";
+import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
-import { scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
+import { KeptPlaceContext, scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -125,20 +126,53 @@ const moreLines = 1000;
 // How many of the files, from the first, have their diffs rendered: at first those whose lines fill
 // the view, and then more each time the last are, in a transition that what the page hears comes
 // before, so that the view shows the first files of a group of thousands of lines at once, and
-// scrolls them and hears the pointer over them while it renders the others.
+// scrolls them and hears the pointer over them while it renders the others. Once files join or
+// leave, those rendered still are, so that what the view shows below one that joins above stays.
 function useRenderedFiles(files: GroupRead["files"]): number {
   const lines = useMemo(() => files.map(linesShown), [files]);
-  const [rendered, setRendered] = useState(() => filesToRender(lines, 0, firstLines));
+
+  const [rendered, setRendered] = useState(() => ({
+    files,
+    count: filesToRender(lines, 0, firstLines),
+  }));
+
+  if (rendered.files !== files) {
+    setRendered({
+      files,
+      count: stillRendered(rendered.files, rendered.count, files),
+    });
+  }
+
+  const { count } = rendered;
 
   useEffect(() => {
-    if (rendered < lines.length) {
+    if (count < lines.length) {
       startTransition(() => {
-        setRendered(filesToRender(lines, rendered, moreLines));
+        setRendered({ files, count: filesToRender(lines, count, moreLines) });
       });
     }
-  }, [lines, rendered]);
+  }, [files, lines, count]);
 
-  return rendered;
+  return count;
+}
+
+// Has the view keep the place of the start of each file's diff, and settle, keeping its place,
+// each time it renders, with whether an action is running.
+function useKeptStarts(files: GroupRead["files"], view: string, busy: boolean): void {
+  const kept = useContext(KeptPlaceContext);
+
+  const starts = useMemo(
+    () => new Map(files.map(({ path }, index) => [path, fileId(view, index)])),
+    [files, view],
+  );
+
+  useLayoutEffect(() => {
+    kept.showStarts(starts);
+  }, [kept, starts]);
+
+  useLayoutEffect(() => {
+    kept.settle(busy);
+  });
 }
 
 interface GroupFilesProps {
@@ -204,6 +238,7 @@ function GroupFiles({
     stopScrollAnchoring(view);
   }, [view]);
 
+  useKeptStarts(files, view, controls.busy);
   useSettledFocus(controls.busy);
 
   const barHeight = tallest(

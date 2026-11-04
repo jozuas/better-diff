@@ -1,13 +1,14 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import type { NumberedLine } from "./lines";
 import type { LineRange } from "./selection";
 import {
   fileId,
+  focusedId,
   hunkId,
   isSelected,
   lineId,
-  markOf,
   onSide,
   rangeIn,
   rangeInHunk,
@@ -15,6 +16,8 @@ import {
   rangeLines,
   selectedLines,
   selectedRange,
+  unchangedLineId,
+  unfocusedId,
 } from "./selection";
 import type { Side } from "./side-by-side";
 
@@ -132,29 +135,52 @@ test("a line on the side without focus has an id of its own, which a selection d
   expect(selectedRange("«r1»", [lineId(file, 1, 3, false)], "")).toBeUndefined();
 });
 
-test("marks the places of a view's files' diffs, their hunks' lines and those lines, on either side", () => {
-  const file = fileId("«r1»", 12);
+// A line outside the hunks, with its number in each version.
+function unchangedLine(oldNumber: number, newNumber: number): NumberedLine {
+  return { kind: "context", text: "kept", newline: true, oldNumber, newNumber };
+}
 
-  expect(markOf("«r1»", file)).toBe(file);
-  expect(markOf("«r1»", hunkId(file, 13))).toBe(hunkId(file, 13));
-  expect(markOf("«r1»", lineId(file, 13, 0))).toBe(lineId(file, 13, 0));
-  expect(markOf("«r1»", lineId(file, 13, 0, false))).toBe(lineId(file, 13, 0));
+test("a line outside the hunks has an id on each side no other line has, by its number in the new version, which a selection leaves out", () => {
+  const file = fileId("«r1»", 2);
+  const unchanged = unchangedLineId(file, unchangedLine(3, 1));
+
+  const ids = [
+    unchanged,
+    unchangedLineId(file, unchangedLine(3, 1), false),
+    unchangedLineId(file, unchangedLine(1, 3)),
+    lineId(file, 0, 1),
+    lineId(file, 1, 3),
+    hunkId(file, 1),
+    file,
+  ];
+
+  expect(new Set(ids).size).toBe(ids.length);
+  expect(unchangedLineId(file, unchangedLine(5, 1))).toBe(unchanged);
+  expect(selectedRange("«r1»", ids.slice(0, 3), unchanged)).toBeUndefined();
 });
 
-test.each([
-  "«r1»",
-  "«r1»:",
-  "«r1»:2:",
-  "«r1»:x2",
-  "«r1»:2:x13",
-  "«r2»:2:13",
-  "x«r1»:2",
-  "«r1»:2:13x",
-  "«r1»:2:13:0:1",
-  "«r1»:2:unfocused:13",
-])("%s marks no place in the view «r1»", (id) => {
-  expect(markOf("«r1»", id)).toBeUndefined();
+test("a line's id on either side is the one the side with focus has", () => {
+  const file = fileId("«r1»", 2);
+
+  expect(focusedId(lineId(file, 1, 3, false))).toBe(lineId(file, 1, 3));
+  expect(focusedId(unchangedLineId(file, unchangedLine(2, 2), false))).toBe(
+    unchangedLineId(file, unchangedLine(2, 2)),
+  );
+
+  fc.assert(
+    fc.property(fc.string({ unit: "binary" }), (id) => {
+      expect(focusedId(unfocusedId(id))).toBe(id);
+      expect(unfocusedId(id)).not.toBe(id);
+    }),
+  );
 });
+
+test.each(["«r1»:2:13", "«r1»:2:new 4", "«r1»:unfocused:2", "«r1»:2:13:unfocused:x"])(
+  "%s is a line's id on the side with focus",
+  (id) => {
+    expect(focusedId(id)).toBe(id);
+  },
+);
 
 test("selects nothing when the selection touches no line", () => {
   expect(selectedRange("«r1»", [], "")).toBeUndefined();

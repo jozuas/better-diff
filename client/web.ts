@@ -1,13 +1,12 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useContext, useEffect, useLayoutEffect, useRef } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 
 import type { Controls } from "./actions";
 import { KeyboardFocusContext } from "./focus";
 import type { Point } from "./menu";
-import { placeHeld, placeToShow, topPlace } from "./place";
-import type { HeldPlace, Place } from "./place";
-import { markOf } from "./selection";
+import type { KeptPlace, ViewPage } from "./place";
+import { focusedId, unfocusedId } from "./selection";
 import { shortcutPress } from "./shortcuts";
 import type { Bar, KeyPress, Level } from "./shortcuts";
 
@@ -29,10 +28,16 @@ interface PageEvents {
   keydown: PageKeyboardEvent;
 }
 
+interface PageScrollEvent {
+  readonly target: { readonly id?: string } | null;
+}
+
 interface PageElement {
   readonly id: string;
   readonly parentElement: PageElement | null;
   scrollTop: number;
+  readonly scrollHeight: number;
+  readonly clientHeight: number;
   readonly style: {
     cursor: string;
     overflowAnchor: string;
@@ -58,7 +63,19 @@ declare const document: {
   querySelector: (selectors: string) => PageElement | null;
   readonly body: PageElement;
   readonly activeElement: PageElement | null;
+  addEventListener: (
+    type: "scroll",
+    listener: (event: PageScrollEvent) => void,
+    capture: true,
+  ) => void;
+  removeEventListener: (
+    type: "scroll",
+    listener: (event: PageScrollEvent) => void,
+    capture: true,
+  ) => void;
 };
+
+declare function queueMicrotask(task: () => void): void;
 
 declare const CSS: { escape: (identifier: string) => string };
 
@@ -105,55 +122,6 @@ export function scrollToOffset(container: string, target: string, offset: number
   if (current !== undefined) {
     scrollBy(container, current - offset);
   }
-}
-
-// The places of what the elements of the view with the id mark, in the page's order.
-function placesIn(view: string): Place[] {
-  const scroller = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(view)}`) : null;
-
-  if (scroller === null) {
-    return [];
-  }
-
-  const { top } = scroller.getBoundingClientRect();
-
-  return [...scroller.querySelectorAll("[id]")].flatMap((element) => {
-    const mark = markOf(view, element.id);
-
-    return mark === undefined
-      ? []
-      : [{ id: mark, offset: element.getBoundingClientRect().top - top }];
-  });
-}
-
-// Holds the place in the view with the id `view` of what an element of it marks, from when the
-// returned function is called with the mark, or without one for the line, hunk or file's diff the
-// view shows at its top, until `shown` changes, when the view scrolls to show that in the same place
-// again. It's held until an action that's `busy` is done, so that an agent's change shown before the
-// action's doesn't end it.
-export function useHeldPlace(view: string, shown: string, busy: boolean): (mark?: string) => void {
-  const held = useRef<HeldPlace | undefined>(undefined);
-
-  useLayoutEffect(() => {
-    const place = placeToShow(held.current, shown);
-
-    held.current = placeHeld(held.current, shown, busy);
-
-    if (place !== undefined) {
-      const now = placesIn(view).find(({ id }) => id === place.id);
-
-      if (now !== undefined) {
-        scrollBy(view, now.offset - place.offset);
-      }
-    }
-  }, [view, shown, busy]);
-
-  return (mark) => {
-    const places = placesIn(view);
-    const place = mark === undefined ? topPlace(places) : places.find(({ id }) => id === mark);
-
-    held.current = place === undefined ? undefined : { ...place, shown };
-  };
 }
 
 // Whether nothing on the page has focus, as once the element with focus is gone.
@@ -285,6 +253,68 @@ function useListener<Type extends keyof PageEvents>(
       element?.removeEventListener(type, listen);
     };
   }, [id, type, latest]);
+}
+
+// The element with the id `view`, which scrolls, as what it shows keeps its place: each line on
+// either side of a side-by-side view as the side with focus has it.
+export function viewPage(view: string): ViewPage {
+  function scroller(): PageElement | null {
+    return Platform.OS === "web" ? document.querySelector(`#${CSS.escape(view)}`) : null;
+  }
+
+  return {
+    ids: () => [...(scroller()?.querySelectorAll("[id]") ?? [])].map(({ id }) => focusedId(id)),
+    offsetOf: (id) =>
+      id === undefined ? undefined : (offsetIn(view, id) ?? offsetIn(view, unfocusedId(id))),
+    scrollTop: () => scroller()?.scrollTop ?? 0,
+    atEnd: () => {
+      const element = scroller();
+
+      return (
+        element !== null && element.scrollTop >= element.scrollHeight - element.clientHeight - 1
+      );
+    },
+    scrollBy: (distance) => {
+      scrollBy(view, distance);
+    },
+  };
+}
+
+// A view's, which its diffs keep its place with: until a view gives its own, one that keeps none.
+export const KeptPlaceContext = createContext<KeptPlace>({
+  show: () => () => {},
+  showStarts: () => {},
+  hold: () => {},
+  settle: () => {},
+  scrolled: () => {},
+});
+
+// Runs the task once what's rendering now has rendered, and before the page shows it.
+export function afterRender(task: () => void): void {
+  queueMicrotask(task);
+}
+
+// Calls the latest listener each time the element with the id scrolls, whenever it's on the page.
+export function useScrolled(id: string, listener: () => void): void {
+  const latest = useLatest(listener);
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      return () => {};
+    }
+
+    function listen(event: PageScrollEvent): void {
+      if (event.target?.id === id) {
+        latest.current();
+      }
+    }
+
+    document.addEventListener("scroll", listen, true);
+
+    return () => {
+      document.removeEventListener("scroll", listen, true);
+    };
+  }, [id, latest]);
 }
 
 // Calls the latest listener on each double click on the element with the id.

@@ -1,6 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyLinesRpc, diffRpc } from "../shared/diff";
+import type { NumberedLine } from "./lines";
 import { shows } from "./side-by-side";
 import type { Focus, Side } from "./side-by-side";
 
@@ -32,26 +33,36 @@ export function fileId(view: string, file: number): string {
   return `${view}:${file}`;
 }
 
-// A line's element id, under its file's id. Side by side, the side without focus has another, by
-// which a selection doesn't find it.
+// Side by side, the element id of a line on the side without focus, from the one it has on the side
+// with focus: one by which a selection doesn't find it.
+export function unfocusedId(id: string): string {
+  return `${id}:unfocused`;
+}
+
+// The element id a line has on the side with focus, from the one it has on either side.
+export function focusedId(id: string): string {
+  return id.replace(/:unfocused$/u, "");
+}
+
+// A line's element id, under its file's id.
 export function lineId(file: string, hunk: number, line: number, focused = true): string {
-  return focused ? `${file}:${hunk}:${line}` : `${file}:${hunk}:${line}:unfocused`;
+  const id = `${file}:${hunk}:${line}`;
+
+  return focused ? id : unfocusedId(id);
+}
+
+// The element id of a line outside the hunks, under its file's id, by its number in the new
+// version: no hunk's line has it, so a selection leaves the line out of those it selects.
+export function unchangedLineId(file: string, { newNumber }: NumberedLine, focused = true): string {
+  const id = `${file}:new ${String(newNumber)}`;
+
+  return focused ? id : unfocusedId(id);
 }
 
 // The id of an element at the top of a hunk's lines, by which the view finds the hunk, whichever of
 // its lines have ids.
 export function hunkId(file: string, hunk: number): string {
   return `${file}:${hunk}`;
-}
-
-// What the element with the id marks the place of in the view, if anything, whichever side has
-// focus: one of its files' diffs, the lines of one of their hunks, or one of those lines.
-export function markOf(view: string, id: string): string | undefined {
-  const mark = id.replace(/:unfocused$/u, "");
-
-  return mark.startsWith(`${view}:`) && /^\d+(?::\d+){0,2}$/u.test(mark.slice(view.length + 1))
-    ? mark
-    : undefined;
 }
 
 // The line an element id names, if it's one of the view's lines.

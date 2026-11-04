@@ -11,9 +11,9 @@ import { DiffLine } from "./diff-line";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
 import { numberLines } from "./lines";
-import type { NumberedLine } from "./lines";
+import type { IndexedLine, NumberedLine } from "./lines";
 import type { PointedHunk } from "./pointed";
-import { isSelected, lineId } from "./selection";
+import { isSelected, lineId, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
 import { rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
@@ -43,15 +43,15 @@ type Selected = (index: number, side?: Side) => boolean;
 // The changed text of each line, by its index among those shown.
 type ChangedText = (index: number) => readonly TextRange[];
 
-// The id of a line's text, by its index and whether its side has focus. One without focus has an
-// id a selection doesn't find it by.
-type IdOf = (index: number, focused: boolean) => string;
+// The id of a line's text, by the line, with its index, and whether its side has focus. One without
+// focus has an id a selection doesn't find it by.
+type IdOf = (line: IndexedLine, focused: boolean) => string;
 
 interface HalfProps {
   side: Side;
   // The line the side shows in the row, if any.
   shown: Row[Side];
-  idOf: IdOf | undefined;
+  idOf: IdOf;
   // Whether its side has focus, which only it can be selected on.
   focused: boolean;
   selected: Selected;
@@ -84,7 +84,7 @@ function Half({
         <View style={styles.filler} />
       ) : (
         <DiffLine
-          id={idOf?.(shown.index, focused)}
+          id={idOf(shown, focused)}
           line={shown.line}
           selected={selected(shown.index, side)}
           side={side}
@@ -100,7 +100,7 @@ function Half({
 
 interface SideBySideRowProps {
   row: Row;
-  idOf: IdOf | undefined;
+  idOf: IdOf;
   selected: Selected;
   focus: Focus;
   highlights: Highlights;
@@ -141,8 +141,7 @@ function SideBySideRow({
 
 interface LinesProps {
   lines: NumberedLine[];
-  // None for lines outside the hunks.
-  idOf: IdOf | undefined;
+  idOf: IdOf;
   selected: Selected;
   // Undefined for an inline view.
   focus: Focus | undefined;
@@ -165,7 +164,7 @@ function Lines({
     return lines.map((line, index) => (
       <DiffLine
         key={`${line.oldNumber},${line.newNumber}`}
-        id={idOf?.(index, true)}
+        id={idOf({ index, line }, true)}
         line={line}
         selected={selected(index)}
         side={undefined}
@@ -224,7 +223,7 @@ function LinesOfHunk({
     <View style={contained} {...pointed.pointer(index)}>
       <Lines
         lines={lines}
-        idOf={(line, focused) => lineId(container, index, line, focused)}
+        idOf={(line, focused) => lineId(container, index, line.index, focused)}
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
         highlights={highlights}
@@ -241,6 +240,8 @@ export const HunkLines = memo(LinesOfHunk);
 
 interface UnchangedLinesProps {
   lines: NumberedLine[];
+  // The id of the file's diff they're in.
+  container: string;
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The diff's.
@@ -253,6 +254,7 @@ interface UnchangedLinesProps {
 // them out of the lines it selects.
 function LinesOutsideHunks({
   lines,
+  container,
   focus,
   highlights,
   style,
@@ -264,7 +266,7 @@ function LinesOutsideHunks({
     <View style={[style, contained]}>
       <Lines
         lines={lines}
-        idOf={undefined}
+        idOf={({ line }, focused) => unchangedLineId(container, line, focused)}
         selected={() => false}
         focus={focus}
         highlights={highlights}

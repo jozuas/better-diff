@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, button, line, openFile, selectLines } from "./panel";
+import { box, button, line, openFile, scrollToTop, selectLines } from "./panel";
 
 // The shared daemon's diffs are in the Auto style, as no test there picks another, which shows them
 // side by side in a window this wide, and inline in one this narrow.
@@ -285,20 +285,6 @@ function changeTwoLongHunks(repository: string): void {
   );
 
   writeFile(repository, "a.txt", `${changed.join("\n")}\n`);
-}
-
-// An element on the page, which the tests typecheck without the DOM library to describe.
-interface Scrollable {
-  scrollIntoView: (options: { block: "start" }) => void;
-}
-
-// Scrolls the line's view to show the line at its top.
-async function scrollToTop(page: Page, text: string): Promise<void> {
-  await line(page, text)
-    .first()
-    .evaluate((shown: Scrollable) => {
-      shown.scrollIntoView({ block: "start" });
-    });
 }
 
 test("a change of width that switches between inline and side by side keeps what's at the top of a file's diff in place", async ({

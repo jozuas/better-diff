@@ -115,7 +115,7 @@ function unchanged(lines: readonly string[], from: Counts, to: number): Numbered
 
 // The lines a text diff's hunks leave out of the file, which neither version changes: those before
 // the first hunk, and those after each one, up to the next or the end of the file.
-interface Unchanged {
+export interface Unchanged {
   before: NumberedLine[];
   after: NumberedLine[][];
 }
