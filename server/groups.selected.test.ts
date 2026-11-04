@@ -16,7 +16,6 @@ import {
 import type { GroupAction } from "../test/groups";
 import { commitTenLines } from "../test/renames";
 import {
-  commitAll,
   inCopyOf,
   inRepository,
   runGit,
@@ -90,22 +89,18 @@ test.each(groupActions)(
           setUp(repository, all, "myers");
 
           const paths = all.map(({ path }) => path);
+          const { [action.group]: listed } = await listChanges({ directory: repository });
+          const chosen = selected.filter((path) => listed.includes(path));
 
           const outcome = await inCopyOf(repository, async (copy) => {
-            const { version } = await readGroup({
-              directory: repository,
-              group: action.group,
-              paths: selected,
-            });
-
             const status = await applyGroup({
               directory: repository,
-              version,
-              paths: selected,
+              paths: chosen,
+              selected: true,
               ...action,
             });
 
-            await actOnEachSelected(copy, action, selected);
+            await actOnEachSelected(copy, action, chosen);
 
             return {
               status,
@@ -131,12 +126,15 @@ test("unstage the selected staged files: unstages the deletion of the file a sel
     writeFile(repository, "c", "c\n");
     runGit(repository, ["add", "--", "c"]);
 
-    const selected = { directory: repository, group: "staged" as const, paths: ["b"] };
-    const { version } = await readGroup(selected);
-
-    await expect(applyGroup({ ...selected, operation: "unstage", version })).resolves.toStrictEqual(
-      { status: "applied" },
-    );
+    await expect(
+      applyGroup({
+        directory: repository,
+        group: "staged",
+        operation: "unstage",
+        paths: ["b"],
+        selected: true,
+      }),
+    ).resolves.toStrictEqual({ status: "applied" });
 
     expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe(
       " D a\nA  c\n?? b\n",
@@ -149,40 +147,21 @@ test("stage the selected untracked files: does nothing once one has left the gro
     writeFile(repository, "a", "a\n");
     writeFile(repository, "b", "b\n");
 
-    const selected = { directory: repository, group: "untracked" as const, paths: ["a", "b"] };
-    const { version } = await readGroup(selected);
-
     runGit(repository, ["add", "--", "a"]);
 
-    await expect(applyGroup({ ...selected, operation: "stage", version })).resolves.toStrictEqual({
-      status: "stale",
-    });
+    await expect(
+      applyGroup({
+        directory: repository,
+        group: "untracked",
+        operation: "stage",
+        paths: ["a", "b"],
+        selected: true,
+      }),
+    ).resolves.toStrictEqual({ status: "stale" });
 
     expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe(
       "A  a\n?? b\n",
     );
-  });
-});
-
-test("discard the selected modified files: does nothing once one's diff has changed", async () => {
-  await inRepository(async (repository) => {
-    writeFile(repository, "a", "a\n");
-    writeFile(repository, "b", "b\n");
-    commitAll(repository);
-    writeFile(repository, "a", "changed a\n");
-    writeFile(repository, "b", "changed b\n");
-
-    const selected = { directory: repository, group: "modified" as const, paths: ["a", "b"] };
-    const { version } = await readGroup(selected);
-
-    writeFile(repository, "b", "changed b again\n");
-
-    await expect(applyGroup({ ...selected, operation: "discard", version })).resolves.toStrictEqual(
-      { status: "stale" },
-    );
-
-    expect(worktreeFile(repository, "a")?.toString()).toBe("changed a\n");
-    expect(worktreeFile(repository, "b")?.toString()).toBe("changed b again\n");
   });
 });
 
@@ -212,24 +191,20 @@ test.each(groupActions)(
   async (action) => {
     await fc.assert(
       fc.asyncProperty(filesAndJoining(action.group), async ([all, joining]) => {
-        const paths = all.map(({ path }) => path);
-
         await inRepository(async (repository) => {
           setUp(repository, all, "myers");
 
-          const selected = { directory: repository, group: action.group, paths };
-          const read = await readGroup(selected);
+          const { [action.group]: listed } = await listChanges({ directory: repository });
 
           writeLater(repository, joining);
 
-          const { files: reread } = await readGroup(selected);
-          const { [action.group]: listed } = await listChanges({ directory: repository });
+          const { [action.group]: relisted } = await listChanges({ directory: repository });
 
-          fc.pre(JSON.stringify(reread) === JSON.stringify(read.files));
-          fc.pre(listed.includes(joining.path));
+          fc.pre(relisted.includes(joining.path));
+          fc.pre(listed.every((path) => relisted.includes(path)));
 
           await expect(
-            applyGroup({ ...selected, version: read.version, ...action }),
+            applyGroup({ directory: repository, paths: listed, selected: true, ...action }),
           ).resolves.toStrictEqual({ status: "applied" });
 
           expect(worktreeFile(repository, joining.path)).toStrictEqual(joining.versions.worktree);
@@ -257,7 +232,7 @@ test("reads and acts on the selected files the same through the RPCs' input and 
     expect(read.files.map(({ path }) => path)).toStrictEqual(["a", "c"]);
 
     const applied = await applyGroup(
-      applyGroupRpc.input.parse({ ...input, operation: "stage", version: read.version }),
+      applyGroupRpc.input.parse({ ...input, operation: "stage", selected: true }),
     );
 
     expect(applyGroupRpc.output.parse(applied)).toStrictEqual({ status: "applied" });

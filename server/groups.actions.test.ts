@@ -14,7 +14,8 @@ import type { GroupAction, RepositoryState } from "../test/groups";
 import { commitTenLines, move } from "../test/renames";
 import { inCopyOf, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { setUp } from "../test/staging";
-import { applyGroup, readGroup } from "./groups";
+import { listChanges } from "./changes";
+import { applyGroup } from "./groups";
 
 interface Outcome {
   status: RpcOutput<typeof applyGroupRpc>;
@@ -30,8 +31,8 @@ async function actOnGroupAndEachFile(
   paths: readonly string[],
 ): Promise<Outcome> {
   const outcome = await inCopyOf(repository, async (copy) => {
-    const { version } = await readGroup({ directory: repository, group: action.group });
-    const status = await applyGroup({ directory: repository, version, ...action });
+    const { [action.group]: listed } = await listChanges({ directory: repository });
+    const status = await applyGroup({ directory: repository, paths: listed, ...action });
 
     await actOnEachListed(copy, action);
 
@@ -133,10 +134,13 @@ test("stage all untracked files: leaves one whose diff can't be read as it is", 
   await inRepository(async (repository) => {
     addUnreadableFile(repository);
 
-    const { version } = await readGroup({ directory: repository, group: "untracked" });
-
     await expect(
-      applyGroup({ directory: repository, group: "untracked", operation: "stage", version }),
+      applyGroup({
+        directory: repository,
+        group: "untracked",
+        operation: "stage",
+        paths: ["a", "b"],
+      }),
     ).resolves.toStrictEqual({ status: "applied" });
 
     expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all", "-z"])).toBe(

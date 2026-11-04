@@ -6,20 +6,14 @@ import type { Server } from "./apply";
 interface Answers {
   // The diff shown, if it's been read.
   shown?: { version: string };
-  // The paths of a group as read.
-  listed?: string[];
   status?: "applied" | "stale";
 }
 
-// A server that answers with what's given, a diff read with the version "read" and a group with
-// the version "group".
-function serverWith({ shown, listed = [], status = "applied" }: Answers = {}) {
+// A server that answers with what's given, and a diff read with the version "read".
+function serverWith({ shown, status = "applied" }: Answers = {}) {
   return {
     shownDiff: vi.fn<Server["shownDiff"]>(() => shown),
     readDiff: vi.fn<Server["readDiff"]>().mockResolvedValue({ version: "read" }),
-    readGroup: vi
-      .fn<Server["readGroup"]>()
-      .mockResolvedValue({ version: "group", files: listed.map((path) => ({ path })) }),
     applyFile: vi.fn<Server["applyFile"]>().mockResolvedValue({ status }),
     applyLines: vi.fn<Server["applyLines"]>().mockResolvedValue({ status }),
     applyMode: vi.fn<Server["applyMode"]>().mockResolvedValue({ status }),
@@ -110,7 +104,7 @@ test("reads the diff of the shown file's row while it hasn't been read to be sho
 });
 
 test("answers with the server's answer", async () => {
-  const server = serverWith({ listed: ["a"], status: "stale" });
+  const server = serverWith({ status: "stale" });
 
   await expect(apply(server, "/repo", "stage", { file: modified, version: "1" })).resolves.toBe(
     "stale",
@@ -126,67 +120,42 @@ test("answers with the server's answer", async () => {
   ).resolves.toBe("stale");
 });
 
-test("acts on all of a group's files, of the version read, while they're the ones listed", async () => {
-  const server = serverWith({ listed: ["a", "b"] });
+test("acts on all of a group's files as they were listed, without reading them", async () => {
+  const server = serverWith();
 
   await expect(
     apply(server, "/repo", "discard", { group: "untracked", paths: ["a", "b"] }),
   ).resolves.toBe("applied");
-  expect(server.readGroup).toHaveBeenCalledWith({ directory: "/repo", group: "untracked" });
   expect(server.applyGroup).toHaveBeenCalledWith({
     directory: "/repo",
     group: "untracked",
     operation: "discard",
-    version: "group",
+    paths: ["a", "b"],
   });
+  expect(server.readDiff).not.toHaveBeenCalled();
 });
 
-test("refuses an action on a group as stale, and applies nothing, once a file has joined it, left it or been replaced since it was listed", async () => {
-  const server = serverWith({ listed: ["a", "b"] });
-
-  await expect(apply(server, "/repo", "stage", { group: "modified", paths: ["a"] })).resolves.toBe(
-    "stale",
-  );
-  await expect(
-    apply(server, "/repo", "stage", { group: "modified", paths: ["a", "b", "c"] }),
-  ).resolves.toBe("stale");
-  await expect(
-    apply(server, "/repo", "stage", { group: "modified", paths: ["a", "c"] }),
-  ).resolves.toBe("stale");
-  expect(server.applyGroup).not.toHaveBeenCalled();
-});
-
-test("acts on the files selected in a group, of the version read of them, while the group still lists them all, in any order", async () => {
-  const server = serverWith({ listed: ["a", "b"] });
+test("acts on the files selected in a group, in the order they were selected", async () => {
+  const server = serverWith();
 
   await expect(
     apply(server, "/repo", "stage", { group: "modified", paths: ["b", "a"], selected: true }),
   ).resolves.toBe("applied");
-  expect(server.readGroup).toHaveBeenCalledWith({
-    directory: "/repo",
-    group: "modified",
-    paths: ["b", "a"],
-  });
-  expect(server.applyGroup).toHaveBeenCalledWith({
-    directory: "/repo",
-    group: "modified",
-    operation: "stage",
-    version: "group",
-    paths: ["b", "a"],
-  });
-});
-
-test("refuses an action on the files selected as stale, and applies nothing, once one has left the group", async () => {
-  const server = serverWith({ listed: ["a"] });
-
-  await expect(
-    apply(server, "/repo", "stage", { group: "modified", paths: ["a", "b"], selected: true }),
-  ).resolves.toBe("stale");
-  expect(server.applyGroup).not.toHaveBeenCalled();
+  expect(server.applyGroup.mock.calls).toStrictEqual([
+    [
+      {
+        directory: "/repo",
+        group: "modified",
+        operation: "stage",
+        paths: ["b", "a"],
+        selected: true,
+      },
+    ],
+  ]);
 });
 
 test("refuses an operation a group's files can't have", async () => {
-  const server = serverWith({ listed: ["a"] });
+  const server = serverWith();
 
   await expect(
     apply(server, "/repo", "discard", { group: "staged", paths: ["a"] }),

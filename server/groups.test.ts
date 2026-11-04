@@ -5,7 +5,6 @@ import { expect, test } from "vitest";
 import { applyGroupRpc, groupRpc } from "../shared/diff";
 import { canCoexist, filePath } from "../test/file-names";
 import {
-  diffChanges,
   files,
   filesAndLater,
   groupActions,
@@ -14,7 +13,7 @@ import {
   writeLater,
 } from "../test/groups";
 import type { GroupAction } from "../test/groups";
-import { commitAll, inRepository, timeout, writeFile } from "../test/repository";
+import { commitAll, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { setUp } from "../test/staging";
 import { listChanges } from "./changes";
 import { readDiff } from "./diff";
@@ -182,7 +181,7 @@ test.each<[Group, (repository: string) => void]>([
 );
 
 test.each(groupActions)(
-  "$operation all $group files: does nothing once a file has joined or left the group, or its diff has changed",
+  "$operation all $group files: does nothing once a file has joined or left the group",
   async (action) => {
     await fc.assert(
       fc.asyncProperty(filesAndLater, async ([all, written]) => {
@@ -191,28 +190,48 @@ test.each(groupActions)(
         await inRepository(async (repository) => {
           setUp(repository, all, "myers");
 
-          const read = await readGroup({ directory: repository, group: action.group });
+          const { [action.group]: listed } = await listChanges({ directory: repository });
 
           writeLater(repository, written);
 
-          const reread = await readGroup({ directory: repository, group: action.group });
+          const { [action.group]: relisted } = await listChanges({ directory: repository });
 
-          fc.pre(JSON.stringify(reread.files) !== JSON.stringify(read.files));
+          fc.pre(JSON.stringify(relisted) !== JSON.stringify(listed));
 
           const before = repositoryState(repository, [...paths, written.path]);
 
           await expect(
-            applyGroup({ directory: repository, version: read.version, ...action }),
+            applyGroup({ directory: repository, paths: listed, ...action }),
           ).resolves.toStrictEqual({ status: "stale" });
 
           expect(repositoryState(repository, [...paths, written.path])).toStrictEqual(before);
         });
       }),
-      { numRuns: 20, examples: diffChanges },
+      { numRuns: 20 },
     );
   },
   timeout,
 );
+
+test("stage all untracked files: does nothing once one has left the group and another has joined it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", "a\n");
+    writeFile(repository, "c", "c\n");
+
+    await expect(
+      applyGroup({
+        directory: repository,
+        group: "untracked",
+        operation: "stage",
+        paths: ["a", "b"],
+      }),
+    ).resolves.toStrictEqual({ status: "stale" });
+
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe(
+      "?? a\n?? c\n",
+    );
+  });
+});
 
 test.each(groupActions)(
   "$operation all $group files: answers the same through the RPCs' input and output validation",
@@ -245,7 +264,11 @@ test.each(groupActions)(
       );
 
       const applied = await applyGroup(
-        applyGroupRpc.input.parse({ directory: repository, version: read.version, ...action }),
+        applyGroupRpc.input.parse({
+          directory: repository,
+          paths: read.files.map(({ path }) => path),
+          ...action,
+        }),
       );
 
       expect(applyGroupRpc.output.parse(applied)).toStrictEqual({ status: "applied" });
@@ -260,7 +283,7 @@ test.each([
   { group: "staged", operation: "stage" },
   { group: "staged", operation: "discard" },
 ])("refuses to $operation all $group files", ({ group, operation }) => {
-  const parsed = applyGroupRpc.input.safeParse({ directory: "/", version: "", group, operation });
+  const parsed = applyGroupRpc.input.safeParse({ directory: "/", paths: [], group, operation });
 
   expect(parsed.success).toBe(false);
 });

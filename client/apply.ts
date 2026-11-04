@@ -1,7 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { applyGroupRpc } from "../shared/diff";
-import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc, groupRpc } from "../shared/diff";
+import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
 import { groups } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 
@@ -47,9 +47,6 @@ export interface Server {
   // Undefined until it's read.
   shownDiff: (file: OpenFile) => { version: string } | undefined;
   readDiff: (input: RpcInput<typeof diffRpc>) => Promise<{ version: string }>;
-  readGroup: (
-    input: RpcInput<typeof groupRpc>,
-  ) => Promise<{ version: string; files: { path: string }[] }>;
   applyFile: (input: RpcInput<typeof applyFileRpc>) => Promise<{ status: Status }>;
   applyLines: (input: RpcInput<typeof applyLinesRpc>) => Promise<{ status: Status }>;
   applyMode: (input: RpcInput<typeof applyModeRpc>) => Promise<{ status: Status }>;
@@ -65,15 +62,8 @@ async function applyToGroup(
   operation: Operation,
   { group, paths, selected }: ListedGroup,
 ): Promise<Status> {
-  const only = selected === undefined ? undefined : paths;
-  const { version, files } = await server.readGroup({ directory, group, paths: only });
-
-  if (files.length !== paths.length || files.some(({ path }) => !paths.includes(path))) {
-    return "stale";
-  }
-
   const { status } = await server.applyGroup(
-    applyGroupRpc.input.parse({ directory, group, operation, version, paths: only }),
+    applyGroupRpc.input.parse({ directory, group, operation, paths, selected }),
   );
 
   return status;

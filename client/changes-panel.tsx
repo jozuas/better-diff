@@ -99,7 +99,6 @@ function useControls(
   const server: Server = {
     shownDiff,
     readDiff: useRpc(diffRpc),
-    readGroup: useRpc(groupRpc),
     applyFile: useRpc(applyFileRpc),
     applyLines: useRpc(applyLinesRpc),
     applyMode: useRpc(applyModeRpc),
