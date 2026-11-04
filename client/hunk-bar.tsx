@@ -1,12 +1,23 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { ReactElement } from "react";
-import { memo, useId, useMemo, useState, useSyncExternalStore } from "react";
+import type { ReactElement, RefObject } from "react";
+import {
+  memo,
+  useContext,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import { hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
+import { hunkMove } from "./arrows";
+import { KeyboardFocusContext } from "./focus";
 import type { OpenFile } from "./groups";
 import { IconButton } from "./icon-button";
 import { entireFileIcon, onlyHunksIcon } from "./icons";
@@ -14,7 +25,7 @@ import type { PointedHunk } from "./pointed";
 import { hunkRevealed } from "./reveal";
 import { rangeKey, rangeLines } from "./selection";
 import type { LineRange } from "./selection";
-import { useStuckAt } from "./web";
+import { useKeys, useStuckAt } from "./web";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -84,6 +95,8 @@ interface LineButtonsProps {
   file: OpenFile;
   selection: LineRange | undefined;
   controls: Controls;
+  // Called just before one of the actions runs.
+  onRun: () => void;
   theme: PluginTheme;
 }
 
@@ -95,6 +108,7 @@ function LineButtons({
   file,
   selection,
   controls,
+  onRun,
   theme,
 }: LineButtonsProps): ReactElement | null {
   return selection?.hunk === index ? (
@@ -103,6 +117,7 @@ function LineButtons({
       bar={`${version}:lines ${index}:${rangeKey(selection)}`}
       target={{ file, version, lines: rangeLines(selection, hunk.lines) }}
       controls={controls}
+      onRun={onRun}
       color={theme.colors.foreground}
       theme={theme}
     />
@@ -114,6 +129,8 @@ interface HunkBarProps {
   index: number;
   version: string;
   file: OpenFile;
+  // Its file's index in the view.
+  fileIndex: number;
   selection: LineRange | undefined;
   // Which of the diff's hunks the pointer is over.
   pointed: PointedHunk;
@@ -127,20 +144,51 @@ interface HunkBarProps {
   onHeight: (height: number) => void;
   // Called with the hunk's index just before an action on the hunk runs.
   onRun: (hunk: number) => void;
+  // Called with the hunk's index to scroll the view to show the hunk from its start.
+  onShow: (hunk: number) => void;
   // How far below the top of the view the bar stays while the hunk's lines scroll under it, while
   // they scroll with the view's other diffs, whose view keeps only the files' bars at its top.
   stuckBelow: number | undefined;
   theme: PluginTheme;
 }
 
+// Lets the panel's keyboard focus move to the hunk, onto the button, and show it with `onShow`.
+function useHunkFocus(
+  file: OpenFile,
+  fileIndex: number,
+  index: number,
+  button: RefObject<View | null>,
+  onShow: (hunk: number) => void,
+): void {
+  const focus = useContext(KeyboardFocusContext);
+  const { group, path } = file;
+
+  useLayoutEffect(
+    () =>
+      focus.addHunk({
+        file: { group, path },
+        place: [fileIndex, index],
+        focus: () => {
+          button.current?.focus();
+        },
+        show: () => {
+          onShow(index);
+        },
+      }),
+    [focus, group, path, fileIndex, index, button, onShow],
+  );
+}
+
 // On its left, the toggle between the entire file and only its hunks, and on its right, the hunk's
 // actions, both hidden until the hunk is revealed, and those on its selected lines while it has
-// any.
+// any. With focus in it, ↓ and ↑ move focus to the next hunk or the one before, and ← to its file's
+// row. Once an action on the hunk or its lines runs with focus in it, focus moves on with the view.
 function BarOfHunk({
   hunk,
   index,
   version,
   file,
+  fileIndex,
   selection,
   pointed,
   controls,
@@ -148,6 +196,7 @@ function BarOfHunk({
   onToggleEntire,
   onHeight,
   onRun,
+  onShow,
   stuckBelow,
   theme,
 }: HunkBarProps): ReactElement {
@@ -155,8 +204,26 @@ function BarOfHunk({
   const [focused, setFocused] = useState(false);
   const revealed = hunkRevealed(index, usePointedAt(pointed, index), focused, selection?.hunk);
   const id = useId();
+  const button = useRef<View>(null);
+  const focus = useContext(KeyboardFocusContext);
 
   useStuckAt(id, stuckBelow);
+  useHunkFocus(file, fileIndex, index, button, onShow);
+
+  useKeys(id, hunkMove, (move) => {
+    if (move === "row") {
+      focus.toRow(file);
+    } else {
+      focus.toHunkBy([fileIndex, index], move);
+    }
+  });
+
+  // Called just before an action on the hunk or its lines runs.
+  function holdFocus(): void {
+    if (focused) {
+      focus.hold([fileIndex, index]);
+    }
+  }
 
   return (
     <View
@@ -193,6 +260,7 @@ function BarOfHunk({
           file={file}
           selection={selection}
           controls={controls}
+          onRun={holdFocus}
           theme={theme}
         />
         <ActionButtons
@@ -201,9 +269,11 @@ function BarOfHunk({
           target={{ file, version, lines: hunkLines(hunk.lines, index) }}
           controls={controls}
           onRun={() => {
+            holdFocus();
             onRun(index);
           }}
           hidden={!revealed}
+          buttonRef={button}
           color={theme.colors.foreground}
           theme={theme}
         />

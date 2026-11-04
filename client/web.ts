@@ -1,7 +1,8 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 
+import { KeyboardFocusContext } from "./focus";
 import type { Point } from "./menu";
 import { placeHeld, placeToShow, topPlace } from "./place";
 import type { HeldPlace, Place } from "./place";
@@ -54,6 +55,7 @@ interface PageElement {
 declare const document: {
   querySelector: (selectors: string) => PageElement | null;
   readonly body: PageElement;
+  readonly activeElement: PageElement | null;
 };
 
 declare const CSS: { escape: (identifier: string) => string };
@@ -88,7 +90,7 @@ function scrollBy(container: string, distance: number): void {
 
 // Scrolls the element with the id `container`, as far as it goes, to show the top of the element
 // with the id `target` `offset` below its top.
-function scrollToOffset(container: string, target: string, offset: number): void {
+export function scrollToOffset(container: string, target: string, offset: number): void {
   const current = offsetIn(container, target);
 
   if (current !== undefined) {
@@ -143,6 +145,25 @@ export function useHeldPlace(view: string, shown: string, busy: boolean): (mark?
 
     held.current = place === undefined ? undefined : { ...place, shown };
   };
+}
+
+// Whether nothing on the page has focus, as once the element with focus is gone.
+function nothingFocused(): boolean {
+  return (
+    Platform.OS === "web" &&
+    (document.activeElement === null || document.activeElement === document.body)
+  );
+}
+
+// Once the caller renders, and no action is `busy`, moves focus to the hunk the panel's keyboard
+// focus holds the place of, if nothing has focus, as once the hunk an action ran on with focus in
+// its bar is gone.
+export function useSettledFocus(busy: boolean): void {
+  const focus = useContext(KeyboardFocusContext);
+
+  useLayoutEffect(() => {
+    focus.settle(busy, nothingFocused());
+  });
 }
 
 // Scrolls the element with the id `container` up, if it has to, to show the top of the element with

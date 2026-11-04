@@ -30,7 +30,7 @@ import { Failed, Queried } from "./queried";
 import { filesToRender, linesShown } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
-import { scrollUpTo, stopScrollAnchoring } from "./web";
+import { scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -204,6 +204,8 @@ function GroupFiles({
     stopScrollAnchoring(view);
   }, [view]);
 
+  useSettledFocus(controls.busy);
+
   const barHeight = tallest(
     heights,
     files.map(({ path }) => path),
@@ -282,7 +284,8 @@ interface GroupDiffProps extends Omit<GroupFilesProps, "read" | "view" | "sideBy
 // as tall as the tallest, so none shows from under the one that covers it. A collapsed diff shows
 // its lines once asked to, until another file or group is opened. Just before an action on a file
 // or a hunk runs, the view scrolls up to its start if it's above, so what then takes its place
-// shows from its start.
+// shows from its start, and focus moves on to the hunk that takes the place of one an action ran
+// on with focus in its bar.
 export function GroupDiff({ query, layout, theme, ...files }: GroupDiffProps): ReactElement {
   const read = useQuery(query);
   const view = useId();

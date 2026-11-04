@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import type { ReactElement, Ref } from "react";
 import { useState } from "react";
 import type { PressableProps } from "react-native";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -12,6 +12,7 @@ interface Pointer {
 }
 
 interface HoverableProps extends Omit<PressableProps, "children"> {
+  ref?: Ref<View> | undefined;
   children: (pointer: Pointer) => ReactElement;
 }
 

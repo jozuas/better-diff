@@ -19,7 +19,7 @@ import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { useSelectedLines } from "./text-selection";
-import { scrollUpTo } from "./web";
+import { scrollUpTo, useSettledFocus } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -187,13 +187,15 @@ interface FileDiffProps {
 // The file's diff, as opened from its group, under its bar. A collapsed diff shows its lines once
 // asked to, until another file is opened. Just before an action on a hunk runs, the view scrolls up
 // to the hunk's start if it's above, so the next hunk, which then takes its place, shows from its
-// start.
+// start, and focus moves on to it if it was in the hunk's bar.
 export function FileDiff({ query, file, layout, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
   const view = useId();
   const [expand, setExpand] = useState(false);
   const diff = useQuery(query(expand));
   const selection = useSelectedLines(view, () => diff.data?.version);
+
+  useSettledFocus(controls.busy);
 
   return (
     <View style={styles.file}>

@@ -203,6 +203,24 @@ export function selectedBy(
   return between(file.group, listed, start, listed[listed.indexOf(end) + step] ?? end);
 }
 
+// What opens once ↓ (1) or ↑ (-1) is pressed with focus in the file's row: the file the sidebar
+// lists after it or before it, from the files of one of its groups it shows them of to the next's.
+// None past either end, or if the sidebar doesn't list the file.
+export function listedBy(
+  sidebar: readonly SidebarGroup[],
+  collapsed: readonly GroupName[],
+  file: OpenFile,
+  step: 1 | -1,
+): OpenFile | undefined {
+  const listed = sidebar
+    .filter(({ name }) => !collapsed.includes(name))
+    .flatMap(({ name, paths }) => paths.map((path) => ({ group: name, path })));
+
+  const index = listed.findIndex(({ group, path }) => group === file.group && path === file.path);
+
+  return index === -1 ? undefined : listed[index + step];
+}
+
 // The files of the group's read that the sidebar lists under the filter, each with its diff or why
 // it can't be read.
 export function listedFiles(read: GroupRead, filter: string): GroupRead["files"] {

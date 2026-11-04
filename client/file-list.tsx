@@ -1,14 +1,16 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { Controls } from "./actions";
 import type { CopyItem } from "./copy";
 import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
+import { KeyboardFocusContext } from "./focus";
 import { GroupSection } from "./group-section";
+import { listedBy } from "./groups";
 import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
 import type { Point } from "./menu";
 
@@ -37,7 +39,8 @@ interface FileListProps {
 // The changed files, in their groups, under the filter they're listed by. Each file and group has
 // its actions at the end of its row, shown while the pointer is over it or focus is in it, and
 // always for the open file or group, or the files selected. A file's row opens its menu when
-// right-clicked.
+// right-clicked. ↓ and ↑ with focus in a file's row open the next file listed or the one before,
+// whichever group it's in, and focus moves along with them.
 export function FileList({
   groups,
   open,
@@ -52,6 +55,7 @@ export function FileList({
   theme,
 }: FileListProps): ReactElement {
   const [menu, setMenu] = useState<{ path: string; point: Point }>();
+  const focus = useContext(KeyboardFocusContext);
 
   return (
     <View style={styles.fileList}>
@@ -69,6 +73,14 @@ export function FileList({
             expanded={!collapsed.includes(group.name)}
             onToggle={() => {
               onToggle(group.name);
+            }}
+            onMove={(file, step) => {
+              const next = listedBy(groups, collapsed, file, step);
+
+              if (next !== undefined) {
+                onOpen(next);
+                focus.toRow(next);
+              }
             }}
             onMenu={(path, point) => {
               setMenu({ path, point });

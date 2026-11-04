@@ -1,5 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import type { ReactElement } from "react";
+import type { ReactElement, Ref } from "react";
 import { useContext, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -45,6 +45,7 @@ interface ActionButtonProps {
   busy: boolean;
   hidden: boolean;
   onPress: () => void;
+  buttonRef: Ref<View> | undefined;
   styles: Styles;
 }
 
@@ -54,12 +55,14 @@ function ActionButton({
   busy,
   hidden,
   onPress,
+  buttonRef,
   styles,
 }: ActionButtonProps): ReactElement {
   const text = buttonText(action, armed);
 
   return (
     <Hoverable
+      ref={buttonRef}
       accessibilityRole="button"
       accessibilityLabel={text}
       accessibilityState={{ disabled: busy }}
@@ -98,6 +101,8 @@ interface ActionButtonsProps {
   // Called just before one of the actions runs.
   onRun?: (() => void) | undefined;
   hidden?: boolean;
+  // The button of the action that loses no work, which keys move focus to.
+  buttonRef?: Ref<View>;
   // The buttons' colour, against the bar's.
   color: string;
   theme: PluginTheme;
@@ -111,6 +116,7 @@ export function ActionButtons({
   controls,
   onRun,
   hidden = false,
+  buttonRef,
   color,
   theme,
 }: ActionButtonsProps): ReactElement {
@@ -128,6 +134,7 @@ export function ActionButtons({
           onPress={() => {
             controls.press(`${bar}:${action.operation}`, action, target, onRun);
           }}
+          buttonRef={action.confirmation === undefined ? buttonRef : undefined}
           styles={styles}
         />
       ))}

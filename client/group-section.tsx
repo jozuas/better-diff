@@ -1,11 +1,13 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement, Ref } from "react";
-import { useContext, useId, useMemo, useRef, useState } from "react";
+import { useContext, useId, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { groupActions, rowActions } from "./actions";
 import type { Controls, RowActions } from "./actions";
+import { rowMove } from "./arrows";
 import { FileLabel } from "./file-label";
+import { KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
 import {
   isGroupOpen,
@@ -109,9 +111,11 @@ interface FileRowProps {
   onPress: (shift: boolean) => void;
   // Hears 1 on Shift+↓ while focus is in the row, and -1 on Shift+↑.
   onStep: (step: 1 | -1) => void;
+  // Hears 1 on ↓ while focus is in the row, -1 on ↑, and "diff" on →.
+  onMove: (move: 1 | -1 | "diff") => void;
   // Hears where the row was right-clicked.
   onMenu: (point: Point) => void;
-  // The row's button that opens the file, which focus moves to once Shift+↑/↓ reaches it.
+  // The row's button that opens the file, which focus moves to once ↑/↓ reaches it.
   buttonRef: Ref<View>;
   controls: Controls;
   styles: Styles;
@@ -124,6 +128,7 @@ function FileRow({
   actions,
   onPress,
   onStep,
+  onMove,
   onMenu,
   buttonRef,
   controls,
@@ -136,6 +141,7 @@ function FileRow({
 
   useContextMenu(id, onMenu);
   useKeys(id, shiftStep, onStep);
+  useKeys(id, rowMove, onMove);
 
   return (
     <View role="listitem" nativeID={id}>
@@ -247,6 +253,8 @@ interface GroupSectionProps {
   onOpenGroup: () => void;
   expanded: boolean;
   onToggle: () => void;
+  // Hears ↓ (1) or ↑ (-1) pressed with focus in the file's row.
+  onMove: (file: OpenFile, step: 1 | -1) => void;
   // Hears where the file at the path was right-clicked.
   onMenu: (path: string, point: Point) => void;
   controls: Controls;
@@ -255,7 +263,8 @@ interface GroupSectionProps {
 
 // The group's heading, and the rows of the files it lists while it's expanded. A file's row opens
 // its file, or if shift-clicked selects the files from the open one to it. Shift+↑/↓ with focus in
-// a row selects one more file or one fewer, and moves focus to the file the selection reaches.
+// a row selects one more file or one fewer, and moves focus to the file the selection reaches. →
+// moves focus to the file's first hunk in the diff.
 export function GroupSection({
   group,
   open,
@@ -263,13 +272,13 @@ export function GroupSection({
   onOpenGroup,
   expanded,
   onToggle,
+  onMove,
   onMenu,
   controls,
   theme,
 }: GroupSectionProps): ReactElement {
   const styles = useStyles(theme);
-  // The rows' buttons that open their files, by their paths.
-  const buttons = useRef(new Map<string, View>());
+  const focus = useContext(KeyboardFocusContext);
 
   return (
     <View style={styles.group}>
@@ -303,21 +312,20 @@ export function GroupSection({
                 onOpen(selected);
 
                 if (reached !== undefined) {
-                  buttons.current.get(reached)?.focus();
+                  focus.toRow({ group: group.name, path: reached });
+                }
+              }}
+              onMove={(move) => {
+                if (move === "diff") {
+                  focus.toHunks(file);
+                } else {
+                  onMove(file, move);
                 }
               }}
               onMenu={(point) => {
                 onMenu(path, point);
               }}
-              buttonRef={(button) => {
-                if (button !== null) {
-                  buttons.current.set(path, button);
-                }
-
-                return () => {
-                  buttons.current.delete(path);
-                };
-              }}
+              buttonRef={(button) => (button === null ? undefined : focus.addRow(file, button))}
               controls={controls}
               styles={styles}
               theme={theme}

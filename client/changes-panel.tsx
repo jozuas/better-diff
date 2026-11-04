@@ -24,6 +24,7 @@ import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
 import type { Layout } from "./diff-style";
 import { DiffView } from "./diff-view";
+import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
 import { groups, openAfter, placeholder, toggled } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
@@ -253,6 +254,7 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   const sidebar = useSidebarState(tab, changes.data);
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
+  const focus = useMemo(() => keyboardFocus(), []);
   const diffs = useDiffQueries(directory);
   const readVersion = useRpc(versionRpc);
   const refresh = useMemo(() => refreshOf(queryClient, directory), [queryClient, directory]);
@@ -303,28 +305,30 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
         setPanelWidth(event.nativeEvent.layout.width);
       }}
     >
-      <Sidebar
-        {...sidebar}
-        directory={directory}
-        changes={changes}
-        controls={controls}
-        panelWidth={panelWidth}
-        theme={theme}
-      />
-      <View style={styles.diff}>
-        <ShownDiffsContext value={shownDiffs}>
-          <DiffView
-            open={sidebar.open}
-            placeholder={placeholder(changes.data)}
-            layout={layout}
-            fileQuery={diffs.query}
-            groupQuery={diffs.groupQuery}
-            filter={sidebar.filter}
-            controls={controls}
-            theme={theme}
-          />
-        </ShownDiffsContext>
-      </View>
+      <KeyboardFocusContext value={focus}>
+        <Sidebar
+          {...sidebar}
+          directory={directory}
+          changes={changes}
+          controls={controls}
+          panelWidth={panelWidth}
+          theme={theme}
+        />
+        <View style={styles.diff}>
+          <ShownDiffsContext value={shownDiffs}>
+            <DiffView
+              open={sidebar.open}
+              placeholder={placeholder(changes.data)}
+              layout={layout}
+              fileQuery={diffs.query}
+              groupQuery={diffs.groupQuery}
+              filter={sidebar.filter}
+              controls={controls}
+              theme={theme}
+            />
+          </ShownDiffsContext>
+        </View>
+      </KeyboardFocusContext>
     </View>
   );
 }

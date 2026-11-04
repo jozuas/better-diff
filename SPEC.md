@@ -28,6 +28,8 @@ Replicates Sublime Merge as much as possible:
 - An untracked file's lines can be staged and discarded like a modified file's. Its one hunk is the whole file, so discarding that hunk, or all its lines, deletes the file, as Delete does.
 - A partly staged file appears in both MODIFIED and STAGED. Opened from MODIFIED it shows the unstaged part, from STAGED the staged part.
 - After a hunk action the view moves to the next hunk; after a file action, to the next file.
+- With focus in a hunk's bar, ↓ and ↑ move focus to the next hunk or the one before, in a group's view from one file's diff to the next's, and the view shows that hunk from its start. Focus lands on its Stage Hunk button, or Unstage Hunk, so Enter stages or unstages it. ← moves focus back to its file's row in the sidebar.
+- Once an action on a hunk or its lines runs with focus in the hunk's bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left. So Enter stages one hunk after another.
 
 ### Selecting lines
 
@@ -73,6 +75,7 @@ Replicates Sublime Merge as much as possible:
   They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
 - Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. Shift+↓ and Shift+↑, with focus in a file's row, select one more file or one fewer, and focus moves along with them. A selection stays within one group: shift-clicking a file in another group opens just that file.
+- ↓ and ↑, with focus in a file's row, open the next file the sidebar lists or the one before, from the last file of one group to the first of the next, and focus moves along with them. → moves focus into the file's diff, to its first hunk.
 - The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows show their actions always, acting on all of them as a group's actions act on all its files:
   - MODIFIED: Stage Selected, Discard Selected
   - UNTRACKED: Stage Selected, Delete Selected
@@ -114,7 +117,7 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 - Sending line comments to an agent.
 - Show/hide whitespace changes.
-- Keyboard shortcuts.
+- Keyboard shortcuts for actions, besides Enter on the button with focus.
 - The actions of a file's and a group's buttons in right-click menus too.
 - Mobile.
 

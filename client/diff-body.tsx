@@ -22,7 +22,7 @@ import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
 import { clearSelection } from "./text-selection";
-import { useHeldPlace, useLatest } from "./web";
+import { scrollToOffset, useHeldPlace, useLatest } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -141,6 +141,7 @@ interface BarActions {
   onToggleEntire: (hunk: number) => void;
   onHeight: (height: number) => void;
   onRun: (hunk: number) => void;
+  onShow: (hunk: number) => void;
 }
 
 // What the bars act with, as the latest render gives it.
@@ -149,12 +150,15 @@ interface BarState {
   // Holds the place of what the element with the id marks.
   hold: (mark: string) => void;
   onHunkRun: DiffBodyProps["onHunkRun"];
+  view: string;
+  barsBelow: number | undefined;
 }
 
 // The bars' actions, the same each render, with what the latest render gives them, so that a change
 // that reaches only some hunks, as the selection's does, renders only their bars again. Toggling the
 // entire file keeps the hunk in place, and so does an action on a hunk while the entire file shows,
-// where the next hunk takes its place.
+// where the next hunk takes its place. Showing a hunk scrolls the view to its lines' start, under
+// its bar, and under the file's bar where that stays at the top too.
 function useBarActions(
   container: string,
   state: BarState,
@@ -180,6 +184,11 @@ function useBarActions(
         if (entire) {
           hold(hunkId(container, hunk));
         }
+      },
+      onShow: (hunk) => {
+        const { view, barsBelow = 0 } = latest.current;
+
+        scrollToOffset(view, hunkId(container, hunk), barsBelow + barHeight.current);
       },
     }),
     [container, setEntire, latest],
@@ -232,7 +241,7 @@ function Hunks({
   const container = fileId(view, fileIndex);
   const key = `${shownDiff.version} ${String(showsEntire)}`;
   const hold = useHeldPlace(view, key, controls.busy);
-  const bars = useBarActions(container, { entire, hold, onHunkRun }, setEntire);
+  const bars = useBarActions(container, { entire, hold, onHunkRun, view, barsBelow }, setEntire);
 
   const unchanged = useMemo(
     () => (showsEntire ? unchangedLines(shownDiff) : { before: noLines, after: [] }),
@@ -252,6 +261,7 @@ function Hunks({
         index={index}
         version={shownDiff.version}
         file={file}
+        fileIndex={fileIndex}
         selection={selected}
         pointed={pointed}
         controls={controls}
@@ -259,6 +269,7 @@ function Hunks({
         onToggleEntire={bars.onToggleEntire}
         onHeight={bars.onHeight}
         onRun={bars.onRun}
+        onShow={bars.onShow}
         stuckBelow={barsBelow}
         theme={theme}
       />,
