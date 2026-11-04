@@ -4,7 +4,7 @@ import { useRpc, useSettings, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
@@ -33,7 +33,8 @@ import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
 import { SyntaxColorsProvider } from "./syntax-colors";
 import { clearSelection } from "./text-selection";
-import { onWindowFocus } from "./window-focus";
+import { useLatest } from "./web";
+import { useWindowFocus } from "./window-focus";
 
 type Listed = RpcOutput<typeof changesRpc>;
 
@@ -146,12 +147,8 @@ function useRefreshOnChanges(
 ): void {
   const wait = useRpc(waitRpc);
   const release = useRpc(releaseRpc);
-  const first = useRef(from);
+  const first = useLatest(from);
   const read = from !== undefined;
-
-  useLayoutEffect(() => {
-    first.current = from;
-  });
 
   useEffect(() => {
     const stopping = new AbortController();
@@ -177,20 +174,7 @@ function useRefreshOnChanges(
     return () => {
       stopping.abort();
     };
-  }, [directory, read, wait, release, refresh]);
-}
-
-// Calls the latest `refresh` whenever the window regains focus, as on switching back from an
-// editor, which may have changed what nothing tells of a change to, such as a file outside the
-// worktree that git reads.
-function useRefreshOnFocus(refresh: () => Promise<void>): void {
-  const latest = useRef(refresh);
-
-  useEffect(() => {
-    latest.current = refresh;
-  });
-
-  useEffect(() => onWindowFocus(() => void latest.current()), []);
+  }, [directory, read, wait, release, refresh, first]);
 }
 
 // What's open, moved on from the open file whenever the changes are listed again and its group no
@@ -299,7 +283,12 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   );
 
   useRefreshOnChanges(directory, readAt(changes), refresh);
-  useRefreshOnFocus(refreshNow);
+
+  // Switching back from an editor may have changed what nothing tells of a change to, such as a
+  // file outside the worktree that git reads.
+  useWindowFocus(() => {
+    void refreshNow();
+  });
 
   return (
     <View

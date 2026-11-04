@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useContext, useEffect, useId, useMemo, useState } from "react";
+import { useContext, useId, useMemo, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { copyItems, copyLabel } from "./copy";
@@ -9,7 +9,7 @@ import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import { menuPosition } from "./menu";
 import type { Point, Size } from "./menu";
-import { onContextMenu } from "./web";
+import { useContextMenu } from "./web";
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -79,7 +79,7 @@ export function FileMenu({ path, point, onCopy, onClose, theme }: FileMenuProps)
   const [size, setSize] = useState<Size>();
   const backdrop = useId();
 
-  useEffect(() => onContextMenu(backdrop, onClose), [backdrop, onClose]);
+  useContextMenu(backdrop, onClose);
 
   return (
     <Modal transparent visible onRequestClose={onClose}>

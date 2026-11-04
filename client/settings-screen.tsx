@@ -8,12 +8,13 @@ import {
   useToast,
 } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { fontSizeRanges, lineLengthRange, viewSettings } from "../shared/settings";
 import { debounced } from "./debounce";
 import { sizeOptions } from "./fonts";
 import { lineLengthOf, viewSettingsOf } from "./settings";
+import { useLatest } from "./web";
 
 // The styles a diff can show in.
 const diffStyles = [
@@ -45,12 +46,8 @@ function LineLength({ settings }: LineLengthProps): ReactElement {
   const [typed, setTyped] = useState(String(settings.values.lineLength));
   // The settings as they are when typing pauses, which a save changes, rather than as they were
   // when the length was typed.
-  const latest = useRef(settings);
+  const latest = useLatest(settings);
   const save = useMemo(() => debounced(typingPause), []);
-
-  useEffect(() => {
-    latest.current = settings;
-  });
 
   useEffect(() => save.flush, [save]);
 

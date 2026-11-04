@@ -1,12 +1,12 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { GestureResponderEvent, GestureResponderHandlers } from "react-native";
 import { StyleSheet, View } from "react-native";
 
 import { draggedWidth } from "./resize";
 import type { DragStart } from "./resize";
-import { onDoubleClick, resizing, showResizeCursor } from "./web";
+import { resizing, showResizeCursor, useDoubleClick } from "./web";
 
 // The pixels either side of the separator's line that grab it too.
 const grab = 6;
@@ -47,23 +47,6 @@ function useDrag({ width, onResize, onResized }: Resize) {
   };
 
   return { dragging: drag !== null, handlers };
-}
-
-// Calls the latest `onFit` on each double click on the element with the id.
-function useDoubleClick(id: string, onFit: () => void): void {
-  const fit = useRef(onFit);
-
-  useEffect(() => {
-    fit.current = onFit;
-  });
-
-  useEffect(
-    () =>
-      onDoubleClick(id, () => {
-        fit.current();
-      }),
-    [id],
-  );
 }
 
 interface SeparatorProps extends Resize {

@@ -1,9 +1,10 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { Platform } from "react-native";
 
 import { selectedLines, selectedRange, stillSelected } from "./selection";
 import type { LineRange, SelectedLines, ShownFiles } from "./selection";
+import { useLatest } from "./web";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageNode {
@@ -190,11 +191,7 @@ export function clearSelection(): void {
 // which an action on the lines would act on.
 export function useSelectedLines(view: string, shown: ShownFiles): LineRange | undefined {
   const [selected, setSelected] = useState<SelectedLines>();
-  const latest = useRef(shown);
-
-  useLayoutEffect(() => {
-    latest.current = shown;
-  });
+  const latest = useLatest(shown);
 
   useEffect(
     () =>
@@ -203,7 +200,7 @@ export function useSelectedLines(view: string, shown: ShownFiles): LineRange | u
 
         setSelected((before) => selectedLines(before, range, latest.current));
       }),
-    [view],
+    [view, latest],
   );
 
   const range = stillSelected(selected, shown);

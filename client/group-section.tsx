@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement, Ref } from "react";
-import { useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useContext, useId, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { groupActions, rowActions } from "./actions";
@@ -19,9 +19,9 @@ import type { Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
 import { Hoverable } from "./hoverable";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
-import { withShift } from "./shift";
+import { shiftStep, withShift } from "./shift";
 import { SidebarButtons } from "./sidebar-buttons";
-import { onContextMenu, onShiftArrow } from "./web";
+import { useContextMenu, useKeys } from "./web";
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -134,8 +134,8 @@ function FileRow({
   const look = lookOf(open, revealed);
   const id = useId();
 
-  useEffect(() => onContextMenu(id, onMenu), [id, onMenu]);
-  useEffect(() => onShiftArrow(id, onStep), [id, onStep]);
+  useContextMenu(id, onMenu);
+  useKeys(id, shiftStep, onStep);
 
   return (
     <View role="listitem" nativeID={id}>

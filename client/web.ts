@@ -1,12 +1,11 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 
 import type { Point } from "./menu";
 import { placeHeld, placeToShow, topPlace } from "./place";
 import type { HeldPlace, Place } from "./place";
 import { markOf } from "./selection";
-import { shiftStep } from "./shift";
 import type { Keys } from "./shift";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
@@ -202,46 +201,69 @@ export function resizing(): () => void {
   };
 }
 
-// Calls the listener on each event of the type in the element with the id, until the returned
-// function is called.
-function listen<Type extends keyof PageEvents>(
+// The value the latest render gave, for what runs after it, such as a listener added once rather
+// than again with each render's value.
+export function useLatest<Value>(value: Value): { readonly current: Value } {
+  const latest = useRef(value);
+
+  useLayoutEffect(() => {
+    latest.current = value;
+  });
+
+  return latest;
+}
+
+// Calls the latest listener on each event of the type in the element with the id, while the caller
+// is mounted: a listener that's new with each render isn't removed and added again.
+function useListener<Type extends keyof PageEvents>(
   id: string,
   type: Type,
   listener: (event: PageEvents[Type]) => void,
-): () => void {
-  const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+): void {
+  const latest = useLatest(listener);
 
-  element?.addEventListener(type, listener);
+  useEffect(() => {
+    const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
 
-  return () => {
-    element?.removeEventListener(type, listener);
-  };
+    function listen(event: PageEvents[Type]): void {
+      latest.current(event);
+    }
+
+    element?.addEventListener(type, listen);
+
+    return () => {
+      element?.removeEventListener(type, listen);
+    };
+  }, [id, type, latest]);
 }
 
-// Calls the listener on each double click on the element with the id, until the returned function is
-// called.
-export function onDoubleClick(id: string, listener: () => void): () => void {
-  return listen(id, "dblclick", listener);
+// Calls the latest listener on each double click on the element with the id.
+export function useDoubleClick(id: string, listener: () => void): void {
+  useListener(id, "dblclick", listener);
 }
 
-// Calls the listener with where the pointer is on each right click on the element with the id, in
-// place of the page's own menu, until the returned function is called.
-export function onContextMenu(id: string, listener: (point: Point) => void): () => void {
-  return listen(id, "contextmenu", (event) => {
+// Calls the latest listener with where the pointer is on each right click on the element with the
+// id, in place of the page's own menu.
+export function useContextMenu(id: string, listener: (point: Point) => void): void {
+  useListener(id, "contextmenu", (event) => {
     event.preventDefault();
     listener({ x: event.clientX, y: event.clientY });
   });
 }
 
-// Calls the listener with how far each Shift+↓ or Shift+↑ in the element with the id moves the file
-// a selection reaches, in place of scrolling, until the returned function is called.
-export function onShiftArrow(id: string, listener: (step: 1 | -1) => void): () => void {
-  return listen(id, "keydown", (event) => {
-    const step = shiftStep(event);
+// Calls the latest listener with what `read` makes of each key pressed in the element with the id,
+// where it makes something of it, in place of what the key does on the page, such as scroll it.
+export function useKeys<Read>(
+  id: string,
+  read: (keys: Keys) => Read | undefined,
+  listener: (read: Read) => void,
+): void {
+  useListener(id, "keydown", (event) => {
+    const made = read(event);
 
-    if (step !== undefined) {
+    if (made !== undefined) {
       event.preventDefault();
-      listener(step);
+      listener(made);
     }
   });
 }

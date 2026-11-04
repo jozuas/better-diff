@@ -3,7 +3,7 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
-import { useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useContext, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -22,7 +22,7 @@ import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
 import { clearSelection } from "./text-selection";
-import { useHeldPlace } from "./web";
+import { useHeldPlace, useLatest } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -157,12 +157,8 @@ function useBarActions(
   state: BarState,
   setEntire: Dispatch<SetStateAction<boolean>>,
 ): BarActions {
-  const latest = useRef(state);
+  const latest = useLatest(state);
   const barHeight = useRef(0);
-
-  useLayoutEffect(() => {
-    latest.current = state;
-  });
 
   return useMemo(
     () => ({
@@ -183,7 +179,7 @@ function useBarActions(
         }
       },
     }),
-    [container, setEntire],
+    [container, setEntire, latest],
   );
 }
 
