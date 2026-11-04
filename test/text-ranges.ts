@@ -1,7 +1,7 @@
 import type { TextRange } from "../client/changed-text";
 
 // The positions of the line's characters outside the ranges.
-export function keptPositions(line: string, ranges: readonly TextRange[]): number[] {
+function keptPositions(line: string, ranges: readonly TextRange[]): number[] {
   return Array.from({ length: line.length }, (_, at) => at).filter(
     (at) => !ranges.some(({ start, end }) => start <= at && at < end),
   );

@@ -1,5 +1,9 @@
-import { longestCommon } from "./longest-common";
-import { wordsOf } from "./words";
+// Infers which text of a run of changes' lines changed as delta's within-line diff does, in its
+// edits.rs (https://github.com/dandavison/delta, MIT licence, copyright 2020 Dan Davison).
+
+import { operationsOf } from "./alignment";
+import type { Operation } from "./alignment";
+import { startsWithWord, wordsOf } from "./words";
 
 // Where a piece of a line's text starts, and where it ends, after its last character.
 export interface TextRange {
@@ -7,187 +11,125 @@ export interface TextRange {
   end: number;
 }
 
-// The most words and breaks removed and added that a run of changes is compared in, since comparing
-// takes longer the more there are.
-const editLimit = 1000;
+// The most cells the tables aligning a run's lines can have together, since filling them takes
+// longer the more there are.
+const cellLimit = 1_000_000;
 
-// A word of one of a run's lines, by the line's index among the run's removed or added ones and
-// where the word starts in its text, or, as null, the break before the line.
-interface Piece {
-  word: string | null;
-  line: number;
-  start: number;
-}
+// The operations, each with how many tokens in a row it's of.
+function groupsOf(operations: readonly Operation[]): [Operation, number][] {
+  const groups: [Operation, number][] = [];
 
-// The words of the lines, in order, with a break before each line. The removed and added lines'
-// first breaks are the same, so what they have in common starts at the start of both.
-function piecesOf(lines: readonly string[]): Piece[] {
-  return lines.flatMap((text, line) => {
-    let start = 0;
+  for (const operation of operations) {
+    const last = groups.at(-1);
 
-    const words = wordsOf(text).map((word) => {
-      const piece = { word, line, start };
-
-      start += word.length;
-
-      return piece;
-    });
-
-    return [{ word: null, line, start: 0 }, ...words];
-  });
-}
-
-// Where each piece starts in the text of them all, a break being a character, then where it ends.
-function offsetsOf(pieces: readonly Piece[]): number[] {
-  const offsets = [0];
-
-  for (const { word } of pieces) {
-    offsets.push((offsets.at(-1) ?? 0) + (word?.length ?? 1));
-  }
-
-  return offsets;
-}
-
-// A run's removed and added pieces' offsets.
-interface Offsets {
-  old: number[];
-  new: number[];
-}
-
-// How long the text of the pieces is from the one at `from` up to the one at `to`, or NaN past the
-// pieces.
-function lengthOf(offsets: readonly number[], from: number, to: number): number {
-  return (offsets[to] ?? Number.NaN) - (offsets[from] ?? Number.NaN);
-}
-
-// A stretch of pieces the removed and added lines have in common, unchanged: where it starts among
-// each's pieces, and how many pieces it has.
-interface Stretch {
-  old: number;
-  new: number;
-  count: number;
-}
-
-// The pieces in common, by their indices among the removed and added ones, in stretches of those
-// that follow each other in both.
-function stretchesOf(pairs: readonly [number, number][]): Stretch[] {
-  // Stryker disable next-line ArrayDeclaration: the first stretch has the first lines' break, so it's always kept, and nothing before it is weighed.
-  const stretches: Stretch[] = [];
-
-  for (const [old, added] of pairs) {
-    const last = stretches.at(-1);
-
-    if (last !== undefined && last.old + last.count === old && last.new + last.count === added) {
-      last.count += 1;
+    if (last?.[0] === operation) {
+      last[1] += 1;
     } else {
-      stretches.push({ old, new: added, count: 1 });
+      groups.push([operation, 1]);
     }
   }
 
-  return stretches;
+  return groups;
 }
 
-// How much text is both removed and added between the stretches: the less of the two.
-function changedBetween(before: Stretch, after: Stretch, offsets: Offsets): number {
-  return Math.min(
-    lengthOf(offsets.old, before.old + before.count, after.old),
-    lengthOf(offsets.new, before.new + before.count, after.new),
-  );
+// A character a terminal shows two columns wide: an emoji, or a Chinese, Japanese or Korean one.
+const wide =
+  /[\p{Emoji_Presentation}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303F\uFF01-\uFF60\uFFE0-\uFFE6]/u;
+
+// A line's words and other characters, as delta aligns them: after an empty token if the line
+// doesn't start with a word, so that its indentation is changed along with the word another line
+// starts with instead.
+function tokensOf(line: string): string[] {
+  return startsWithWord(line) ? wordsOf(line) : ["", ...wordsOf(line)];
 }
 
-// Whether the stretch has a break in it, which, being in common, it has in both the removed and the
-// added pieces.
-function hasBreak(stretch: Stretch, pieces: readonly Piece[]): boolean {
-  return pieces.slice(stretch.old, stretch.old + stretch.count).some(({ word }) => word === null);
+// How much text there is, for how different lines are, as delta measures it: how many columns a
+// terminal shows it in, but for whitespace at its ends. A mark, a joiner or an emoji's skin tone
+// combines with the character before it.
+function widthOf(text: string): number {
+  const characters = text.trim().match(/[^\p{M}\p{Join_Control}\p{EMod}]/gu) ?? [];
+
+  return characters.length + characters.filter((character) => wide.test(character)).length;
 }
 
-// Whether the stretch is longer than the text that's both removed and added on one side of it,
-// before it from the stretch `before`, or after it up to the stretch `after`.
-function outweighs(before: Stretch, stretch: Stretch, after: Stretch, offsets: Offsets): boolean {
-  const length = lengthOf(offsets.old, stretch.old, stretch.old + stretch.count);
+// A line's tokens, read a group at a time, and its changed text.
+class Reader {
+  private readonly tokens: readonly string[];
+  private token = 0;
+  private at = 0;
+  readonly changes: TextRange[] = [];
 
-  return (
-    length > changedBetween(before, stretch, offsets) ||
-    length > changedBetween(stretch, after, offsets)
-  );
-}
-
-// The stretches but those no longer than the text that's both removed and added on each side of
-// them, as a space between two words that both changed is, which count as changed too. Leaving one
-// out joins the changes on either side of it, so the stretch before it is checked again. One with a
-// break in it stays, so a line's stretches are weighed against what changed between them and its
-// start or end, as a line's on its own are, not against what changed in the lines around it. The
-// first has the break before the first lines.
-function withoutCoincidences(
-  stretches: readonly Stretch[],
-  offsets: Offsets,
-  pieces: readonly Piece[],
-): readonly Stretch[] {
-  const [first, ...rest] = stretches;
-
-  if (first === undefined) {
-    return stretches;
+  constructor(tokens: readonly string[]) {
+    this.tokens = tokens;
   }
 
-  const end = { old: offsets.old.length - 1, new: offsets.new.length - 1, count: 0 };
-  // Stryker disable next-line ArrayDeclaration: the first stretch has the first lines' break, so it's always kept, and nothing before it is weighed.
-  const kept: Stretch[] = [];
-  let last = first;
+  // The text of the next `count` tokens.
+  textOf(count: number): string {
+    return this.tokens.slice(this.token, this.token + count).join("");
+  }
 
-  for (const next of [...rest, end]) {
-    let before = kept.at(-1);
+  // Reads the next `count` tokens, as changed or not, and gives their text.
+  read(count: number, changed: boolean): string {
+    const text = this.textOf(count);
+    const start = this.at;
+    const last = this.changes.at(-1);
 
-    while (
-      before !== undefined &&
-      !outweighs(before, last, next, offsets) &&
-      !hasBreak(last, pieces)
-    ) {
-      last = before;
-      kept.pop();
-      before = kept.at(-1);
+    this.token += count;
+    this.at += text.length;
+
+    if (changed && last?.end === start) {
+      last.end = this.at;
+    } else if (changed && text !== "") {
+      this.changes.push({ start, end: this.at });
     }
 
-    kept.push(last);
-    last = next;
+    return text;
   }
-
-  return kept;
 }
 
-// The indices of the pieces the stretches have on a side.
-function indicesIn(stretches: readonly Stretch[], side: keyof Offsets): Set<number> {
-  return new Set(
-    stretches.flatMap((stretch) =>
-      Array.from({ length: stretch.count }, (_, index) => stretch[side] + index),
-    ),
-  );
+// What aligning a removed line with an added one finds: each one's changed text, and how different
+// they are, from 0 for lines that only differ in whitespace to 1 for lines with nothing in common.
+interface Pair {
+  removed: TextRange[];
+  added: TextRange[];
+  distance: number;
 }
 
-// Each line's words that aren't among the unchanged pieces, in ranges of those that touch.
-function rangesOf(lines: number, pieces: readonly Piece[], unchanged: Set<number>): TextRange[][] {
-  const ranges = new Map<number, TextRange[]>();
+// The pair the lines' tokens make. Whitespace both lines keep right after text both changed counts
+// as changed too. How different the lines are is how much of their text changed, counting what they
+// keep twice, once in each.
+function pairOf(removedTokens: readonly string[], addedTokens: readonly string[]): Pair {
+  const removed = new Reader(removedTokens);
+  const added = new Reader(addedTokens);
+  let changed = 0;
+  let total = 0;
+  // The kinds of change since the text the lines last kept.
+  const since = new Set<Operation>();
 
-  for (const [index, { word, line, start }] of pieces.entries()) {
-    if (word !== null && !unchanged.has(index)) {
-      const lineRanges = ranges.get(line) ?? [];
-      const last = lineRanges.at(-1);
+  for (const [operation, count] of groupsOf(operationsOf(removedTokens, addedTokens))) {
+    if (operation === "keep") {
+      const width = widthOf(removed.textOf(count));
+      const between = width === 0 && since.has("remove") && since.has("add");
 
-      if (last?.end === start) {
-        last.end += word.length;
-      } else {
-        lineRanges.push({ start, end: start + word.length });
-      }
+      removed.read(count, between);
+      added.read(count, between);
+      total += 2 * width;
+      since.clear();
+    } else {
+      const width = widthOf((operation === "remove" ? removed : added).read(count, true));
 
-      ranges.set(line, lineRanges);
+      changed += width;
+      total += width;
+      since.add(operation);
     }
   }
 
-  return Array.from({ length: lines }, (_, line) => ranges.get(line) ?? []);
+  return {
+    removed: removed.changes,
+    added: added.changes,
+    distance: total === 0 ? 0 : changed / total,
+  };
 }
-
-// What lines have in common with no lines.
-// Stryker disable next-line ArrayDeclaration: pairs that aren't of numbers are of no pieces, so they keep nothing, as no pairs do.
-const nothingInCommon: readonly [number, number][] = [];
 
 // The changed text of each of a run's removed lines and each of its added ones.
 interface RunChanges {
@@ -195,36 +137,40 @@ interface RunChanges {
   added: TextRange[][];
 }
 
-// The text that changed in each of a run's removed and added lines: the words that aren't among the
-// most the run's removed and added text have in common, in order, but for stretches of those as
-// long as at most the text that's both removed and added on each side of them. None if comparing
-// them would take more than `editLimit` words and breaks removed and added. Lines with none on the
-// other side to compare with have nothing in common with it, which takes no comparing.
-export function changedTextOf(removed: readonly string[], added: readonly string[]): RunChanges {
-  const oldPieces = piecesOf(removed);
-  const newPieces = piecesOf(added);
+// The text that changed in each of a run's removed and added lines. Each removed line, in order, is
+// paired with the first added line after the last one paired that's no more than `maxDistance`
+// different from it, and the two have the changed text aligning them finds. Others have none, as
+// have those after aligning the run's lines would take tables of more than `cellLimit` cells.
+export function changedTextOf(
+  removed: readonly string[],
+  added: readonly string[],
+  maxDistance: number,
+): RunChanges {
+  const changes: RunChanges = { removed: removed.map(() => []), added: added.map(() => []) };
+  const addedTokens = added.map(tokensOf);
+  let next = 0;
+  let cells = 0;
 
-  const pairs =
-    removed.length === 0 || added.length === 0
-      ? nothingInCommon
-      : longestCommon(
-          oldPieces.map(({ word }) => word),
-          newPieces.map(({ word }) => word),
-          editLimit,
-        );
+  for (const [index, line] of removed.entries()) {
+    const tokens = tokensOf(line);
 
-  if (pairs === undefined) {
-    return { removed: removed.map(() => []), added: added.map(() => []) };
+    for (const [offset, candidate] of addedTokens.slice(next).entries()) {
+      cells += (tokens.length + 1) * (candidate.length + 1);
+
+      if (cells > cellLimit) {
+        return changes;
+      }
+
+      const pair = pairOf(tokens, candidate);
+
+      if (pair.distance <= maxDistance) {
+        changes.removed[index] = pair.removed;
+        changes.added[next + offset] = pair.added;
+        next += offset + 1;
+        break;
+      }
+    }
   }
 
-  const stretches = withoutCoincidences(
-    stretchesOf(pairs),
-    { old: offsetsOf(oldPieces), new: offsetsOf(newPieces) },
-    oldPieces,
-  );
-
-  return {
-    removed: rangesOf(removed.length, oldPieces, indicesIn(stretches, "old")),
-    added: rangesOf(added.length, newPieces, indicesIn(stretches, "new")),
-  };
+  return changes;
 }

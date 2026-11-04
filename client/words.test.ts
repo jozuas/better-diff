@@ -2,28 +2,24 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { lineText } from "../test/line-texts";
-import { wordsOf } from "./words";
+import { startsWithWord, wordsOf } from "./words";
 
-type Kind = "word" | "space" | "other";
+type Kind = "word" | "other";
 
-// What a piece of text is: a run of letters, digits and underscores, a run of whitespace, or
-// something else.
+// What a piece of text is: a run of letters, marks, decimal digits, connectors and joiners, as Rust's
+// \w matches, or something else.
 function kindOf(piece: string): Kind {
-  if (/^[\p{L}\p{M}\p{N}_]+$/u.test(piece)) {
-    return "word";
-  }
-
-  return /^\s+$/u.test(piece) ? "space" : "other";
+  return /^[\p{Alphabetic}\p{M}\p{Nd}\p{Pc}\p{Join_Control}]+$/u.test(piece) ? "word" : "other";
 }
 
-// The kinds of the pieces that are runs followed by a run of the same kind.
-function runsFollowedByTheirKind(kinds: readonly Kind[]): string[] {
-  return kinds.filter((kind, index) => kind !== "other" && kind === kinds[index + 1]);
+// The words followed by a word.
+function wordsFollowedByWords(kinds: readonly Kind[]): string[] {
+  return kinds.filter((kind, index) => kind === "word" && kinds[index + 1] === "word");
 }
 
 const graphemes = new Intl.Segmenter("en", { granularity: "grapheme" });
 
-// Where each of the text's words starts, and where the last ends.
+// Where each of the text's tokens starts, and where the last ends.
 function wordBounds(text: string): number[] {
   const bounds = [0];
 
@@ -34,8 +30,8 @@ function wordBounds(text: string): number[] {
   return bounds;
 }
 
-// The words that are neither runs of letters, digits and underscores nor of whitespace, yet have
-// more than one of the text's characters as a reader sees them, its grapheme clusters.
+// The tokens that aren't words, yet have more than one of the text's characters as a reader sees
+// them, its grapheme clusters.
 function othersOfManyCharacters(text: string): string[] {
   const starts = new Set([...graphemes.segment(text)].map(({ index }) => index));
   const bounds = wordBounds(text);
@@ -49,7 +45,7 @@ function othersOfManyCharacters(text: string): string[] {
   );
 }
 
-test("the words make up the text", () => {
+test("the words and other characters make up the text", () => {
   fc.assert(
     fc.property(lineText, (line) => {
       expect(wordsOf(line).join("")).toBe(line);
@@ -57,17 +53,47 @@ test("the words make up the text", () => {
   );
 });
 
-test("each word is a run of letters, digits and underscores, or of whitespace, as long as it goes, or another character as a reader sees it, or part of one", () => {
+test("each token is a word as long as it goes, or another character as a reader sees it, or part of one", () => {
   fc.assert(
     fc.property(lineText, (line) => {
-      expect(runsFollowedByTheirKind(wordsOf(line).map(kindOf))).toStrictEqual([]);
+      expect(wordsFollowedByWords(wordsOf(line).map(kindOf))).toStrictEqual([]);
       expect(othersOfManyCharacters(line)).toStrictEqual([]);
     }),
   );
 });
 
-test("a combining mark is part of its letter's word", () => {
-  expect(wordsOf("café_1 x٣")).toStrictEqual(["café_1", " ", "x٣"]);
+test("a text starts with a word if its first token is one", () => {
+  fc.assert(
+    fc.property(lineText, (line) => {
+      expect(startsWithWord(line)).toBe(wordsOf(line).slice(0, 1).map(kindOf).includes("word"));
+    }),
+  );
+});
+
+test.each([
+  ["café_1 x٣", ["café_1", " ", "x٣"]],
+  ["e\u0301 a\u200Db a‿b Ⅻ", ["e\u0301", " ", "a\u200Db", " ", "a‿b", " ", "Ⅻ"]],
+  ["if (x²  >= 1)", ["if", " ", "(", "x", "²", " ", " ", ">", "=", " ", "1", ")"]],
+])(
+  "a word is a run of letters, marks, decimal digits, connectors such as underscores, and joiners, and any other character is a token of its own: %j",
+  (text, tokens) => {
+    expect(wordsOf(text)).toStrictEqual(tokens);
+  },
+);
+
+test.each<[string, boolean]>([
+  ["a b", true],
+  ["é", true],
+  ["\u0301a", true],
+  ["1", true],
+  ["_a", true],
+  ["\u200Da", true],
+  [" a", false],
+  ["(a", false],
+  ["²", false],
+  ["", false],
+])("%j starts with a word: %s", (text, starts) => {
+  expect(startsWithWord(text)).toBe(starts);
 });
 
 // Emoji of every kind a word keeps whole: joined to others, with a variation selector, with a skin

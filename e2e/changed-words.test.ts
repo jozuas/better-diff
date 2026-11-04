@@ -69,7 +69,7 @@ async function expectHighlighted(
   await expect.poll(highlightedIn(page, highlights.added)).toStrictEqual(added);
 }
 
-test("changed words within a line are highlighted, as in Sublime Merge, in a stronger tint of the line's red or green", async ({
+test("changed words within a line are highlighted, as in Sublime Merge, in a stronger tint of the line's red or green, as delta highlights them", async ({
   app,
   page,
   repository,
@@ -84,67 +84,56 @@ test("changed words within a line are highlighted, as in Sublime Merge, in a str
   await expectHighlighted(page, "MODIFIED a.ts +1 −1", ["price"], ["cost"]);
 });
 
-test("a line split in two shows only what changed where it's split", async ({
+test("each removed line in turn is paired with the first added line, after the last one paired, that's similar enough to it, and only paired lines have words highlighted", async ({
   app,
   page,
   repository,
 }) => {
-  writeFile(repository, "a.txt", "call(first, second);\nend\n");
+  writeFile(repository, "a.txt", "first = 1;\nrewritten(items);\nsecond = 2;\nend\n");
   commitAll(repository);
-  writeFile(repository, "a.txt", "call(first,\n  second);\nend\n");
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-
-  await expectHighlighted(page, "MODIFIED a.txt +2 −1", [" "], ["  "]);
-});
-
-test("an unchanged stretch with at least as much text both removed and added on each side of it in its line counts as changed, as a space between two replaced words does", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "a.txt", "x: foo = bar\nkeep\ny: a = b\n");
-  commitAll(repository);
-  writeFile(repository, "a.txt", "x: baz = qux\nkeep\ny: c = d\n");
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-
-  await expectHighlighted(
-    page,
-    "MODIFIED a.txt +2 −2",
-    ["foo = bar", "a", "b"],
-    ["baz = qux", "c", "d"],
+  writeFile(
+    repository,
+    "a.txt",
+    "first = 10;\nsomething_else = await fetch(config);\nsecond = 20;\nend\n",
   );
-});
-
-test("a line that keeps nothing but whitespace, as one rewritten or added does, has no words highlighted", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "a.txt", "  a = 41\n  foo bar\nend\n");
-  commitAll(repository);
-  writeFile(repository, "a.txt", "  a = 42\n  baz qux\n  added\nend\n");
 
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
 
-  await expectHighlighted(page, "MODIFIED a.txt +3 −2", ["41"], ["42"]);
+  await expectHighlighted(page, "MODIFIED a.txt +3 −3", ["1", "2"], ["10", "20"]);
 });
 
-test("nor has a run that would take more than 1,000 words and line breaks removed and added to compare", async ({
+test("whitespace both lines keep right after text both changed counts as changed too", async ({
   app,
   page,
   repository,
 }) => {
-  writeFile(repository, "a.txt", `x = 1\nkeep\nkept ${"a ".repeat(600)}end\n`);
+  writeFile(repository, "a.txt", "so it is safe to read the commit number from any one of them.\n");
   commitAll(repository);
-  writeFile(repository, "a.txt", `x = 2\nkeep\nkept ${"b ".repeat(600)}end\n`);
+  writeFile(repository, "a.txt", "so it is safe to read build info from any one of them.\n");
 
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
 
-  await expectHighlighted(page, "MODIFIED a.txt +2 −2", ["1"], ["2"]);
+  await expectHighlighted(page, "MODIFIED a.txt +1 −1", ["the commit number"], ["build info"]);
+});
+
+// A line of the first word, then the other as many times more as make 400 words.
+function wordsLine(first: string, other: string): string {
+  return [first, ...Array.from({ length: 399 }, () => other)].join(" ");
+}
+
+test("a run stops pairing its lines once the tables aligning them would have more than a million cells together", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", `x = 1\nkeep\n${wordsLine("c", "c")}\n${wordsLine("a", "a")}\n`);
+  commitAll(repository);
+  writeFile(repository, "a.txt", `x = 2\nkeep\n${wordsLine("b", "a")}\n`);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  await expectHighlighted(page, "MODIFIED a.txt +2 −3", ["1"], ["2"]);
 });
