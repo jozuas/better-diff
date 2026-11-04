@@ -3,7 +3,16 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { memo, useCallback, useContext, useEffect, useId, useMemo, useState } from "react";
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -18,6 +27,7 @@ import { FontSizesContext } from "./fonts";
 import { diffOf, listedFiles } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
+import { filesToRender, linesShown } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
 import { scrollUpTo, stopScrollAnchoring } from "./web";
@@ -85,6 +95,30 @@ function FileOfGroup({
 // file or leaving it does, and not as it changes in the group's other files.
 const GroupFileDiff = memo(FileOfGroup);
 
+// How many lines the files whose diffs render at first show, as many as a tall view shows, and how
+// many more those whose diffs render each time after that do.
+const firstLines = 200;
+const moreLines = 1000;
+
+// How many of the files, from the first, have their diffs rendered: at first those whose lines fill
+// the view, and then more each time the last are, in a transition that what the page hears comes
+// before, so that the view shows the first files of a group of thousands of lines at once, and
+// scrolls them and hears the pointer over them while it renders the others.
+function useRenderedFiles(files: GroupRead["files"]): number {
+  const lines = useMemo(() => files.map(linesShown), [files]);
+  const [rendered, setRendered] = useState(() => filesToRender(lines, 0, firstLines));
+
+  useEffect(() => {
+    if (rendered < lines.length) {
+      startTransition(() => {
+        setRendered(filesToRender(lines, rendered, moreLines));
+      });
+    }
+  }, [lines, rendered]);
+
+  return rendered;
+}
+
 interface GroupFilesProps {
   read: GroupRead;
   // The id of the view they scroll in.
@@ -112,7 +146,8 @@ function GroupFiles({
 }: GroupFilesProps): ReactElement {
   const [expandedPaths, setExpandedPaths] = useState<string[]>([]);
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
-  const files = listedFiles(read, filter);
+  const files = useMemo(() => listedFiles(read, filter), [read, filter]);
+  const rendered = useRenderedFiles(files);
   const shownExpanded = files.filter(({ path }) => expandedPaths.includes(path));
 
   const expandedDiffs = useQueries({
@@ -187,19 +222,21 @@ function GroupFiles({
             />,
             <View key={`diff ${shown.path}`}>
               <View nativeID={fileId(view, index)} />
-              <GroupFileDiff
-                group={group}
-                read={shown}
-                expanded={expandedDiff(shown.path)}
-                view={view}
-                fileIndex={index}
-                selection={rangeIn(selection, index)}
-                sideBySide={sideBySide}
-                onHunkRun={onHunkRun}
-                controls={controls}
-                onExpand={onExpand}
-                theme={theme}
-              />
+              {index < rendered ? (
+                <GroupFileDiff
+                  group={group}
+                  read={shown}
+                  expanded={expandedDiff(shown.path)}
+                  view={view}
+                  fileIndex={index}
+                  selection={rangeIn(selection, index)}
+                  sideBySide={sideBySide}
+                  onHunkRun={onHunkRun}
+                  controls={controls}
+                  onExpand={onExpand}
+                  theme={theme}
+                />
+              ) : null}
             </View>,
           ];
         })

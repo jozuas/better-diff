@@ -65,6 +65,27 @@ test("clicking a group shows the diffs of all its files in one scrollable view, 
   expect(status(repository)).toBe(" M a.txt\nM  b.txt\n?? c.txt\n");
 });
 
+test("clicking a group shows the diffs of all its files, however many lines they have", async ({
+  app,
+  page,
+  repository,
+}) => {
+  for (const name of ["a", "b", "c"]) {
+    writeFile(
+      repository,
+      `${name}.txt`,
+      Array.from({ length: 300 }, (_, index) => `${name} ${index + 1}\n`).join(""),
+    );
+  }
+
+  await app.openPanel();
+  await button(page, "UNTRACKED FILES (3)").click();
+
+  await expect(line(page, "a 300")).toBeVisible();
+  await expect(line(page, "b 300")).toBeVisible();
+  await expect(line(page, "c 300")).toBeVisible();
+});
+
 test("each file's bar is a sticky header, so you always know which file you're looking at", async ({
   app,
   page,
