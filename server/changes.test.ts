@@ -1,3 +1,6 @@
+import { cpSync } from "node:fs";
+import { join } from "node:path";
+
 import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
@@ -7,12 +10,13 @@ import { canCoexist, filePath } from "../test/file-names";
 import {
   commitAll,
   deleteFile,
+  inDirectory,
   inRepository,
   runGit,
   timeout,
   writeFile,
 } from "../test/repository";
-import { listChanges } from "./changes";
+import { indexOf, listChanges } from "./changes";
 
 type Changes = Omit<RpcOutput<typeof changesRpc>, "version">;
 
@@ -145,5 +149,21 @@ test("answers the same through the RPC's input and output validation", async () 
     );
 
     expect(validated).toStrictEqual(changes);
+  });
+});
+
+test("asks git for a directory's index once, and names the same one after", async () => {
+  await inDirectory(async (elsewhere) => {
+    await inRepository(async (repository) => {
+      runGit(repository, ["init", "--quiet", "--separate-git-dir", join(elsewhere, "a")]);
+
+      const first = await indexOf(repository);
+
+      cpSync(join(elsewhere, "a"), join(elsewhere, "b"), { recursive: true });
+      writeFile(repository, ".git", `gitdir: ${join(elsewhere, "b")}\n`);
+
+      expect(runGit(repository, ["rev-parse", "--git-path", "index"])).not.toContain(first);
+      await expect(indexOf(repository)).resolves.toBe(first);
+    });
   });
 });

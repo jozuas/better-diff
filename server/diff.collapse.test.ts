@@ -68,6 +68,18 @@ test.each([
   });
 });
 
+test("a collapsed diff has no hunks or contents, though every line of the file is asked for", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "yarn.lock", "a\n");
+    commitAll(repository);
+    writeFile(repository, "yarn.lock", "b\n");
+
+    await expect(
+      readDiff({ directory: repository, path: "yarn.lock", side: "unstaged", entire: true }),
+    ).resolves.toMatchObject(generated);
+  });
+});
+
 test.each([
   ["set", "a linguist-generated", "a", "generated"],
   ["set to true", "a linguist-generated=true", "a", "generated"],
