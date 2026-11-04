@@ -19,6 +19,18 @@ import { rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
 import type { Highlights } from "./syntax";
 
+declare module "react-native" {
+  interface ViewStyle {
+    // CSS's, which React Native Web passes on.
+    contain?: "content";
+  }
+}
+
+// Has the browser lay out and paint the lines apart from the rest of the view, and look for what's
+// under the pointer among them only while it's over them: without it, each move of the pointer
+// over a diff of thousands of lines takes the browser as long as all of them.
+const contained: ViewStyle = { contain: "content" };
+
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
 // The changed text of a line that has none, the same each time, so a line rendered again with it
@@ -209,7 +221,7 @@ function LinesOfHunk({
   const changes = useMemo(() => changedWordsOf(lines), [lines]);
 
   return (
-    <View {...pointed.pointer(index)}>
+    <View style={contained} {...pointed.pointer(index)}>
       <Lines
         lines={lines}
         idOf={(line, focused) => lineId(container, index, line, focused)}
@@ -249,7 +261,7 @@ function LinesOutsideHunks({
   const styles = useStyles(theme);
 
   return lines.length === 0 ? null : (
-    <View style={style}>
+    <View style={[style, contained]}>
       <Lines
         lines={lines}
         idOf={undefined}
