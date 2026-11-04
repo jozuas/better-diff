@@ -1,8 +1,7 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { applyGroupRpc } from "../shared/diff";
-import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
-import { groups } from "./groups";
+import type { applyFileRpc, applyLinesRpc, applyModeRpc } from "../shared/diff";
 import type { GroupName, OpenFile } from "./groups";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
@@ -46,7 +45,6 @@ export type Target = ShownFile | ShownMode | ListedFile | ListedGroup;
 export interface Server {
   // Undefined until it's read.
   shownDiff: (file: OpenFile) => { version: string } | undefined;
-  readDiff: (input: RpcInput<typeof diffRpc>) => Promise<{ version: string }>;
   applyFile: (input: RpcInput<typeof applyFileRpc>) => Promise<{ status: Status }>;
   applyLines: (input: RpcInput<typeof applyLinesRpc>) => Promise<{ status: Status }>;
   applyMode: (input: RpcInput<typeof applyModeRpc>) => Promise<{ status: Status }>;
@@ -69,22 +67,10 @@ async function applyToGroup(
   return status;
 }
 
-async function shownFile(
-  server: Server,
-  directory: string,
-  target: ShownFile | ListedFile,
-): Promise<ShownFile> {
-  if ("version" in target) {
-    return target;
-  }
-
-  const { file, shown } = target;
-
-  const { version } =
-    (shown ? server.shownDiff(file) : undefined) ??
-    (await server.readDiff({ directory, path: file.path, side: groups[file.group].side }));
-
-  return { file, version };
+// The version of the listed file's diff as shown, if it's shown, or else null, to act on it as it
+// is.
+function listedVersion(server: Server, { file, shown }: ListedFile): string | null {
+  return (shown ? server.shownDiff(file)?.version : undefined) ?? null;
 }
 
 async function applyToFile(
@@ -93,13 +79,22 @@ async function applyToFile(
   operation: Operation,
   target: ShownFile | ListedFile,
 ): Promise<Status> {
-  const { file, version, lines } = await shownFile(server, directory, target);
+  const action = { directory, path: target.file.path, operation };
 
-  const action = { directory, path: file.path, operation, version };
+  if ("shown" in target) {
+    const { status } = await server.applyFile({
+      ...action,
+      version: listedVersion(server, target),
+    });
+
+    return status;
+  }
+
+  const { version, lines } = target;
 
   const { status } = await (lines === undefined
-    ? server.applyFile(action)
-    : server.applyLines({ ...action, lines }));
+    ? server.applyFile({ ...action, version })
+    : server.applyLines({ ...action, version, lines }));
 
   return status;
 }

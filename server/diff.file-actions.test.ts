@@ -1,10 +1,13 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import { applyFileRpc, applyLinesRpc, applyModeRpc } from "../shared/diff";
+import { repositoryState } from "../test/groups";
 import { commitTenLines, move, tenLines } from "../test/renames";
 import {
   commitAll,
   deleteFile,
+  inCopyOf,
   inRepository,
   runGit,
   timeout,
@@ -61,6 +64,57 @@ test.each(operations)(
   },
   timeout,
 );
+
+test.each(operations)(
+  "%s file without a version: does what acting on its diff of the version read then does",
+  async (operation) => {
+    await fc.assert(
+      fc.asyncProperty(file, async ({ path, versions }) => {
+        await inRepository(async (repository) => {
+          setUp(repository, [{ path, versions }], "myers");
+
+          const outcome = await inCopyOf(repository, async (copy) => {
+            const { version } = await readDiff({ directory: copy, path, side: sides[operation] });
+
+            const status = await applyFile({
+              directory: repository,
+              path,
+              operation,
+              version: null,
+            });
+
+            await applyFile({ directory: copy, path, operation, version });
+
+            return {
+              status,
+              asItIs: repositoryState(repository, [path]),
+              read: repositoryState(copy, [path]),
+            };
+          });
+
+          expect(outcome.status).toStrictEqual({ status: "applied" });
+          expect(outcome.asItIs).toStrictEqual(outcome.read);
+        });
+      }),
+      { numRuns: 30, examples: [[binary]] },
+    );
+  },
+  timeout,
+);
+
+test("only an action on all of a file's changes can be without the version of the diff it acts on, and only by saying so with null", () => {
+  const action = { directory: "/", path: "a", operation: "stage" };
+
+  expect(applyFileRpc.input.parse({ ...action, version: null })).toStrictEqual({
+    ...action,
+    version: null,
+  });
+  expect(applyFileRpc.input.safeParse(action).success).toBe(false);
+  expect(applyLinesRpc.input.safeParse({ ...action, version: null, lines: [] }).success).toBe(
+    false,
+  );
+  expect(applyModeRpc.input.safeParse({ ...action, version: null }).success).toBe(false);
+});
 
 test.each(operations)(
   "%s file leaves alone a file whose diff has no changes, such as an ignored one",

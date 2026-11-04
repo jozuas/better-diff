@@ -122,7 +122,11 @@ export const applyLinesRpc = defineRpc({
 // All of the file's changes, of any kind.
 export const applyFileRpc = defineRpc({
   name: "diff.apply-file",
-  input: z.object(action),
+  input: z.object({
+    ...action,
+    // Or null, for a file whose diff isn't shown, to act on it as it is, which is never stale.
+    version: z.string().nullable(),
+  }),
   output: status,
 });
 

@@ -9,11 +9,10 @@ interface Answers {
   status?: "applied" | "stale";
 }
 
-// A server that answers with what's given, and a diff read with the version "read".
+// A server that answers with what's given.
 function serverWith({ shown, status = "applied" }: Answers = {}) {
   return {
     shownDiff: vi.fn<Server["shownDiff"]>(() => shown),
-    readDiff: vi.fn<Server["readDiff"]>().mockResolvedValue({ version: "read" }),
     applyFile: vi.fn<Server["applyFile"]>().mockResolvedValue({ status }),
     applyLines: vi.fn<Server["applyLines"]>().mockResolvedValue({ status }),
     applyMode: vi.fn<Server["applyMode"]>().mockResolvedValue({ status }),
@@ -36,7 +35,6 @@ test("acts on all of a shown diff, or its lines, of the version shown", async ()
   expect(server.applyLines.mock.calls).toStrictEqual([
     [{ directory: "/repo", path: "a.txt", operation: "discard", version: "2", lines }],
   ]);
-  expect(server.readDiff).not.toHaveBeenCalled();
 });
 
 test("acts on the mode change of a shown diff, of the version shown", async () => {
@@ -53,10 +51,9 @@ test("acts on the mode change of a shown diff, of the version shown", async () =
   ]);
   expect(server.applyFile).not.toHaveBeenCalled();
   expect(server.applyLines).not.toHaveBeenCalled();
-  expect(server.readDiff).not.toHaveBeenCalled();
 });
 
-test("acts on a listed file's diff as it is, read from the side its group shows", async () => {
+test("acts on a listed file whose diff isn't shown as it is, without a version", async () => {
   const server = serverWith({ shown: { version: "shown" } });
 
   await apply(server, "/repo", "unstage", { file: { group: "staged", path: "b" }, shown: false });
@@ -65,42 +62,32 @@ test("acts on a listed file's diff as it is, read from the side its group shows"
     shown: false,
   });
 
-  expect(server.readDiff.mock.calls).toStrictEqual([
-    [{ directory: "/repo", path: "b", side: "staged" }],
-    [{ directory: "/repo", path: "c", side: "unstaged" }],
-  ]);
   expect(server.applyFile.mock.calls).toStrictEqual([
-    [{ directory: "/repo", path: "b", operation: "unstage", version: "read" }],
-    [{ directory: "/repo", path: "c", operation: "discard", version: "read" }],
+    [{ directory: "/repo", path: "b", operation: "unstage", version: null }],
+    [{ directory: "/repo", path: "c", operation: "discard", version: null }],
   ]);
+  expect(server.shownDiff).not.toHaveBeenCalled();
 });
 
-test("acts on the diff shown from the shown file's row, without reading it again", async () => {
+test("acts on the diff shown from the shown file's row, of the version shown", async () => {
   const server = serverWith({ shown: { version: "shown" } });
 
   await apply(server, "/repo", "stage", { file: modified, shown: true });
 
-  expect(server.shownDiff).toHaveBeenCalledWith(modified);
-  expect(server.applyFile).toHaveBeenCalledWith({
-    directory: "/repo",
-    path: "a.txt",
-    operation: "stage",
-    version: "shown",
-  });
-  expect(server.readDiff).not.toHaveBeenCalled();
+  expect(server.shownDiff.mock.calls).toStrictEqual([[modified]]);
+  expect(server.applyFile.mock.calls).toStrictEqual([
+    [{ directory: "/repo", path: "a.txt", operation: "stage", version: "shown" }],
+  ]);
 });
 
-test("reads the diff of the shown file's row while it hasn't been read to be shown", async () => {
+test("acts on the shown file's row's file as it is, without a version, while its diff hasn't been read to be shown", async () => {
   const server = serverWith();
 
   await apply(server, "/repo", "stage", { file: modified, shown: true });
 
-  expect(server.applyFile).toHaveBeenCalledWith({
-    directory: "/repo",
-    path: "a.txt",
-    operation: "stage",
-    version: "read",
-  });
+  expect(server.applyFile.mock.calls).toStrictEqual([
+    [{ directory: "/repo", path: "a.txt", operation: "stage", version: null }],
+  ]);
 });
 
 test("answers with the server's answer", async () => {
@@ -120,7 +107,7 @@ test("answers with the server's answer", async () => {
   ).resolves.toBe("stale");
 });
 
-test("acts on all of a group's files as they were listed, without reading them", async () => {
+test("acts on all of a group's files as they were listed", async () => {
   const server = serverWith();
 
   await expect(
@@ -132,7 +119,6 @@ test("acts on all of a group's files as they were listed, without reading them",
     operation: "discard",
     paths: ["a", "b"],
   });
-  expect(server.readDiff).not.toHaveBeenCalled();
 });
 
 test("acts on the files selected in a group, in the order they were selected", async () => {

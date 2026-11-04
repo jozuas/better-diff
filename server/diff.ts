@@ -245,7 +245,7 @@ export async function inTurn(directory: string, apply: () => Promise<Status>): P
 }
 
 // In turn, acts on the diff the operation acts on, if it is still the one the action was chosen
-// from.
+// from, or as it is, without a version.
 async function applyToFile(
   { directory, path, operation, version }: Action,
   act: (changes: Changes) => Promise<void>,
@@ -253,7 +253,7 @@ async function applyToFile(
   const status = await inTurn(directory, async () => {
     const changes = await changesOf(directory, path, sides[operation]);
 
-    if (versionOf(changes.diff) !== version) {
+    if (version !== null && versionOf(changes.diff) !== version) {
       return { status: "stale" };
     }
 
