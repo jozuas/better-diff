@@ -1,6 +1,6 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
 
@@ -10,9 +10,9 @@ import { changedWordsOf } from "./changed-words";
 import { DiffLine } from "./diff-line";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
-import type { PointerHandlers } from "./hunk-bar";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
+import type { PointedHunk } from "./pointed";
 import { isSelected, lineId } from "./selection";
 import type { LineRange } from "./selection";
 import { rowsOf, sides } from "./side-by-side";
@@ -20,6 +20,10 @@ import type { Focus, Row, Side } from "./side-by-side";
 import type { Highlights } from "./syntax";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
+
+// The changed text of a line that has none, the same each time, so a line rendered again with it
+// isn't rendered again for it.
+const unchanged: readonly TextRange[] = [];
 
 // Which lines are selected, by their indices among those shown and, side by side, their side.
 type Selected = (index: number, side?: Side) => boolean;
@@ -179,8 +183,10 @@ interface HunkLinesProps {
   hunk: Hunk;
   index: number;
   container: string;
+  // Its lines the page's text selection touches, if any.
   selection: LineRange | undefined;
-  pointer: PointerHandlers;
+  // Which of the diff's hunks the pointer is over.
+  pointed: PointedHunk;
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The diff's.
@@ -188,12 +194,12 @@ interface HunkLinesProps {
   theme: PluginTheme;
 }
 
-export function HunkLines({
+function LinesOfHunk({
   hunk,
   index,
   container,
   selection,
-  pointer,
+  pointed,
   focus,
   highlights,
   theme,
@@ -203,19 +209,23 @@ export function HunkLines({
   const changes = useMemo(() => changedWordsOf(lines), [lines]);
 
   return (
-    <View {...pointer}>
+    <View {...pointed.pointer(index)}>
       <Lines
         lines={lines}
         idOf={(line, focused) => lineId(container, index, line, focused)}
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
         highlights={highlights}
-        changes={(line) => changes[line] ?? []}
+        changes={(line) => changes[line] ?? unchanged}
         styles={styles}
       />
     </View>
   );
 }
+
+// Rendered again only once what it's rendered with changes, as the text selection reaching into the
+// hunk or leaving it does, and not as it changes in other hunks.
+export const HunkLines = memo(LinesOfHunk);
 
 interface UnchangedLinesProps {
   lines: NumberedLine[];
@@ -229,7 +239,7 @@ interface UnchangedLinesProps {
 
 // Lines of the file outside its hunks, if there are any. A selection can copy them, but leaves
 // them out of the lines it selects.
-export function UnchangedLines({
+function LinesOutsideHunks({
   lines,
   focus,
   highlights,
@@ -246,9 +256,12 @@ export function UnchangedLines({
         selected={() => false}
         focus={focus}
         highlights={highlights}
-        changes={() => []}
+        changes={() => unchanged}
         styles={styles}
       />
     </View>
   );
 }
+
+// Rendered again only once what it's rendered with changes.
+export const UnchangedLines = memo(LinesOutsideHunks);

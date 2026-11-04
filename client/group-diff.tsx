@@ -3,7 +3,7 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useContext, useEffect, useId, useMemo, useState } from "react";
+import { memo, useCallback, useContext, useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -42,26 +42,48 @@ function ExpandedDiff({ diff, theme, ...shown }: ExpandedDiffProps): ReactElemen
   );
 }
 
-interface GroupFileDiffProps extends ShownDiffProps {
+interface GroupFileDiffProps extends Omit<ShownDiffProps, "file" | "onExpand"> {
+  group: GroupName;
   // The file as the group's read has it.
   read: GroupRead["files"][number];
   // Its diff read again with its lines, once they're asked for.
   expanded: UseQueryResult<Diff> | undefined;
+  // Asks for the lines of the collapsed diff of the file at the path.
+  onExpand: (path: string) => void;
 }
 
 // The file's diff as the group's read has it, or why it couldn't be read, or as read again with its
 // lines once they're asked for.
-function GroupFileDiff({ read, expanded, theme, ...shown }: GroupFileDiffProps): ReactElement {
+function FileOfGroup({
+  group,
+  read,
+  expanded,
+  onExpand,
+  theme,
+  ...shown
+}: GroupFileDiffProps): ReactElement {
+  const file = useMemo(() => ({ group, path: read.path }), [group, read.path]);
+
+  const expand = useCallback(() => {
+    onExpand(read.path);
+  }, [onExpand, read.path]);
+
   if (expanded !== undefined) {
-    return <ExpandedDiff diff={expanded} theme={theme} {...shown} />;
+    return <ExpandedDiff diff={expanded} file={file} onExpand={expand} theme={theme} {...shown} />;
   }
 
   if ("error" in read) {
     return <Failed message={read.error} theme={theme} />;
   }
 
-  return <DiffBody diff={read} scrolls={false} theme={theme} {...shown} />;
+  return (
+    <DiffBody diff={read} file={file} scrolls={false} onExpand={expand} theme={theme} {...shown} />
+  );
 }
+
+// Rendered again only once what it's rendered with changes, as the text selection reaching into the
+// file or leaving it does, and not as it changes in the group's other files.
+const GroupFileDiff = memo(FileOfGroup);
 
 interface GroupFilesProps {
   read: GroupRead;
@@ -129,6 +151,17 @@ function GroupFiles({
     files.map(({ path }) => path),
   );
 
+  const onHunkRun = useCallback(
+    (top: string, hunkBarHeight: number) => {
+      scrollUpTo(view, top, barHeight + hunkBarHeight);
+    },
+    [view, barHeight],
+  );
+
+  const onExpand = useCallback((path: string) => {
+    setExpandedPaths((paths) => [...paths, path]);
+  }, []);
+
   return (
     <ScrollView nativeID={view} stickyHeaderIndices={files.map((_, index) => 2 * index)}>
       {files.length === 0 ? (
@@ -155,20 +188,16 @@ function GroupFiles({
             <View key={`diff ${shown.path}`}>
               <View nativeID={fileId(view, index)} />
               <GroupFileDiff
+                group={group}
                 read={shown}
                 expanded={expandedDiff(shown.path)}
-                file={file}
                 view={view}
                 fileIndex={index}
                 selection={rangeIn(selection, index)}
                 sideBySide={sideBySide}
-                onHunkRun={(top, hunkBarHeight) => {
-                  scrollUpTo(view, top, barHeight + hunkBarHeight);
-                }}
+                onHunkRun={onHunkRun}
                 controls={controls}
-                onExpand={() => {
-                  setExpandedPaths((paths) => [...paths, shown.path]);
-                }}
+                onExpand={onExpand}
                 theme={theme}
               />
             </View>,

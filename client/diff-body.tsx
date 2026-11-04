@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
-import type { ReactElement } from "react";
-import { useContext, useMemo, useRef, useState } from "react";
+import type { Dispatch, ReactElement, SetStateAction } from "react";
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -11,11 +11,12 @@ import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
 import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
-import type { PointerHandlers } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
+import type { NumberedLine } from "./lines";
 import { ModeBar } from "./mode-bar";
-import { fileId, hunkId, onSide } from "./selection";
+import { pointedHunk } from "./pointed";
+import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus, Side } from "./side-by-side";
 import { clearSelection } from "./text-selection";
@@ -110,19 +111,81 @@ function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): Reac
 function useFocus(sideBySide: boolean): Focus | undefined {
   const [side, setSide] = useState<Side>("new");
 
-  return sideBySide
-    ? {
-        side,
-        onFocus: (pressed) => {
-          if (pressed !== side) {
-            clearSelection();
-          }
+  return useMemo(
+    () =>
+      sideBySide
+        ? {
+            side,
+            onFocus: (pressed) => {
+              if (pressed !== side) {
+                clearSelection();
+              }
 
-          setSide(pressed);
-        },
-      }
-    : undefined;
+              setSide(pressed);
+            },
+          }
+        : undefined,
+    [sideBySide, side],
+  );
 }
+
+// What a diff's hunks' bars do, with their hunk's index.
+interface BarActions {
+  onToggleEntire: (hunk: number) => void;
+  onHeight: (height: number) => void;
+  onRun: (hunk: number) => void;
+}
+
+// What the bars act with, as the latest render gives it.
+interface BarState {
+  entire: boolean;
+  // Holds the place of what the element with the id marks.
+  hold: (mark: string) => void;
+  onHunkRun: DiffBodyProps["onHunkRun"];
+}
+
+// The bars' actions, the same each render, with what the latest render gives them, so that a change
+// that reaches only some hunks, as the selection's does, renders only their bars again. Toggling the
+// entire file keeps the hunk in place, and so does an action on a hunk while the entire file shows,
+// where the next hunk takes its place.
+function useBarActions(
+  container: string,
+  state: BarState,
+  setEntire: Dispatch<SetStateAction<boolean>>,
+): BarActions {
+  const latest = useRef(state);
+  const barHeight = useRef(0);
+
+  useLayoutEffect(() => {
+    latest.current = state;
+  });
+
+  return useMemo(
+    () => ({
+      onToggleEntire: (hunk) => {
+        latest.current.hold(hunkId(container, hunk));
+        setEntire((entire) => !entire);
+      },
+      onHeight: (height) => {
+        barHeight.current = height;
+      },
+      onRun: (hunk) => {
+        const { entire, hold, onHunkRun } = latest.current;
+
+        onHunkRun(hunkId(container, hunk), barHeight.current);
+
+        if (entire) {
+          hold(hunkId(container, hunk));
+        }
+      },
+    }),
+    [container, setEntire],
+  );
+}
+
+// The lines outside a hunk while only the hunks show, the same each time, so the hunk's lines
+// rendered again with them aren't rendered again for them.
+const noLines: NumberedLine[] = [];
 
 interface HunksProps extends DiffBodyProps {
   styles: Styles;
@@ -133,7 +196,8 @@ interface HunksProps extends DiffBodyProps {
 // hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
 // the top while its lines scroll under it, until the next hunk's bar covers it. While the entire
 // file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
-// is in the side with focus.
+// is in the side with focus. The pointer moving from one hunk to another renders only their bars
+// again, and the selection changing only the hunks it leaves or reaches.
 function Hunks({
   diff,
   file,
@@ -147,24 +211,22 @@ function Hunks({
   styles,
   theme,
 }: HunksProps): ReactElement {
-  const [pointed, setPointed] = useState<number>();
+  const pointed = useMemo(() => pointedHunk(), []);
   const [entire, setEntire] = useState(false);
-  const barHeight = useRef(0);
   const container = fileId(view, fileIndex);
   const hold = useHeldPlace(view, `${diff.version} ${String(entire)}`, controls.busy);
-  const unchanged = entire ? unchangedLines(diff) : { before: [], after: [] };
+  const bars = useBarActions(container, { entire, hold, onHunkRun }, setEntire);
+
+  const unchanged = useMemo(
+    () => (entire ? unchangedLines(diff) : { before: noLines, after: [] }),
+    [diff, entire],
+  );
+
   const focus = useFocus(sideBySide);
-  const range = onSide(selection, focus);
+  const range = useMemo(() => onSide(selection, focus), [selection, focus]);
 
   const hunks = diff.hunks.flatMap((hunk, index) => {
-    const pointer: PointerHandlers = {
-      onPointerEnter: () => {
-        setPointed(index);
-      },
-      onPointerLeave: () => {
-        setPointed(undefined);
-      },
-    };
+    const selected = rangeInHunk(range, index);
 
     return [
       <HunkBar
@@ -173,25 +235,13 @@ function Hunks({
         index={index}
         version={diff.version}
         file={file}
-        selection={range}
+        selection={selected}
         pointed={pointed}
-        pointer={pointer}
         controls={controls}
         entire={entire}
-        onToggleEntire={() => {
-          hold(hunkId(container, index));
-          setEntire(!entire);
-        }}
-        onHeight={(height) => {
-          barHeight.current = height;
-        }}
-        onRun={() => {
-          onHunkRun(hunkId(container, index), barHeight.current);
-
-          if (entire) {
-            hold(hunkId(container, index));
-          }
-        }}
+        onToggleEntire={bars.onToggleEntire}
+        onHeight={bars.onHeight}
+        onRun={bars.onRun}
         theme={theme}
       />,
       <View key={`lines ${hunk.oldStart},${hunk.newStart}`} style={styles.spaced}>
@@ -200,14 +250,14 @@ function Hunks({
           hunk={hunk}
           index={index}
           container={container}
-          selection={range}
-          pointer={pointer}
+          selection={selected}
+          pointed={pointed}
           focus={focus}
           highlights={diff.highlights}
           theme={theme}
         />
         <UnchangedLines
-          lines={unchanged.after[index] ?? []}
+          lines={unchanged.after[index] ?? noLines}
           focus={focus}
           highlights={diff.highlights}
           theme={theme}

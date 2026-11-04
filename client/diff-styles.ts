@@ -14,11 +14,11 @@ const monospace =
 function stylesOf(theme: PluginTheme, fonts: FontSizes) {
   return StyleSheet.create({
     line: { flexDirection: "row" },
-    // Under a line, tinting it as removed or added.
-    tint: { ...StyleSheet.absoluteFillObject, opacity: 0.15 },
-    context: { backgroundColor: "transparent" },
-    removed: { backgroundColor: theme.colors.statusDanger },
-    added: { backgroundColor: theme.colors.statusSuccess },
+    // A line's tint as removed or added, as its own background: a translucent layer under it would
+    // be one more element to render for each line.
+    context: {},
+    removed: { backgroundColor: tintOf(processColor(theme.colors.statusDanger), 0.15) },
+    added: { backgroundColor: tintOf(processColor(theme.colors.statusSuccess), 0.15) },
     // Over the tint, a removed or added line's changed words.
     contextWords: {},
     removedWords: { backgroundColor: tintOf(processColor(theme.colors.statusDanger), 0.3) },

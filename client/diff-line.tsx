@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { useContext } from "react";
+import { memo, useContext } from "react";
 import type { TextStyle } from "react-native";
 import { Text, View } from "react-native";
 
@@ -52,7 +52,7 @@ interface DiffLineProps {
 // Only the line's text can be selected, so copying a selection copies what the lines say. The
 // numbers of a selected line stand out. Its text is in its syntax's colours, and its changed words
 // are highlighted.
-export function DiffLine({
+function Line({
   id,
   line,
   selected,
@@ -69,8 +69,7 @@ export function DiffLine({
 
   return (
     <View>
-      <View dataSet={paseoMonospace} style={styles.line}>
-        <View style={[styles.tint, styles[line.kind]]} />
+      <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]}>
         {numbers.map(({ side: version, number }) => (
           <Text key={version} selectable={false} style={numberStyle}>
             {number}
@@ -101,3 +100,7 @@ export function DiffLine({
     </View>
   );
 }
+
+// Rendered again only once what it's rendered with changes, so a line selected or unselected
+// doesn't render the others again.
+export const DiffLine = memo(Line);

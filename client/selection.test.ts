@@ -10,6 +10,7 @@ import {
   markOf,
   onSide,
   rangeIn,
+  rangeInHunk,
   rangeKey,
   rangeLines,
   selectedLines,
@@ -217,6 +218,14 @@ test("gives each of a view's files only the range of its own lines", () => {
   });
   expect(rangeIn({ file: 1, hunk: 2, first: 3, last: 4 }, 0)).toBeUndefined();
   expect(rangeIn(undefined, 0)).toBeUndefined();
+});
+
+test("gives each of a file's hunks only the range of its own lines, as it is", () => {
+  const selected = { file: 1, hunk: 2, first: 3, last: 4 };
+
+  expect(rangeInHunk(selected, 2)).toBe(selected);
+  expect(rangeInHunk(selected, 1)).toBeUndefined();
+  expect(rangeInHunk(undefined, 0)).toBeUndefined();
 });
 
 // A hunk's lines of each kind, in the order git gives them.

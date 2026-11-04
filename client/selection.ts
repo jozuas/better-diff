@@ -151,6 +151,11 @@ export function rangeIn(range: LineRange | undefined, file: number): LineRange |
   return range?.file === file ? range : undefined;
 }
 
+// The range, if it's of the file's hunk at the index, the same as it is.
+export function rangeInHunk(range: LineRange | undefined, hunk: number): LineRange | undefined {
+  return range?.hunk === hunk ? range : undefined;
+}
+
 // Whether the range has the line of its file, as shown on the side, in a side-by-side view.
 export function isSelected(
   range: LineRange | undefined,
