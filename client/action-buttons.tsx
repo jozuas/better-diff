@@ -3,11 +3,15 @@ import type { ReactElement, Ref } from "react";
 import { useContext, useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { buttonLook, buttonText } from "./actions";
+import { buttonLook, buttonOf, buttonText } from "./actions";
 import type { Action, ButtonLook, Controls } from "./actions";
 import type { Target } from "./apply";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
+import { ShortcutTip } from "./shortcut-tip";
+import { shortcutOf, shortcutText } from "./shortcuts";
+import type { Level } from "./shortcuts";
+import { onMac } from "./web";
 
 function useStyles(theme: PluginTheme, color: string) {
   const fonts = useContext(FontSizesContext);
@@ -41,22 +45,27 @@ type Styles = ReturnType<typeof useStyles>;
 
 interface ActionButtonProps {
   action: Action;
+  // How its shortcut is written, if it has one.
+  shortcut: string | undefined;
   armed: boolean;
   busy: boolean;
   hidden: boolean;
   onPress: () => void;
   buttonRef: Ref<View> | undefined;
   styles: Styles;
+  theme: PluginTheme;
 }
 
 function ActionButton({
   action,
+  shortcut,
   armed,
   busy,
   hidden,
   onPress,
   buttonRef,
   styles,
+  theme,
 }: ActionButtonProps): ReactElement {
   const text = buttonText(action, armed);
 
@@ -74,17 +83,20 @@ function ActionButton({
         const look = buttonLook(action, armed, hovered);
 
         return (
-          <View style={[styles.box, armed && styles.armed]}>
-            <TintLayer
-              color={styles.labels[look]}
-              hovered={hovered}
-              pressed={pressed}
-              filled={!armed}
-            />
-            <Text selectable={false} style={[styles.text, { color: styles.labels[look] }]}>
-              {text}
-            </Text>
-          </View>
+          <>
+            <View style={[styles.box, armed && styles.armed]}>
+              <TintLayer
+                color={styles.labels[look]}
+                hovered={hovered}
+                pressed={pressed}
+                filled={!armed}
+              />
+              <Text selectable={false} style={[styles.text, { color: styles.labels[look] }]}>
+                {text}
+              </Text>
+            </View>
+            <ShortcutTip shortcut={shortcut} hovered={hovered && !pressed} theme={theme} />
+          </>
         );
       }}
     </Hoverable>
@@ -92,11 +104,13 @@ function ActionButton({
 }
 
 interface ActionButtonsProps {
-  actions: Action[];
+  actions: readonly Action[];
   // Tells the bar's buttons apart from other bars'.
   bar: string;
   // What the bar's actions act on.
   target: Target;
+  // What their shortcuts act on, if they have any, which shows under a button the pointer rests on.
+  level?: Level;
   controls: Controls;
   // Called just before one of the actions runs.
   onRun?: (() => void) | undefined;
@@ -113,6 +127,7 @@ export function ActionButtons({
   actions,
   bar,
   target,
+  level,
   controls,
   onRun,
   hidden = false,
@@ -121,6 +136,7 @@ export function ActionButtons({
   theme,
 }: ActionButtonsProps): ReactElement {
   const styles = useStyles(theme, color);
+  const mac = onMac();
 
   return (
     <View style={styles.buttons}>
@@ -128,14 +144,16 @@ export function ActionButtons({
         <ActionButton
           key={action.operation}
           action={action}
-          armed={controls.armed === `${bar}:${action.operation}`}
+          shortcut={level === undefined ? undefined : shortcutText(shortcutOf(action, level), mac)}
+          armed={controls.armed === buttonOf(bar, action)}
           busy={controls.busy}
           hidden={hidden}
           onPress={() => {
-            controls.press(`${bar}:${action.operation}`, action, target, onRun);
+            controls.press(buttonOf(bar, action), action, target, onRun);
           }}
           buttonRef={action.confirmation === undefined ? buttonRef : undefined}
           styles={styles}
+          theme={theme}
         />
       ))}
     </View>

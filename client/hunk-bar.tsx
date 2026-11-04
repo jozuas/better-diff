@@ -14,7 +14,7 @@ import { StyleSheet, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
-import { hunkActions, hunkLines, lineActions } from "./actions";
+import { fileActions, fileBarOf, hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls } from "./actions";
 import { hunkMove } from "./arrows";
 import { KeyboardFocusContext } from "./focus";
@@ -25,7 +25,8 @@ import type { PointedHunk } from "./pointed";
 import { hunkRevealed } from "./reveal";
 import { rangeKey, rangeLines } from "./selection";
 import type { LineRange } from "./selection";
-import { useKeys, useStuckAt } from "./web";
+import type { Bar } from "./shortcuts";
+import { useKeys, useShortcuts, useStuckAt } from "./web";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -128,6 +129,8 @@ interface HunkBarProps {
   hunk: Hunk;
   index: number;
   version: string;
+  // The version of the file's diff its file's bar shows, which the file's actions act on.
+  fileVersion: string;
   file: OpenFile;
   // Its file's index in the view.
   fileIndex: number;
@@ -144,6 +147,8 @@ interface HunkBarProps {
   onHeight: (height: number) => void;
   // Called with the hunk's index just before an action on the hunk runs.
   onRun: (hunk: number) => void;
+  // Called with its file's index just before one of the bar's shortcuts runs an action on the file.
+  onFileRun: ((fileIndex: number) => void) | undefined;
   // Called with the hunk's index to scroll the view to show the hunk from its start.
   onShow: (hunk: number) => void;
   // How far below the top of the view the bar stays while the hunk's lines scroll under it, while
@@ -182,11 +187,14 @@ function useHunkFocus(
 // On its left, the toggle between the entire file and only its hunks, and on its right, the hunk's
 // actions, both hidden until the hunk is revealed, and those on its selected lines while it has
 // any. With focus in it, ↓ and ↑ move focus to the next hunk or the one before, and ← to its file's
-// row. Once an action on the hunk or its lines runs with focus in it, focus moves on with the view.
+// row, and the shortcuts of the hunk's actions and its file's run them. Once an action on the hunk
+// or its lines runs with focus in it, focus moves on with the view, and once one on its file does,
+// to the first hunk of the file that takes the file's place.
 function BarOfHunk({
   hunk,
   index,
   version,
+  fileVersion,
   file,
   fileIndex,
   selection,
@@ -196,6 +204,7 @@ function BarOfHunk({
   onToggleEntire,
   onHeight,
   onRun,
+  onFileRun,
   onShow,
   stuckBelow,
   theme,
@@ -224,6 +233,30 @@ function BarOfHunk({
       focus.hold([fileIndex, index]);
     }
   }
+
+  const hunkBar: Bar = {
+    actions: hunkActions[file.group],
+    bar: `${version}:hunk ${index}`,
+    target: { file, version, lines: hunkLines(hunk.lines, index) },
+    onRun: () => {
+      holdFocus();
+      onRun(index);
+    },
+  };
+
+  // The file's bar's buttons, which their shortcuts press from here too. Focus then moves to the
+  // first hunk in the place of the file's first.
+  const fileBar: Bar = {
+    actions: fileActions[file.group],
+    bar: fileBarOf(fileVersion),
+    target: { file, version: fileVersion },
+    onRun: () => {
+      focus.hold([fileIndex, 0]);
+      onFileRun?.(fileIndex);
+    },
+  };
+
+  useShortcuts(id, { hunk: hunkBar, file: fileBar }, controls);
 
   return (
     <View
@@ -264,14 +297,9 @@ function BarOfHunk({
           theme={theme}
         />
         <ActionButtons
-          actions={hunkActions[file.group]}
-          bar={`${version}:hunk ${index}`}
-          target={{ file, version, lines: hunkLines(hunk.lines, index) }}
+          {...hunkBar}
+          level="hunk"
           controls={controls}
-          onRun={() => {
-            holdFocus();
-            onRun(index);
-          }}
           hidden={!revealed}
           buttonRef={button}
           color={theme.colors.foreground}

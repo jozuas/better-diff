@@ -1,6 +1,6 @@
-import { commitAll, runGit, writeFile } from "../test/repository";
+import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, button, line, openFile } from "./panel";
+import { box, button, group, line, openFile } from "./panel";
 
 function status(repository: string): string {
   return runGit(repository, ["status", "--porcelain", "--untracked-files=all"]);
@@ -186,4 +186,137 @@ test("in a group's view, ↓ moves focus from one file's hunk to the next file's
 
   await expect(button(page, "a.txt")).toBeFocused();
   expect(status(repository)).toBe("A  b.txt\n?? a.txt\n");
+});
+
+test("with focus in a hunk's bar, Backspace discards the hunk once pressed again to confirm, and held down asks only once", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await button(page, "Stage Hunk").first().focus();
+  await page.keyboard.down("Backspace");
+  await page.keyboard.down("Backspace");
+  await page.keyboard.up("Backspace");
+
+  await expect(button(page, "Confirm discard?")).toBeEnabled();
+  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
+
+  await page.keyboard.press("Backspace");
+
+  await expect(line(page, "first")).toBeHidden();
+  await expect(button(page, "Stage Hunk")).toBeFocused();
+  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("1\n2\n3\n4\n5\n6\n7\n8\nlast\n");
+});
+
+test("with focus in a staged file's hunk's bar, Backspace unstages the hunk, Shift+Backspace the file, and Shift+Enter nothing", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+  writeFile(repository, "b.txt", "b\n");
+  runGit(repository, ["add", "a.txt", "b.txt"]);
+
+  await app.openPanel();
+  await openFile(page, "STAGED FILES (2)", "a.txt");
+  await button(page, "Unstage Hunk").first().focus();
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Backspace");
+
+  await expect(line(page, "last")).toBeHidden();
+  await expect(button(page, "Unstage Hunk")).toBeFocused();
+  expect(staged(repository)).toContain("+first");
+  expect(staged(repository)).not.toContain("+last");
+
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(page.getByRole("heading", { name: "STAGED b.txt" })).toBeVisible();
+  await expect(button(page, "Unstage Hunk")).toBeFocused();
+  expect(status(repository)).toBe(" M a.txt\nA  b.txt\n");
+});
+
+test("with focus in a hunk's bar, Shift+Enter stages its file and Shift+Backspace discards it once pressed again to confirm, and focus moves on to the next file's first hunk", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "b.txt", "b\n");
+  writeFile(repository, "c.txt", "c\n");
+  changeTwoHunks(repository);
+  writeFile(repository, "b.txt", "changed b\n");
+  writeFile(repository, "c.txt", "changed c\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (3)", "a.txt");
+  await button(page, "Stage Hunk").last().focus();
+  await page.keyboard.press("Shift+Enter");
+
+  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
+  await expect(button(page, "Stage Hunk")).toBeFocused();
+  expect(status(repository)).toBe("M  a.txt\n M b.txt\n M c.txt\n");
+
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(button(page, "Confirm discard?")).toBeVisible();
+  expect(status(repository)).toBe("M  a.txt\n M b.txt\n M c.txt\n");
+
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(page.getByRole("heading", { name: "MODIFIED c.txt" })).toBeVisible();
+  await expect(button(page, "Stage Hunk")).toBeFocused();
+  expect(status(repository)).toBe("M  a.txt\n M c.txt\n");
+});
+
+test("in a group's view, Shift+Enter in a hunk's bar stages its file, and focus moves on to the next file's first hunk", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeLong(repository, "a.txt", "a");
+  writeLong(repository, "b.txt", "b");
+
+  await app.openPanel();
+  await button(page, "UNTRACKED FILES (2)").click();
+  await button(page, "Stage Hunk").first().focus();
+  await page.keyboard.press("Shift+Enter");
+
+  await expect(line(page, "a 1")).toBeHidden();
+  await expect(button(page, "Stage Hunk")).toBeFocused();
+  await expect(line(page, "b 1")).toBeInViewport();
+  expect(status(repository)).toBe("A  a.txt\n?? b.txt\n");
+});
+
+test("with focus in a file's bar, Shift+Backspace discards the file once pressed again to confirm, and Shift+Enter stages it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+  writeFile(repository, "b.txt", "b\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "changed a\n");
+  writeFile(repository, "b.txt", "changed b\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await button(page, "Stage").focus();
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(button(page, "Confirm discard?")).toBeVisible();
+
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
+  expect(status(repository)).toBe(" M b.txt\n");
+
+  await button(page, "Stage").focus();
+  await page.keyboard.press("Shift+Enter");
+
+  await expect(group(page, "STAGED FILES (1)")).toHaveText(["b.txt"]);
+  expect(status(repository)).toBe("M  b.txt\n");
 });

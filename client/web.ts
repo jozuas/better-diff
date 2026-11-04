@@ -2,12 +2,14 @@
 import { useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 
+import type { Controls } from "./actions";
 import { KeyboardFocusContext } from "./focus";
 import type { Point } from "./menu";
 import { placeHeld, placeToShow, topPlace } from "./place";
 import type { HeldPlace, Place } from "./place";
 import { markOf } from "./selection";
-import type { Keys } from "./shift";
+import { shortcutPress } from "./shortcuts";
+import type { Bar, KeyPress, Level } from "./shortcuts";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageMouseEvent {
@@ -16,7 +18,7 @@ interface PageMouseEvent {
   preventDefault: () => void;
 }
 
-interface PageKeyboardEvent extends Readonly<Keys> {
+interface PageKeyboardEvent extends Readonly<KeyPress> {
   preventDefault: () => void;
 }
 
@@ -59,6 +61,13 @@ declare const document: {
 };
 
 declare const CSS: { escape: (identifier: string) => string };
+
+declare const navigator: { readonly platform: string };
+
+// Whether the page is on a Mac, whose keys have symbols of their own.
+export function onMac(): boolean {
+  return Platform.OS === "web" && navigator.platform.startsWith("Mac");
+}
 
 // How far below the top of the element with the id `container` the top of the element with the id
 // `target` is, if both are on the page.
@@ -293,10 +302,11 @@ export function useContextMenu(id: string, listener: (point: Point) => void): vo
 }
 
 // Calls the latest listener with what `read` makes of each key pressed in the element with the id,
-// where it makes something of it, in place of what the key does on the page, such as scroll it.
+// where it makes something of it, in place of what the key does on the page, such as scroll it or
+// press the button with focus, as Enter does whatever modifiers are held.
 export function useKeys<Read>(
   id: string,
-  read: (keys: Keys) => Read | undefined,
+  read: (press: KeyPress) => Read | undefined,
   listener: (read: Read) => void,
 ): void {
   useListener(id, "keydown", (event) => {
@@ -307,6 +317,24 @@ export function useKeys<Read>(
       listener(made);
     }
   });
+}
+
+// Presses the button whose action's shortcut is each key pressed in the element with the id, among
+// the bars' at each level, as a click on it would.
+export function useShortcuts(
+  id: string,
+  bars: Partial<Record<Level, Bar | undefined>>,
+  controls: Controls,
+): void {
+  useKeys(
+    id,
+    (press) => shortcutPress(press, bars),
+    (pressed) => {
+      if (pressed !== "none") {
+        controls.press(pressed.button, pressed.action, pressed.target, pressed.onRun);
+      }
+    },
+  );
 }
 
 // What ids of elements laid over the end of the row they're in start with.

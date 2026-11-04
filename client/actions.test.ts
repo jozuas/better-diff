@@ -3,8 +3,10 @@ import { expect, test } from "vitest";
 import type { Action, ButtonLook } from "./actions";
 import {
   buttonLook,
+  buttonOf,
   buttonText,
   fileActions,
+  fileBarOf,
   groupActions,
   hunkActions,
   hunkLines,
@@ -127,6 +129,19 @@ test("tells each row's buttons apart, and a selected row's from its own while it
   ].map(({ row }) => row);
 
   expect(new Set(rows).size).toBe(rows.length);
+});
+
+test("tells each bar's buttons apart, and a file's bar's in one version of its diff from another's", () => {
+  const buttons = [
+    buttonOf(fileBarOf("1"), { operation: "stage" }),
+    buttonOf(fileBarOf("1"), { operation: "discard" }),
+    buttonOf(fileBarOf("2"), { operation: "stage" }),
+    buttonOf("1:hunk 0", { operation: "stage" }),
+    buttonOf("1:hunk 0", { operation: "unstage" }),
+    buttonOf("1:hunk 1", { operation: "stage" }),
+  ];
+
+  expect(new Set(buttons).size).toBe(buttons.length);
 });
 
 test("offers discarding and staging a modified or untracked file's hunk, and unstaging a staged one's, asking before discarding", () => {

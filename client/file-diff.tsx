@@ -7,7 +7,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
-import { fileActions } from "./actions";
+import { fileActions, fileBarOf } from "./actions";
 import type { Controls } from "./actions";
 import { countsOf } from "./counts";
 import { DiffBody } from "./diff-body";
@@ -19,7 +19,7 @@ import type { OpenFile } from "./groups";
 import { Queried } from "./queried";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { useSelectedLines } from "./text-selection";
-import { scrollUpTo, useSettledFocus } from "./web";
+import { scrollUpTo, useSettledFocus, useShortcuts } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -48,7 +48,8 @@ function useStyles(theme: PluginTheme) {
     () =>
       StyleSheet.create({
         file: { flex: 1 },
-        fileBar: { justifyContent: "center", backgroundColor: theme.colors.surface2 },
+        // Over the diff that follows it, so its buttons' shortcuts show over the diff.
+        fileBar: { zIndex: 1, justifyContent: "center", backgroundColor: theme.colors.surface2 },
         barContent: {
           flexDirection: "row",
           flexWrap: "wrap",
@@ -91,6 +92,8 @@ function LineCounts({ diff, styles }: LineCountsProps): ReactElement | null {
 }
 
 interface FileActionsProps {
+  // The id of the file's bar, in which keys run their shortcuts.
+  barId: string;
   // Undefined until it's read.
   diff: Diff | undefined;
   file: OpenFile;
@@ -100,23 +103,34 @@ interface FileActionsProps {
 }
 
 function FileActions({
+  barId,
   diff,
   file,
   controls,
   onRun,
   theme,
 }: FileActionsProps): ReactElement | null {
-  if (diff === undefined) {
+  const bar =
+    diff === undefined
+      ? undefined
+      : {
+          actions: fileActions[file.group],
+          bar: fileBarOf(diff.version),
+          target: { file, version: diff.version },
+          onRun,
+        };
+
+  useShortcuts(barId, { file: bar }, controls);
+
+  if (bar === undefined) {
     return null;
   }
 
   return (
     <ActionButtons
-      actions={fileActions[file.group]}
-      bar={`${diff.version}:file`}
-      target={{ file, version: diff.version }}
+      {...bar}
+      level="file"
       controls={controls}
-      onRun={onRun}
       color={theme.colors.foreground}
       theme={theme}
     />
@@ -149,11 +163,12 @@ export function FileBar({
   theme,
 }: FileBarProps): ReactElement {
   const styles = useStyles(theme);
+  const id = useId();
 
   useShownDiff(file, diff);
 
   return (
-    <View accessibilityRole="header" style={[styles.fileBar, { minHeight }]}>
+    <View nativeID={id} accessibilityRole="header" style={[styles.fileBar, { minHeight }]}>
       <View
         style={styles.barContent}
         onLayout={(event) => {
@@ -166,7 +181,14 @@ export function FileBar({
         )}
         <Text style={styles.barPath}>{file.path}</Text>
         <LineCounts diff={diff} styles={styles} />
-        <FileActions diff={diff} file={file} controls={controls} onRun={onRun} theme={theme} />
+        <FileActions
+          barId={id}
+          diff={diff}
+          file={file}
+          controls={controls}
+          onRun={onRun}
+          theme={theme}
+        />
       </View>
     </View>
   );

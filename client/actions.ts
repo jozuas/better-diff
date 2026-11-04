@@ -136,6 +136,17 @@ export const modeActions: Record<GroupName, Action[]> = {
   staged: [{ operation: "unstage", label: "Unstage Mode Change" }],
 };
 
+// What tells a file's bar's buttons apart from other bars', in its diff of the version.
+export function fileBarOf(version: string): string {
+  return `${version}:file`;
+}
+
+// What tells an action's button in the bar apart from the panel's other buttons, which its
+// shortcut presses too.
+export function buttonOf(bar: string, { operation }: Pick<Action, "operation">): string {
+  return `${bar}:${operation}`;
+}
+
 // What the panel's buttons share: the one armed, whether an action is running, and pressing one,
 // which calls `onRun` just before the action runs, if it does.
 export interface Controls {

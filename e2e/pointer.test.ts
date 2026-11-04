@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, group, line, openFile, row } from "./panel";
+import { box, button, group, line, openFile, row } from "./panel";
 
 // Commits `a.txt` and `b.txt`, then changes both.
 function changeTwo(repository: string): void {
@@ -170,4 +170,35 @@ test("the separator shows its line in the accent colour while it has focus", asy
 
   await separator.blur();
   await expect.poll(looks).toBe(plain);
+});
+
+// Rests the pointer on the button with the name, and expects its shortcut to show under it.
+async function expectShortcut(page: Page, name: string, shortcut: RegExp): Promise<void> {
+  const tip = page.getByRole("tooltip");
+
+  await button(page, name).hover();
+  await expect(tip).toHaveText(shortcut);
+
+  const under = await box(button(page, name));
+  const shown = await box(tip);
+
+  expect(shown.y).toBeGreaterThanOrEqual(under.y + under.height);
+}
+
+test("once the pointer rests on a button with a keyboard shortcut, the shortcut shows under it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await expectShortcut(page, "Stage Hunk", /^(?:↩|Enter)$/u);
+  await expectShortcut(page, "Discard Hunk", /^(?:⌫|Backspace)$/u);
+  await expectShortcut(page, "Stage", /^(?:⇧↩|Shift\+Enter)$/u);
+  await expectShortcut(page, "Discard", /^(?:⇧⌫|Shift\+Backspace)$/u);
+  await line(page, "changed a").hover();
+
+  await expect(page.getByRole("tooltip")).toBeHidden();
 });

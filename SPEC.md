@@ -29,7 +29,8 @@ Replicates Sublime Merge as much as possible:
 - A partly staged file appears in both MODIFIED and STAGED. Opened from MODIFIED it shows the unstaged part, from STAGED the staged part.
 - After a hunk action the view moves to the next hunk; after a file action, to the next file.
 - With focus in a hunk's bar, ↓ and ↑ move focus to the next hunk or the one before, in a group's view from one file's diff to the next's, and the view shows that hunk from its start. Focus lands on its Stage Hunk button, or Unstage Hunk, so Enter stages or unstages it. ← moves focus back to its file's row in the sidebar.
-- Once an action on a hunk or its lines runs with focus in the hunk's bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left. So Enter stages one hunk after another.
+- With focus in a hunk's bar, Backspace discards the hunk, or unstages it in STAGED, and Shift+Enter and Shift+Backspace stage and discard, or unstage, its whole file, as the file bar's buttons do. They do that with focus in the file bar too. Enter on its own presses the button with focus, as it does anywhere.
+- Once an action on a hunk or its lines runs with focus in the hunk's bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left. So Enter stages one hunk after another. Once an action on its file runs from there, focus moves to the next file's first hunk.
 
 ### Selecting lines
 
@@ -95,7 +96,7 @@ Replicates Sublime Merge as much as possible:
 
 These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard selected, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
 
-Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it.
+Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it. A key that runs the action asks the same way: its button turns into the question, and the key pressed again runs it. A key held down runs its action once, so holding Backspace doesn't confirm a discard.
 
 ### Pointer
 
@@ -103,6 +104,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - A button that asks for confirmation shows the danger colour while the pointer is over it.
 - A group's triangle brightens while the pointer is over it.
 - The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged or has focus.
+- Once the pointer rests on a button with a keyboard shortcut for a second, the shortcut shows under it, to teach it: Enter or Backspace under a hunk's bar's buttons, Shift+Enter or Shift+Backspace under a file's bar's. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
 
 ### Font sizes
 
@@ -117,7 +119,7 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 - Sending line comments to an agent.
 - Show/hide whitespace changes.
-- Keyboard shortcuts for actions, besides Enter on the button with focus.
+- Keyboard shortcuts for the other actions: on lines, mode changes, and in the sidebar.
 - The actions of a file's and a group's buttons in right-click menus too.
 - Mobile.
 

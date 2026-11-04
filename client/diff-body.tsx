@@ -66,6 +66,8 @@ export interface DiffBodyProps {
   // Called just before an action on one of its hunks runs, with the id of the top of the hunk's
   // lines and the height of its bar.
   onHunkRun: (top: string, barHeight: number) => void;
+  // Called with its index just before a shortcut in one of its hunks' bars runs an action on it.
+  onFileRun?: (fileIndex: number) => void;
   controls: Controls;
   // Asks for a collapsed diff's lines.
   onExpand: () => void;
@@ -230,6 +232,7 @@ function Hunks({
   entireQuery,
   sideBySide,
   onHunkRun,
+  onFileRun,
   controls,
   styles,
   theme,
@@ -260,6 +263,7 @@ function Hunks({
         hunk={hunk}
         index={index}
         version={shownDiff.version}
+        fileVersion={diff.version}
         file={file}
         fileIndex={fileIndex}
         selection={selected}
@@ -269,6 +273,7 @@ function Hunks({
         onToggleEntire={bars.onToggleEntire}
         onHeight={bars.onHeight}
         onRun={bars.onRun}
+        onFileRun={onFileRun}
         onShow={bars.onShow}
         stuckBelow={barsBelow}
         theme={theme}

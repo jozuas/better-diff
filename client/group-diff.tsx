@@ -218,6 +218,13 @@ function GroupFiles({
     [view, barHeight],
   );
 
+  const onFileRun = useCallback(
+    (index: number) => {
+      scrollUpTo(view, fileId(view, index), barHeight);
+    },
+    [view, barHeight],
+  );
+
   const onExpand = useCallback((path: string) => {
     setExpandedPaths((paths) => [...paths, path]);
   }, []);
@@ -240,7 +247,7 @@ function GroupFiles({
                 setHeights((current) => measured(current, shown.path, height));
               }}
               onRun={() => {
-                scrollUpTo(view, fileId(view, index), barHeight);
+                onFileRun(index);
               }}
               controls={controls}
               theme={theme}
@@ -259,6 +266,7 @@ function GroupFiles({
                   sideBySide={sideBySide}
                   barsBelow={barHeight}
                   onHunkRun={onHunkRun}
+                  onFileRun={onFileRun}
                   controls={controls}
                   onExpand={onExpand}
                   theme={theme}
