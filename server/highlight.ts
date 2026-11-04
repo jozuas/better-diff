@@ -82,6 +82,61 @@ export async function highlighted<D extends Omit<Diff, "highlights">>(
   return { ...diff, highlights: { old, new: changed } };
 }
 
+// The indices, in each version, of the hunks' lines.
+interface HunkLines {
+  old: Set<number>;
+  new: Set<number>;
+}
+
+function hunkLinesOf(hunks: Diff["hunks"]): HunkLines {
+  const indices: HunkLines = { old: new Set(), new: new Set() };
+
+  for (const { oldStart, newStart, lines } of hunks) {
+    let old = oldStart - 1;
+    let changed = newStart - 1;
+
+    for (const { kind } of lines) {
+      if (kind !== "added") {
+        indices.old.add(old);
+        old += 1;
+      }
+
+      if (kind !== "removed") {
+        indices.new.add(changed);
+        changed += 1;
+      }
+    }
+  }
+
+  return indices;
+}
+
+// The runs of the lines at the indices, and none for the others before the last of them.
+function runsAt(runs: readonly Runs[], indices: ReadonlySet<number>): Runs[] {
+  let end = 0;
+
+  for (const index of indices) {
+    end = Math.max(end, index + 1);
+  }
+
+  return runs.slice(0, end).map((line, index) => (indices.has(index) ? line : []));
+}
+
+// The diff with only what showing its hunks takes: the highlights of the hunks' lines, and no
+// contents.
+export function onlyHunks<D extends Diff>(diff: D): D {
+  const indices = hunkLinesOf(diff.hunks);
+
+  return {
+    ...diff,
+    contents: { old: [], new: [] },
+    highlights: {
+      old: runsAt(diff.highlights.old, indices.old),
+      new: runsAt(diff.highlights.new, indices.new),
+    },
+  };
+}
+
 // Paseo's default syntax theme.
 const syntaxTheme = "one";
 

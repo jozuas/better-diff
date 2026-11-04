@@ -44,11 +44,13 @@ const diff = z.object({
     }),
   ),
   // Every line of the versions a text diff goes between, the hunks' and the unchanged ones
-  // around them, as the hunks' lines have them. None for a diff of another kind, or a version
-  // without the file.
+  // around them, as the hunks' lines have them, where they're asked for. None for a diff of another
+  // kind, or a version without the file.
   contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
-  // Each line of contents as the runs that make it up, highlighted as part of the whole version.
-  // None for a version in a language the highlighter doesn't know, or too long to highlight.
+  // Each line of each version, by its number in it, as the runs that make it up, highlighted as
+  // part of the whole version: every line's, where they're asked for, or else only the hunks'
+  // lines', and none for the lines before them. None for a version in a language the highlighter
+  // doesn't know, or too long to highlight.
   highlights: z.object({ old: z.array(z.array(run)), new: z.array(z.array(run)) }),
 });
 
@@ -62,6 +64,10 @@ export const diffRpc = defineRpc({
     side: z.enum(["unstaged", "staged"]),
     // Whether to send a diff's hunks and contents though it would be collapsed.
     expand: z.boolean().optional(),
+    // Whether to send every line of the versions, in contents and highlights, as showing the entire
+    // file takes, rather than only what showing the hunks takes. The hunks of a large file are a
+    // small part of it.
+    entire: z.boolean().optional(),
   }),
   output: diff,
 });
@@ -81,8 +87,8 @@ export const groupRpc = defineRpc({
     // read, changes.
     version: z.string(),
     // The group's files, or those of them at the paths, in the order changes.list lists them, each
-    // with its diff, collapsed as diff.read collapses it: the staged one for a staged file, the
-    // unstaged one for the others. A file whose diff can't be read, such as one git can't open, has
+    // with its diff as diff.read reads it, collapsed as it collapses it, and without every line of
+    // the versions: the staged one for a staged file, the unstaged one for the others. A file whose diff can't be read, such as one git can't open, has
     // why in its place.
     files: z.array(
       z.union([

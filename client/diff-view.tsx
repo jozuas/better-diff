@@ -19,10 +19,11 @@ type GroupRead = RpcOutput<typeof groupRpc>;
 interface ShownDiffProps {
   open: Open;
   layout: Layout;
-  // The query of a file's diff, collapsed or not.
+  // The query of a file's diff, collapsed or not, and with every line of the file or not.
   fileQuery: (
     file: OpenFile,
     expand: boolean,
+    entire?: boolean,
   ) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   // The query of the diffs of all of a group's files, or of those of them at the paths.
   groupQuery: (
@@ -52,7 +53,7 @@ function ShownDiff({
       <GroupDiff
         key={`${group}:${JSON.stringify(open.paths)}`}
         query={groupQuery(group, open.paths)}
-        expanded={(file) => fileQuery(file, true)}
+        expanded={(file, entire) => fileQuery(file, true, entire)}
         group={group}
         filter=""
         layout={layout}
@@ -67,7 +68,7 @@ function ShownDiff({
       <GroupDiff
         key={group}
         query={groupQuery(group)}
-        expanded={(file) => fileQuery(file, true)}
+        expanded={(file, entire) => fileQuery(file, true, entire)}
         group={group}
         filter={filter}
         layout={layout}
@@ -80,7 +81,7 @@ function ShownDiff({
   return (
     <FileDiff
       key={`${group}:${path}`}
-      query={(expand) => fileQuery({ group, path }, expand)}
+      query={(expand, entire) => fileQuery({ group, path }, expand, entire)}
       file={{ group, path }}
       layout={layout}
       controls={controls}

@@ -52,8 +52,10 @@ function ExpandedDiff({ diff, theme, ...shown }: ExpandedDiffProps): ReactElemen
   );
 }
 
-interface GroupFileDiffProps extends Omit<ShownDiffProps, "file" | "onExpand"> {
+interface GroupFileDiffProps extends Omit<ShownDiffProps, "file" | "onExpand" | "entireQuery"> {
   group: GroupName;
+  // The query of a file's diff with its lines, and with every line of the file where `entire` says.
+  query: (file: OpenFile, entire: boolean) => DiffQuery;
   // The file as the group's read has it.
   read: GroupRead["files"][number];
   // Its diff read again with its lines, once they're asked for.
@@ -66,6 +68,7 @@ interface GroupFileDiffProps extends Omit<ShownDiffProps, "file" | "onExpand"> {
 // lines once they're asked for.
 function FileOfGroup({
   group,
+  query,
   read,
   expanded,
   onExpand,
@@ -78,8 +81,19 @@ function FileOfGroup({
     onExpand(read.path);
   }, [onExpand, read.path]);
 
+  const entireQuery = query(file, true);
+
   if (expanded !== undefined) {
-    return <ExpandedDiff diff={expanded} file={file} onExpand={expand} theme={theme} {...shown} />;
+    return (
+      <ExpandedDiff
+        diff={expanded}
+        file={file}
+        entireQuery={entireQuery}
+        onExpand={expand}
+        theme={theme}
+        {...shown}
+      />
+    );
   }
 
   if ("error" in read) {
@@ -87,7 +101,15 @@ function FileOfGroup({
   }
 
   return (
-    <DiffBody diff={read} file={file} scrolls={false} onExpand={expand} theme={theme} {...shown} />
+    <DiffBody
+      diff={read}
+      file={file}
+      scrolls={false}
+      entireQuery={entireQuery}
+      onExpand={expand}
+      theme={theme}
+      {...shown}
+    />
   );
 }
 
@@ -125,8 +147,9 @@ interface GroupFilesProps {
   view: string;
   // Whether they show the old versions' lines beside the new ones', rather than inline.
   sideBySide: boolean;
-  // The query of a file's diff with its lines, though it would be collapsed.
-  expanded: (file: OpenFile) => DiffQuery;
+  // The query of a file's diff with its lines, though it would be collapsed, and with every line of
+  // the file where `entire` says.
+  expanded: (file: OpenFile, entire?: boolean) => DiffQuery;
   group: GroupName;
   // What the sidebar's files are filtered by.
   filter: string;
@@ -225,6 +248,7 @@ function GroupFiles({
               {index < rendered ? (
                 <GroupFileDiff
                   group={group}
+                  query={expanded}
                   read={shown}
                   expanded={expandedDiff(shown.path)}
                   view={view}

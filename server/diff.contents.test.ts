@@ -155,14 +155,19 @@ test.each([
 });
 
 test.each(sides)(
-  "%s diff: has every line of each version a text diff goes between",
+  "%s diff: has every line of each version a text diff goes between, once it's asked for them",
   async (side) => {
     await fc.assert(
       fc.asyncProperty(file, async ({ path, versions }) => {
         await inRepository(async (repository) => {
           setUp(repository, [{ path, versions }], "myers");
 
-          const { kind, contents } = await readDiff({ directory: repository, path, side });
+          const { kind, contents } = await readDiff({
+            directory: repository,
+            path,
+            side,
+            entire: true,
+          });
 
           expect(contents).toStrictEqual(expectedContents(kind, side, versions));
         });
@@ -184,6 +189,7 @@ test("a renamed file's contents are its original's and its own", async () => {
       directory: repository,
       path: "b",
       side: "staged",
+      entire: true,
     });
 
     expect(renamedFrom).toBe("a");
@@ -203,6 +209,7 @@ test("a binary file has no contents", async () => {
       directory: repository,
       path: "a",
       side: "unstaged",
+      entire: true,
     });
 
     expect(kind).toBe("binary");

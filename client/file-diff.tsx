@@ -173,8 +173,11 @@ export function FileBar({
 }
 
 interface FileDiffProps {
-  // The query of its diff, collapsed or not.
-  query: (expand: boolean) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
+  // The query of its diff, collapsed or not, and with every line of the file or not.
+  query: (
+    expand: boolean,
+    entire?: boolean,
+  ) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   file: OpenFile;
   layout: Layout;
   controls: Controls;
@@ -206,6 +209,7 @@ export function FileDiff({ query, file, layout, controls, theme }: FileDiffProps
                 fileIndex={0}
                 selection={selection}
                 scrolls
+                entireQuery={query(true, true)}
                 sideBySide={sideBySide}
                 onHunkRun={(top, barHeight) => {
                   scrollUpTo(view, top, barHeight);

@@ -150,7 +150,7 @@ test("reads a collapsed diff's hunks and contents when asked to expand it, and i
 
     const read = { directory: repository, path: "yarn.lock", side: "unstaged" } as const;
     const collapsed = await readDiff(read);
-    const expanded = await readDiff({ ...read, expand: true });
+    const expanded = await readDiff({ ...read, expand: true, entire: true });
 
     expect(expanded).toStrictEqual({
       version: collapsed.version,

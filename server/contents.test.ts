@@ -56,7 +56,12 @@ test("decodes bytes that aren't UTF-8 as the diff's lines do", async () => {
   await inRepository(async (repository) => {
     writeFile(repository, "a", Buffer.from([0x61, 0xff, 0xc3, 0x0a, 0xc3, 0xa9]));
 
-    const { contents } = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+    const { contents } = await readDiff({
+      directory: repository,
+      path: "a",
+      side: "unstaged",
+      entire: true,
+    });
 
     await expect(read(repository, "a")).resolves.toStrictEqual({
       status: "read",

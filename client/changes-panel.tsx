@@ -44,8 +44,9 @@ interface Request {
   target: Target;
 }
 
-// The queries of a file's diff, as opened from its group, collapsed or not, and of the diffs of all
-// of a group's files or of those of them at the paths.
+// The queries of a file's diff, as opened from its group, collapsed or not, with every line of the
+// file or only what its hunks take, and of the diffs of all of a group's files or of those of them
+// at the paths.
 function useDiffQueries(directory: string) {
   const readDiff = useRpc(diffRpc);
   const readGroup = useRpc(groupRpc);
@@ -60,15 +61,16 @@ function useDiffQueries(directory: string) {
           return read;
         },
       }),
-    query: (file: OpenFile, expand: boolean) =>
+    query: (file: OpenFile, expand: boolean, entire = false) =>
       queryOptions({
-        queryKey: [directory, "diff", groups[file.group].side, file.path, expand],
+        queryKey: [directory, "diff", groups[file.group].side, file.path, expand, entire],
         queryFn: async () => {
           const read = await readDiff({
             directory,
             path: file.path,
             side: groups[file.group].side,
             expand,
+            entire,
           });
 
           return read;

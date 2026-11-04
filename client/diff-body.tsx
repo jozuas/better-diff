@@ -1,5 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
+import { useQuery } from "@tanstack/react-query";
+import type { UseQueryOptions } from "@tanstack/react-query";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
 import { useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
@@ -54,6 +56,8 @@ export interface DiffBodyProps {
   // Whether its hunks scroll in the view on their own, under bars that stay at the top, as when
   // it's the view's only diff, rather than with the view's other diffs.
   scrolls: boolean;
+  // The query of its diff with every line of the file, which showing the entire file reads.
+  entireQuery: UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   // Whether it shows the old version's lines beside the new one's, rather than inline.
   sideBySide: boolean;
   // Called just before an action on one of its hunks runs, with the id of the top of the hunk's
@@ -183,6 +187,14 @@ function useBarActions(
   );
 }
 
+// The diff to show: read again with every line of the file while the entire file is asked for, once
+// that's read, and else as it is.
+function useEntireDiff(diff: Diff, query: DiffBodyProps["entireQuery"], entire: boolean): Diff {
+  const whole = useQuery({ ...query, enabled: entire });
+
+  return entire ? (whole.data ?? diff) : diff;
+}
+
 // The lines outside a hunk while only the hunks show, the same each time, so the hunk's lines
 // rendered again with them aren't rendered again for them.
 const noLines: NumberedLine[] = [];
@@ -192,8 +204,8 @@ interface HunksProps extends DiffBodyProps {
 }
 
 // Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions, and
-// the toggle that shows the entire file, with the unchanged lines around the hunks, or only the
-// hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
+// the toggle that shows the entire file, with the unchanged lines around the hunks, once the diff is
+// read again with them, or only the hunks again, which keeps the hunk in place. Hunks that scroll on their own have each bar stay at
 // the top while its lines scroll under it, until the next hunk's bar covers it. While the entire
 // file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
@@ -205,6 +217,7 @@ function Hunks({
   fileIndex,
   selection,
   scrolls,
+  entireQuery,
   sideBySide,
   onHunkRun,
   controls,
@@ -213,19 +226,22 @@ function Hunks({
 }: HunksProps): ReactElement {
   const pointed = useMemo(() => pointedHunk(), []);
   const [entire, setEntire] = useState(false);
+  const shownDiff = useEntireDiff(diff, entireQuery, entire);
+  const showsEntire = shownDiff !== diff;
   const container = fileId(view, fileIndex);
-  const hold = useHeldPlace(view, `${diff.version} ${String(entire)}`, controls.busy);
+  const key = `${shownDiff.version} ${String(showsEntire)}`;
+  const hold = useHeldPlace(view, key, controls.busy);
   const bars = useBarActions(container, { entire, hold, onHunkRun }, setEntire);
 
   const unchanged = useMemo(
-    () => (entire ? unchangedLines(diff) : { before: noLines, after: [] }),
-    [diff, entire],
+    () => (showsEntire ? unchangedLines(shownDiff) : { before: noLines, after: [] }),
+    [shownDiff, showsEntire],
   );
 
   const focus = useFocus(sideBySide);
   const range = useMemo(() => onSide(selection, focus), [selection, focus]);
 
-  const hunks = diff.hunks.flatMap((hunk, index) => {
+  const hunks = shownDiff.hunks.flatMap((hunk, index) => {
     const selected = rangeInHunk(range, index);
 
     return [
@@ -233,7 +249,7 @@ function Hunks({
         key={`bar ${hunk.oldStart},${hunk.newStart}`}
         hunk={hunk}
         index={index}
-        version={diff.version}
+        version={shownDiff.version}
         file={file}
         selection={selected}
         pointed={pointed}
@@ -253,13 +269,13 @@ function Hunks({
           selection={selected}
           pointed={pointed}
           focus={focus}
-          highlights={diff.highlights}
+          highlights={shownDiff.highlights}
           theme={theme}
         />
         <UnchangedLines
           lines={unchanged.after[index] ?? noLines}
           focus={focus}
-          highlights={diff.highlights}
+          highlights={shownDiff.highlights}
           theme={theme}
         />
       </View>,
@@ -271,7 +287,7 @@ function Hunks({
       key="before"
       lines={unchanged.before}
       focus={focus}
-      highlights={diff.highlights}
+      highlights={shownDiff.highlights}
       style={styles.spaced}
       theme={theme}
     />,
@@ -279,7 +295,10 @@ function Hunks({
   ];
 
   return scrolls ? (
-    <ScrollView nativeID={view} stickyHeaderIndices={diff.hunks.map((_, index) => 2 * index + 1)}>
+    <ScrollView
+      nativeID={view}
+      stickyHeaderIndices={shownDiff.hunks.map((_, index) => 2 * index + 1)}
+    >
       {shown}
     </ScrollView>
   ) : (
