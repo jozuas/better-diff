@@ -7,7 +7,7 @@ import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
 import type { ChangedFile, Changes, UnhighlightedDiff } from "./diff";
-import { highlighted, onlyHunks } from "./highlight";
+import { highlighted } from "./highlight";
 import { versionOf } from "./version";
 
 type Group = RpcInput<typeof groupRpc>["group"];
@@ -103,9 +103,9 @@ export async function readGroup({
         return file;
       }
 
-      const read = await highlighted(collapsed(file, generated.has(file.path)), file.path);
+      const read = await highlighted(collapsed(file, generated.has(file.path)), file.path, false);
 
-      return onlyHunks(read);
+      return read;
     }),
   );
 

@@ -10,6 +10,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
 import type { syntaxColorsRpc } from "../shared/syntax";
+import { versionOf } from "./version";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -54,42 +55,119 @@ async function tokensOf(code: string, path: string): Promise<HighlightToken[][]>
   }
 }
 
-// The runs of each of the lines of a version of the file at the path, in the language its extension
-// names.
-async function highlightLines(lines: readonly string[], path: string): Promise<Runs[]> {
-  const code = lines.join("\n");
+// The runs of each of a version's lines mostly in typed arrays, which take a tenth of the memory
+// the runs do: each style the runs have, each run's length and the index of its style, and the
+// index of the run after each line's last.
+interface PackedRuns {
+  styles: (string | null)[];
+  lengths: Uint32Array;
+  styleIndices: Uint16Array;
+  ends: Uint32Array;
+}
 
-  if (lines.length === 0 || !isLanguageSupported(path) || code.length > longestHighlighted) {
-    return [];
+function packed(lines: readonly Runs[]): PackedRuns {
+  const runs = lines.flat();
+  const styles = [...new Set(runs.map(([, style]) => style))];
+  const ends = new Uint32Array(lines.length);
+  let end = 0;
+
+  for (const [index, { length }] of lines.entries()) {
+    end += length;
+    ends[index] = end;
   }
 
+  return {
+    styles,
+    lengths: Uint32Array.from(runs, ([length]) => length),
+    styleIndices: Uint16Array.from(runs, ([, style]) => styles.indexOf(style)),
+    ends,
+  };
+}
+
+// The runs of the lines at the indices, and none for the others before the last of them.
+function unpacked(
+  { styles, lengths, styleIndices, ends }: PackedRuns,
+  lines: ReadonlySet<number>,
+): Runs[] {
+  let last = 0;
+
+  for (const line of lines) {
+    last = Math.max(last, line + 1);
+  }
+
+  return Array.from(ends.subarray(0, last), (end, line): Runs => {
+    if (!lines.has(line)) {
+      return [];
+    }
+
+    const start = ends[line - 1] ?? 0;
+
+    return Array.from(lengths.subarray(start, end), (length, run): Runs[number] => [
+      length,
+      styles[styleIndices[start + run] ?? 0] ?? null,
+    ]);
+  });
+}
+
+async function highlightedRuns(code: string, path: string): Promise<PackedRuns> {
   const tokens = await tokensOf(code, path);
 
-  return tokens.map(runsOf);
+  return packed(tokens.map(runsOf));
 }
 
-// The diff of the file at the path with its versions highlighted, the old one as the file it was
-// renamed from, if it was.
-export async function highlighted<D extends Omit<Diff, "highlights">>(
-  diff: D,
-  path: string,
-): Promise<D & Highlights> {
-  const [old, changed] = await Promise.all([
-    highlightLines(diff.contents.old, diff.renamedFrom ?? path),
-    highlightLines(diff.contents.new, path),
-  ]);
+// The most characters the versions whose runs are kept can have in all, so that reading diffs
+// again, as each refresh does, highlights only the versions that changed. Kept, a character of
+// code takes about two bytes.
+const mostKept = 8 * 1024 * 1024;
 
-  return { ...diff, highlights: { old, new: changed } };
+interface Kept {
+  characters: number;
+  runs: Promise<PackedRuns>;
 }
 
-// The indices, in each version, of the hunks' lines.
-interface HunkLines {
+// The runs of the versions highlighted lately, the least lately first, by the path and the code.
+const kept = new Map<string, Kept>();
+
+let keptCharacters = 0;
+
+function forget(key: string): void {
+  keptCharacters -= kept.get(key)?.characters ?? 0;
+  kept.delete(key);
+}
+
+function forgetLeastLately(): void {
+  for (const key of kept.keys()) {
+    if (keptCharacters <= mostKept) {
+      return;
+    }
+
+    forget(key);
+  }
+}
+
+// The runs of the code at the path, kept from highlighting it lately, or else highlighted anew.
+async function keptRuns(code: string, path: string): Promise<PackedRuns> {
+  const key = versionOf(`${path}\0${code}`);
+  const version = kept.get(key) ?? { characters: code.length, runs: highlightedRuns(code, path) };
+
+  forget(key);
+  kept.set(key, version);
+  keptCharacters += version.characters;
+  forgetLeastLately();
+
+  const runs = await version.runs;
+
+  return runs;
+}
+
+// The indices, in each version, of some of its lines.
+interface Lines {
   old: Set<number>;
   new: Set<number>;
 }
 
-function hunkLinesOf(hunks: Diff["hunks"]): HunkLines {
-  const indices: HunkLines = { old: new Set(), new: new Set() };
+function hunkLinesOf(hunks: Diff["hunks"]): Lines {
+  const indices: Lines = { old: new Set(), new: new Set() };
 
   for (const { oldStart, newStart, lines } of hunks) {
     let old = oldStart - 1;
@@ -111,29 +189,48 @@ function hunkLinesOf(hunks: Diff["hunks"]): HunkLines {
   return indices;
 }
 
-// The runs of the lines at the indices, and none for the others before the last of them.
-function runsAt(runs: readonly Runs[], indices: ReadonlySet<number>): Runs[] {
-  let end = 0;
+// The runs of the lines at the indices of a version of the file at the path, in the language its
+// extension names, and none for the others before the last of them.
+async function highlightLines(
+  version: readonly string[],
+  path: string,
+  lines: ReadonlySet<number>,
+): Promise<Runs[]> {
+  const code = version.join("\n");
 
-  for (const index of indices) {
-    end = Math.max(end, index + 1);
+  if (!isLanguageSupported(path) || code.length > longestHighlighted) {
+    return [];
   }
 
-  return runs.slice(0, end).map((line, index) => (indices.has(index) ? line : []));
+  const runs = await keptRuns(code, path);
+
+  return unpacked(runs, lines);
 }
 
-// The diff with only what showing its hunks takes: the highlights of the hunks' lines, and no
-// contents.
-export function onlyHunks<D extends Diff>(diff: D): D {
-  const indices = hunkLinesOf(diff.hunks);
+// The diff of the file at the path with its versions highlighted, the old one as the file it was
+// renamed from, if it was: with every line of the versions, if it's to be shown entire, or else with
+// only what showing its hunks takes, the highlights of the hunks' lines and no contents. The old
+// version is highlighted only if the diff removes lines, since only removed lines are shown in it.
+export async function highlighted<D extends Omit<Diff, "highlights">>(
+  diff: D,
+  path: string,
+  entire: boolean,
+): Promise<D & Highlights> {
+  const lines = entire
+    ? { old: new Set(diff.contents.old.keys()), new: new Set(diff.contents.new.keys()) }
+    : hunkLinesOf(diff.hunks);
+
+  const [old, changed] = await Promise.all([
+    diff.removed === 0
+      ? []
+      : highlightLines(diff.contents.old, diff.renamedFrom ?? path, lines.old),
+    highlightLines(diff.contents.new, path, lines.new),
+  ]);
 
   return {
     ...diff,
-    contents: { old: [], new: [] },
-    highlights: {
-      old: runsAt(diff.highlights.old, indices.old),
-      new: runsAt(diff.highlights.new, indices.new),
-    },
+    contents: entire ? diff.contents : { old: [], new: [] },
+    highlights: { old, new: changed },
   };
 }
 

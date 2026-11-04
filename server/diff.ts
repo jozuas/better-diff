@@ -5,7 +5,7 @@ import { aloneIntentToAdd, indexOf, readStatus, withIntentToAdd } from "./change
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
-import { highlighted, onlyHunks } from "./highlight";
+import { highlighted } from "./highlight";
 import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, reverse } from "./patch";
 import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
@@ -211,9 +211,9 @@ export async function readDiff({
 
   const diff = diffOf(changes);
   const shown = generated === undefined ? diff : collapsed(diff, generated.has(path));
-  const read = await highlighted(shown, path);
+  const read = await highlighted(shown, path, entire === true);
 
-  return entire === true ? read : onlyHunks(read);
+  return read;
 }
 
 // The last apply to start on each index.

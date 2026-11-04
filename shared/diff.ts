@@ -50,7 +50,8 @@ const diff = z.object({
   // Each line of each version, by its number in it, as the runs that make it up, highlighted as
   // part of the whole version: every line's, where they're asked for, or else only the hunks'
   // lines', and none for the lines before them. None for a version in a language the highlighter
-  // doesn't know, or too long to highlight.
+  // doesn't know, or too long to highlight, nor for the old version of a diff that removes no
+  // lines, since only removed lines are shown in it.
   highlights: z.object({ old: z.array(z.array(run)), new: z.array(z.array(run)) }),
 });
 

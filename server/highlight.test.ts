@@ -1,30 +1,10 @@
 import { highlightCode } from "@getpaseo/highlight";
-import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import type { diffRpc } from "../shared/diff";
 import { filePath } from "../test/file-names";
+import { highlightLines } from "../test/highlights";
 import { highlighted, syntaxColors } from "./highlight";
-
-type Highlights = RpcOutput<typeof diffRpc>["highlights"];
-
-// The highlights of each of the lines of a new file at the path.
-async function highlightLines(lines: string[], path: string): Promise<Highlights["new"]> {
-  const { highlights } = await highlighted(
-    {
-      version: "",
-      kind: "text",
-      added: lines.length,
-      removed: 0,
-      hunks: [],
-      contents: { old: [], new: lines },
-    },
-    path,
-  );
-
-  return highlights.new;
-}
 
 // Pieces of code that start and end what highlighters tell apart, such as strings and comments, and
 // what diffs break on: `\r`, tabs and non-ASCII.
@@ -138,10 +118,32 @@ test("leaves a version Paseo's highlighter fails on, as its Nix grammar fails on
       renamedFrom: "a.nix",
     },
     "a.ts",
+    true,
   );
 
   expect(highlights.old).toStrictEqual([]);
   expect(highlights.new[0]?.[0]).toStrictEqual([5, "keyword"]);
+});
+
+test("leaves the old version without highlights where the diff removes no lines, as none of its lines is shown", async () => {
+  const { highlights } = await highlighted(
+    {
+      version: "",
+      kind: "text",
+      added: 1,
+      removed: 0,
+      hunks: [],
+      contents: { old: ["const a = 1;"], new: ["const a = 1;", "const b = 2;"] },
+    },
+    "a.ts",
+    true,
+  );
+
+  expect(highlights.old).toStrictEqual([]);
+  expect(highlights.new.map((runs) => runs[0])).toStrictEqual([
+    [5, "keyword"],
+    [5, "keyword"],
+  ]);
 });
 
 test("gives a version without lines, as of a file it doesn't have, no highlights", async () => {
