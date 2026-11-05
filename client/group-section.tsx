@@ -1,23 +1,16 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import type { ReactElement, Ref } from "react";
-import { useContext, useId, useMemo, useState } from "react";
+import type { ReactElement } from "react";
+import { memo, useCallback, useContext, useId, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { groupActions, rowActions } from "./actions";
-import type { Controls, RowActions } from "./actions";
+import type { Controls } from "./actions";
 import { rowMove } from "./arrows";
 import { FileLabel } from "./file-label";
 import { KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
-import {
-  isGroupOpen,
-  groups as kinds,
-  isOpen,
-  reachedFile,
-  selectedBy,
-  selectedTo,
-} from "./groups";
-import type { Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
+import { isGroupOpen, groups as kinds, isOpen, rowOpen } from "./groups";
+import type { GroupName, Open, OpenFile, SidebarGroup } from "./groups";
 import { Hoverable } from "./hoverable";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
@@ -101,65 +94,80 @@ function useReveal() {
   };
 }
 
-interface FileRowProps {
-  file: OpenFile;
-  // Whether it's open, or one of the files selected.
-  open: boolean;
-  // Its actions, on it or on all the files selected.
-  actions: RowActions;
+// What a file's row hears things with, each with the row's file.
+export interface RowHandlers {
   // Hears whether Shift was held.
-  onPress: (shift: boolean) => void;
+  onPress: (file: OpenFile, shift: boolean) => void;
   // Hears 1 on Shift+↓ while focus is in the row, and -1 on Shift+↑.
-  onStep: (step: 1 | -1) => void;
+  onStep: (file: OpenFile, step: 1 | -1) => void;
   // Hears 1 on ↓ while focus is in the row, -1 on ↑, and "diff" on →.
-  onMove: (move: 1 | -1 | "diff") => void;
+  onMove: (file: OpenFile, move: 1 | -1 | "diff") => void;
   // Hears where the row was right-clicked.
-  onMenu: (point: Point) => void;
-  // The row's button that opens the file, which focus moves to once ↑/↓ reaches it.
-  buttonRef: Ref<View>;
+  onMenu: (file: OpenFile, point: Point) => void;
+}
+
+interface FileRowProps extends RowHandlers {
+  group: GroupName;
+  path: string;
+  // What's open, as the row shows it.
+  open: Open | undefined;
   controls: Controls;
   styles: Styles;
   theme: PluginTheme;
 }
 
-function FileRow({
-  file,
+function RowOfFile({
+  group,
+  path,
   open,
-  actions,
   onPress,
   onStep,
   onMove,
   onMenu,
-  buttonRef,
   controls,
   styles,
   theme,
 }: FileRowProps): ReactElement {
+  const file = useMemo(() => ({ group, path }), [group, path]);
   const { revealed, reveal } = useReveal();
-  const look = lookOf(open, revealed);
+  const opened = isOpen(open, group, path);
+  const look = lookOf(opened, revealed);
   const id = useId();
+  const focus = useContext(KeyboardFocusContext);
 
-  useContextMenu(id, onMenu);
-  useKeys(id, shiftStep, onStep);
-  useKeys(id, rowMove, onMove);
+  // The button that opens the file, which focus moves to once ↑/↓ reaches it.
+  const buttonRef = useCallback(
+    (button: View | null) => (button === null ? undefined : focus.addRow(file, button)),
+    [focus, file],
+  );
+
+  useContextMenu(id, (point) => {
+    onMenu(file, point);
+  });
+  useKeys(id, shiftStep, (step) => {
+    onStep(file, step);
+  });
+  useKeys(id, rowMove, (move) => {
+    onMove(file, move);
+  });
 
   return (
     <View role="listitem" nativeID={id}>
       <Pressable
         ref={buttonRef}
         accessibilityRole="button"
-        accessibilityLabel={file.path}
-        accessibilityState={{ selected: open }}
+        accessibilityLabel={path}
+        accessibilityState={{ selected: opened }}
         style={[styles.row, styles[look]]}
         onPress={(event) => {
-          onPress(withShift(event));
+          onPress(file, withShift(event));
         }}
         {...reveal}
       >
-        <FileLabel path={file.path} style={[styles.path, look === "plain" && styles.dimmedPath]} />
+        <FileLabel path={path} style={[styles.path, look === "plain" && styles.dimmedPath]} />
       </Pressable>
       <SidebarButtons
-        {...actions}
+        {...rowActions(open, file)}
         look={look}
         background={styles[look]}
         controls={controls}
@@ -169,6 +177,10 @@ function FileRow({
     </View>
   );
 }
+
+// Rendered again only once what it's rendered with changes, as once its file opens or the controls
+// change, and not with each of the sidebar's renders, as with each key typed in the filter.
+const FileRow = memo(RowOfFile);
 
 interface GroupHeadingProps {
   group: SidebarGroup;
@@ -249,36 +261,27 @@ function GroupHeading({
 interface GroupSectionProps {
   group: SidebarGroup;
   open: Open | undefined;
-  onOpen: (open: OpenFile | OpenFiles) => void;
   onOpenGroup: () => void;
   expanded: boolean;
   onToggle: () => void;
-  // Hears ↓ (1) or ↑ (-1) pressed with focus in the file's row.
-  onMove: (file: OpenFile, step: 1 | -1) => void;
-  // Hears where the file at the path was right-clicked.
-  onMenu: (path: string, point: Point) => void;
+  // What its files' rows hear things with.
+  rows: RowHandlers;
   controls: Controls;
   theme: PluginTheme;
 }
 
-// The group's heading, and the rows of the files it lists while it's expanded. A file's row opens
-// its file, or if shift-clicked selects the files from the open one to it. Shift+↑/↓ with focus in
-// a row selects one more file or one fewer, and moves focus to the file the selection reaches. →
-// moves focus to the file's first hunk in the diff.
+// The group's heading, and the rows of the files it lists while it's expanded.
 export function GroupSection({
   group,
   open,
-  onOpen,
   onOpenGroup,
   expanded,
   onToggle,
-  onMove,
-  onMenu,
+  rows,
   controls,
   theme,
 }: GroupSectionProps): ReactElement {
   const styles = useStyles(theme);
-  const focus = useContext(KeyboardFocusContext);
 
   return (
     <View style={styles.group}>
@@ -293,45 +296,18 @@ export function GroupSection({
         theme={theme}
       />
       <View accessibilityRole="list" accessibilityLabel={group.heading}>
-        {(expanded ? group.paths : []).map((path) => {
-          const file = { group: group.name, path };
-
-          return (
-            <FileRow
-              key={path}
-              file={file}
-              open={isOpen(open, group.name, path)}
-              actions={rowActions(open, file)}
-              onPress={(shift) => {
-                onOpen(shift ? selectedTo(open, file, group.paths) : file);
-              }}
-              onStep={(step) => {
-                const selected = selectedBy(open, file, group.paths, step);
-                const reached = reachedFile(selected);
-
-                onOpen(selected);
-
-                if (reached !== undefined) {
-                  focus.toRow({ group: group.name, path: reached });
-                }
-              }}
-              onMove={(move) => {
-                if (move === "diff") {
-                  focus.toHunks(file);
-                } else {
-                  onMove(file, move);
-                }
-              }}
-              onMenu={(point) => {
-                onMenu(path, point);
-              }}
-              buttonRef={(button) => (button === null ? undefined : focus.addRow(file, button))}
-              controls={controls}
-              styles={styles}
-              theme={theme}
-            />
-          );
-        })}
+        {(expanded ? group.paths : []).map((path) => (
+          <FileRow
+            key={path}
+            group={group.name}
+            path={path}
+            open={rowOpen(open, group.name, path)}
+            {...rows}
+            controls={controls}
+            styles={styles}
+            theme={theme}
+          />
+        ))}
       </View>
     </View>
   );

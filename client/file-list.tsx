@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useContext, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import type { Controls } from "./actions";
@@ -10,9 +10,11 @@ import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { KeyboardFocusContext } from "./focus";
 import { GroupSection } from "./group-section";
-import { listedBy } from "./groups";
+import type { RowHandlers } from "./group-section";
+import { listedBy, reachedFile, selectedBy, selectedTo } from "./groups";
 import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
 import type { Point } from "./menu";
+import { useLatest } from "./web";
 
 const styles = StyleSheet.create({
   fileList: { flex: 1 },
@@ -36,11 +38,70 @@ interface FileListProps {
   theme: PluginTheme;
 }
 
+// What the files' rows hear things with, which acts on the groups and what's open as they are once a
+// row hears something, so it stays the same as they change, and a row renders again only once what
+// it shows does.
+function useRowHandlers(
+  list: Pick<FileListProps, "groups" | "open" | "onOpen" | "collapsed"> & {
+    onMenu: (path: string, point: Point) => void;
+  },
+): RowHandlers {
+  const focus = useContext(KeyboardFocusContext);
+  const latest = useLatest(list);
+
+  return useMemo(() => {
+    // The files the sidebar lists of the group.
+    function listed(group: GroupName): string[] {
+      return latest.current.groups.find(({ name }) => name === group)?.paths ?? [];
+    }
+
+    return {
+      onPress: (file, shift) => {
+        const { open, onOpen } = latest.current;
+
+        onOpen(shift ? selectedTo(open, file, listed(file.group)) : file);
+      },
+      onStep: (file, step) => {
+        const { open, onOpen } = latest.current;
+        const selected = selectedBy(open, file, listed(file.group), step);
+        const reached = reachedFile(selected);
+
+        onOpen(selected);
+
+        if (reached !== undefined) {
+          focus.toRow({ group: file.group, path: reached });
+        }
+      },
+      onMove: (file, move) => {
+        const { groups, collapsed, onOpen } = latest.current;
+
+        if (move === "diff") {
+          focus.toHunks(file);
+
+          return;
+        }
+
+        const next = listedBy(groups, collapsed, file, move);
+
+        if (next !== undefined) {
+          onOpen(next);
+          focus.toRow(next);
+        }
+      },
+      onMenu: ({ path }, point) => {
+        latest.current.onMenu(path, point);
+      },
+    };
+  }, [focus, latest]);
+}
+
 // The changed files, in their groups, under the filter they're listed by. Each file and group has
 // its actions at the end of its row, shown while the pointer is over it or focus is in it, and
-// always for the open file or group, or the files selected. A file's row opens its menu when
-// right-clicked. ↓ and ↑ with focus in a file's row open the next file listed or the one before,
-// whichever group it's in, and focus moves along with them.
+// always for the open file or group, or the files selected. A file's row opens its file, or if
+// shift-clicked selects the files from the open one to it, and opens its menu when right-clicked.
+// ↓ and ↑ with focus in a file's row open the next file listed or the one before, whichever group
+// it's in, and focus moves along with them. Shift+↑/↓ selects one more file or one fewer, and moves
+// focus to the file the selection reaches. → moves focus to the file's first hunk in the diff.
 export function FileList({
   groups,
   open,
@@ -55,7 +116,16 @@ export function FileList({
   theme,
 }: FileListProps): ReactElement {
   const [menu, setMenu] = useState<{ path: string; point: Point }>();
-  const focus = useContext(KeyboardFocusContext);
+
+  const rows = useRowHandlers({
+    groups,
+    open,
+    onOpen,
+    collapsed,
+    onMenu: (path, point) => {
+      setMenu({ path, point });
+    },
+  });
 
   return (
     <View style={styles.fileList}>
@@ -66,7 +136,6 @@ export function FileList({
             key={group.name}
             group={group}
             open={open}
-            onOpen={onOpen}
             onOpenGroup={() => {
               onOpenGroup(group.name);
             }}
@@ -74,17 +143,7 @@ export function FileList({
             onToggle={() => {
               onToggle(group.name);
             }}
-            onMove={(file, step) => {
-              const next = listedBy(groups, collapsed, file, step);
-
-              if (next !== undefined) {
-                onOpen(next);
-                focus.toRow(next);
-              }
-            }}
-            onMenu={(path, point) => {
-              setMenu({ path, point });
-            }}
+            rows={rows}
             controls={controls}
             theme={theme}
           />

@@ -172,13 +172,13 @@ function ShownDiff({
     );
   }
 
-  // The open file itself, the same while it stays open, so its hunks' bars aren't rendered again
-  // with each of the panel's renders.
+  // The open file itself, the same while it stays open, so neither its diff nor its hunks' bars are
+  // rendered again with each of the panel's renders.
   return (
     <>
       <FileDiff
         key={`${group}:${open.path}`}
-        query={(expand, entire) => fileQuery(open, expand, entire)}
+        query={fileQuery}
         file={open}
         layout={layout}
         whitespace={whitespace}

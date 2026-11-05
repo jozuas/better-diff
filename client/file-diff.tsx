@@ -2,7 +2,7 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useContext, useId, useLayoutEffect, useMemo, useState } from "react";
+import { memo, useContext, useId, useLayoutEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -218,8 +218,9 @@ function SettledFocus({ busy }: SettledFocusProps): null {
 }
 
 interface FileDiffProps {
-  // The query of its diff, collapsed or not, and with every line of the file or not.
+  // The query of a file's diff, collapsed or not, and with every line of the file or not.
   query: (
+    file: OpenFile,
     expand: boolean,
     entire?: boolean,
   ) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
@@ -234,7 +235,7 @@ interface FileDiffProps {
 // asked to, until another file is opened. Just before an action on a hunk runs, the view scrolls up
 // to the hunk's start if it's above, so the next hunk, which then takes its place, shows from its
 // start, and focus moves on to it if it was in the hunk's bar.
-export function FileDiff({
+function DiffOfFile({
   query,
   file,
   layout,
@@ -245,7 +246,7 @@ export function FileDiff({
   const styles = useStyles(theme);
   const view = useId();
   const [expand, setExpand] = useState(false);
-  const diff = useQuery(query(expand));
+  const diff = useQuery(query(file, expand));
   const selection = useSelectedLines(view, () => diff.data?.version);
 
   return (
@@ -269,7 +270,7 @@ export function FileDiff({
                   fileIndex={0}
                   selection={selection}
                   scrolls
-                  entireQuery={query(true, true)}
+                  entireQuery={query(file, true, true)}
                   sideBySide={sideBySide}
                   onHunkRun={(top, barHeight) => {
                     scrollUpTo(view, top, barHeight);
@@ -289,3 +290,7 @@ export function FileDiff({
     </View>
   );
 }
+
+// Rendered again only once what it's rendered with changes, and not with each of the panel's
+// renders, as with each key typed in the sidebar's filter.
+export const FileDiff = memo(DiffOfFile);

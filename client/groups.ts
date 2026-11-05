@@ -133,6 +133,13 @@ export function isShown(open: Open | undefined, group: GroupName, path: string):
   return isOpen(open, group, path) || isGroupOpen(open, group);
 }
 
+// What's open, as the row of the file the group lists shows it: what's open while the file's diff
+// is shown, and otherwise nothing, which the row shows the same, so the row stays the same as other
+// files open.
+export function rowOpen(open: Open | undefined, group: GroupName, path: string): Open | undefined {
+  return isShown(open, group, path) ? open : undefined;
+}
+
 // The file the open file or the files selected reach, which Shift+↑/↓ moves on from.
 export function reachedFile(open: OpenFile | OpenFiles): string | undefined {
   return openPaths(open).at(-1);

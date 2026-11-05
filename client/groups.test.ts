@@ -5,6 +5,7 @@ import { expect, test } from "vitest";
 import type { diffRpc } from "../shared/diff";
 import { changes, groupName, modified } from "../test/changes";
 import { filePath } from "../test/file-names";
+import { rowActions } from "./actions";
 import {
   diffOf,
   groups,
@@ -14,6 +15,7 @@ import {
   listedFiles,
   openAfter,
   placeholder,
+  rowOpen,
   sidebarGroups,
   toggled,
 } from "./groups";
@@ -155,6 +157,41 @@ test("shows the diff of each file of the open group, and of the open file alone"
   expect(isShown({ group: "staged", path: "a" }, "staged", "a")).toBe(true);
   expect(isShown({ group: "staged", path: "a" }, "staged", "b")).toBe(false);
   expect(isShown(undefined, "staged", "a")).toBe(false);
+});
+
+// A path that's often that of a file open, or of one of the files selected.
+const rowPath = fc.oneof(fc.constantFrom("a", "b"), filePath);
+
+// Nothing, a group, a file of it, or two or more of its files selected.
+const opened: fc.Arbitrary<Open | undefined> = fc.option(
+  fc.oneof(
+    fc.record({ group: groupName }),
+    fc.record({ group: groupName, path: rowPath }),
+    fc.record({ group: groupName, paths: fc.uniqueArray(rowPath, { minLength: 2 }) }),
+  ),
+  { nil: undefined },
+);
+
+test("a file's row shows what's open as it is: whether its file is open, and what its buttons act on", () => {
+  fc.assert(
+    fc.property(opened, groupName, rowPath, (open, group, path) => {
+      const shown = rowOpen(open, group, path);
+
+      expect(isOpen(shown, group, path)).toBe(isOpen(open, group, path));
+      expect(rowActions(shown, { group, path })).toStrictEqual(rowActions(open, { group, path }));
+    }),
+  );
+});
+
+test("a file's row stays the same whatever opens while its diff isn't shown", () => {
+  fc.assert(
+    fc.property(opened, opened, groupName, rowPath, (one, other, group, path) => {
+      fc.pre(!isShown(one, group, path));
+      fc.pre(!isShown(other, group, path));
+
+      expect(rowOpen(one, group, path)).toBe(rowOpen(other, group, path));
+    }),
+  );
 });
 
 test("stays on a file its group still lists after an action, as after staging one of its hunks", () => {
