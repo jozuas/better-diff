@@ -55,23 +55,57 @@ function bytes(text: string): Buffer {
   return Buffer.from(text, "latin1");
 }
 
-function field(lines: readonly string[], name: Field): string | undefined {
-  return lines.find((line) => line.startsWith(`${name} `))?.slice(name.length + 1);
+// Where each line of the diff that starts with the text starts: at the diff's start, or after a
+// newline. Searching the diff's bytes finds them without reading the rest of it as text, which with
+// every line of the file can be long.
+export function* lineStarts(diff: Buffer, text: string): Generator<number> {
+  const after = `\n${text}`;
+
+  if (diff.subarray(0, text.length).equals(Buffer.from(text))) {
+    yield 0;
+  }
+
+  for (let at = diff.indexOf(after); at !== -1; at = diff.indexOf(after, at + 1)) {
+    yield at + 1;
+  }
+}
+
+// The line that starts at the position, without its newline.
+function lineAt(diff: Buffer, start: number): string {
+  const end = diff.indexOf("\n", start);
+
+  return diff.toString("latin1", start, end === -1 ? diff.length : end);
+}
+
+function linesStarting(diff: Buffer, text: string): string[] {
+  return [...lineStarts(diff, text)].map((start) => lineAt(diff, start));
+}
+
+function hasLine(diff: Buffer, text: string): boolean {
+  const [start] = lineStarts(diff, text);
+
+  return start !== undefined;
+}
+
+function field(diff: Buffer, name: Field): string | undefined {
+  const [start] = lineStarts(diff, `${name} `);
+
+  return start === undefined ? undefined : lineAt(diff, start).slice(name.length + 1);
 }
 
 // Each field is on the first line that starts with it: the header comes before the hunks, whose
 // lines can start with `---` or `+++` too.
-export function headerOf(lines: readonly string[]): Header {
+export function headerOf(diff: Buffer): Header {
   return {
-    "diff --git": field(lines, "diff --git"),
-    "old mode": field(lines, "old mode"),
-    "new mode": field(lines, "new mode"),
-    "new file mode": field(lines, "new file mode"),
-    "deleted file mode": field(lines, "deleted file mode"),
-    "rename from": field(lines, "rename from"),
-    "rename to": field(lines, "rename to"),
-    "---": field(lines, "---"),
-    "+++": field(lines, "+++"),
+    "diff --git": field(diff, "diff --git"),
+    "old mode": field(diff, "old mode"),
+    "new mode": field(diff, "new mode"),
+    "new file mode": field(diff, "new file mode"),
+    "deleted file mode": field(diff, "deleted file mode"),
+    "rename from": field(diff, "rename from"),
+    "rename to": field(diff, "rename to"),
+    "---": field(diff, "---"),
+    "+++": field(diff, "+++"),
   };
 }
 
@@ -98,62 +132,52 @@ export function modeOf(header: Header): Mode | undefined {
 
 type Kind = "text" | "unchanged" | "renamed" | "symlink" | "binary" | "mode" | "unmerged";
 
-function hasLine(lines: readonly string[], start: string): boolean {
-  return lines.some((line) => line.startsWith(start));
-}
-
 // Whether a version is a symlink, by the mode git prints for a new or deleted file, or after the
 // blobs a changed one goes between.
-function isSymlink(lines: readonly string[]): boolean {
+function isSymlink(diff: Buffer): boolean {
   return (
-    hasLine(lines, "new file mode 120000") ||
-    hasLine(lines, "deleted file mode 120000") ||
-    lines.some((line) => line.startsWith("index ") && line.endsWith(" 120000"))
+    hasLine(diff, "new file mode 120000") ||
+    hasLine(diff, "deleted file mode 120000") ||
+    linesStarting(diff, "index ").some((line) => line.endsWith(" 120000"))
   );
 }
 
 // What a file's diff is, from the lines git prints instead of hunks. For a file with merge
 // conflicts, git prints a diff against each side of the merge, or only names the file. A renamed
 // file is whatever its other changes are, and renamed only without any.
-export function kindOf(diff: Buffer): Kind {
-  const lines = diff.toString("latin1").split("\n");
-
+function kindOf(diff: Buffer): Kind {
   if (diff.length === 0) {
     return "unchanged";
   }
 
-  if (hasLine(lines, "diff --cc ") || hasLine(lines, "* Unmerged path ")) {
+  if (hasLine(diff, "diff --cc ") || hasLine(diff, "* Unmerged path ")) {
     return "unmerged";
   }
 
-  if (isSymlink(lines)) {
+  if (isSymlink(diff)) {
     return "symlink";
   }
 
-  if (hasLine(lines, "Binary files ")) {
+  if (hasLine(diff, "Binary files ")) {
     return "binary";
   }
 
-  if (lines.some((line) => hunkStart.test(line))) {
+  // Stryker disable next-line StringLiteral: only a line that starts with `@@ -` can be a hunk's start, so it's found among all lines as among those.
+  if (linesStarting(diff, "@@ -").some((line) => hunkStart.test(line))) {
     return "text";
   }
 
-  if (hasLine(lines, "old mode ")) {
+  if (hasLine(diff, "old mode ")) {
     return "mode";
   }
 
-  return hasLine(lines, "rename from ") ? "renamed" : "text";
+  return hasLine(diff, "rename from ") ? "renamed" : "text";
 }
 
 // Whether git printed one diff, which renames a file. Of a renamed file's two paths, it prints one
 // for each where it no longer pairs them.
 export function isRename(diff: Buffer): boolean {
-  const lines = diff.toString("latin1").split("\n");
-
-  return (
-    hasLine(lines, "rename from ") &&
-    lines.filter((line) => line.startsWith("diff --git ")).length === 1
-  );
+  return hasLine(diff, "rename from ") && [...lineStarts(diff, "diff --git ")].length === 1;
 }
 
 // How many lines of each version some lines have.
@@ -268,18 +292,19 @@ function narrow(lines: readonly Line[]): Hunk[] {
 // A file's diff as git prints it with more lines of context than either version has, whose one
 // hunk has all of their lines, and its hunks as git prints them with three lines of context. A
 // diff of another kind has no lines.
-export function parseDiff(diff: Buffer): FileDiff & { lines: Line[] } {
-  const header = headerOf(diff.toString("latin1").split("\n"));
+export function parseDiff(diff: Buffer): FileDiff & { kind: Kind; lines: Line[] } {
+  const header = headerOf(diff);
+  const kind = kindOf(diff);
 
   // The plugin shows other kinds of diff without their lines. A file that changed type, as to a
   // symlink, has a diff for each version.
-  if (kindOf(diff) !== "text") {
-    return { header, hunks: [], lines: [] };
+  if (kind !== "text") {
+    return { kind, header, hunks: [], lines: [] };
   }
 
   const lines = linesOf(diff);
 
-  return { header, hunks: narrow(lines), lines };
+  return { kind, header, hunks: narrow(lines), lines };
 }
 
 // A path as a --- or +++ line names it: git quotes a path that needs it with its prefix.

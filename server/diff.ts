@@ -7,7 +7,7 @@ import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
 import { highlighted } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
-import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, reverse } from "./patch";
+import { buildModePatch, buildPatch, isRename, modeOf, parseDiff, reverse } from "./patch";
 import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
 
@@ -169,12 +169,12 @@ function text(content: Buffer): string {
 
 // The diff of the changes.
 export function diffOf({ diff, renamedFrom }: Changes): UnhighlightedDiff {
-  const { header, hunks, lines } = parseDiff(diff);
+  const { kind: diffKind, header, hunks, lines } = parseDiff(diff);
   const changed = hunks.flatMap((hunk) => hunk.lines);
 
   return {
     version: versionOf(diff),
-    kind: kindOf(diff),
+    kind: diffKind,
     renamedFrom,
     mode: modeOf(header),
     added: changed.filter(({ kind }) => kind === "added").length,

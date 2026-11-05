@@ -3,7 +3,7 @@ import type { Entry } from "./changes";
 import { changesFrom, diffOptions, listingOf } from "./diff";
 import type { Changes, Listing, Side } from "./diff";
 import { git } from "./git";
-import { headerOf } from "./patch";
+import { headerOf, lineStarts } from "./patch";
 import type { Header } from "./patch";
 
 // Reads each item, eight at a time: a group can have hundreds of files, each read by git commands
@@ -90,12 +90,6 @@ async function diffOf(
   }
 }
 
-// Where a file's diff starts in a diff of several: at a line that names its paths, or for a file
-// with merge conflicts, its path. No other line starts like that: a hunk's lines start with " ",
-// "-", "+" or "\", and git quotes a path with a newline in it, except where it names a file with
-// merge conflicts, which no group lists.
-const fileStart = /^(?=diff --git |diff --cc |\* Unmerged path )/mu;
-
 // One file's diff in a diff of several. A file that changed type, as to a symlink, has one for each
 // version.
 interface DiffPart {
@@ -103,13 +97,22 @@ interface DiffPart {
   diff: Buffer;
 }
 
-// Each file's diff in a diff of several, in the order git prints them. Latin1 reads each byte as one
-// character and writes each character back as that byte.
+// Each file's diff in a diff of several, in the order git prints them. It starts with a line that
+// names its paths, or for a file with merge conflicts, its path. No other line starts like that: a
+// hunk's lines start with " ", "-", "+" or "\", and git quotes a path with a newline in it, except
+// where it names a file with merge conflicts, which no group lists.
 function partsOf(diff: Buffer): DiffPart[] {
-  return diff
-    .toString("latin1")
-    .split(fileStart)
-    .map((part) => ({ header: headerOf(part.split("\n")), diff: Buffer.from(part, "latin1") }));
+  const starts = [
+    ...lineStarts(diff, "diff --git "),
+    ...lineStarts(diff, "diff --cc "),
+    ...lineStarts(diff, "* Unmerged path "),
+  ].toSorted((one, other) => one - other);
+
+  return starts.map((start, index) => {
+    const part = diff.subarray(start, starts[index + 1]);
+
+    return { header: headerOf(part), diff: part };
+  });
 }
 
 // The letters git escapes these characters with where it quotes a path.

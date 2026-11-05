@@ -77,8 +77,9 @@ test("reads with a diff of several each file, whatever characters its path has",
   });
 });
 
-// Lines in a file that start as a file's diff does in a diff of several.
-const diffStarts = "diff --git a/a b/a\ndiff --cc a\n* Unmerged path a\n";
+// Lines in a file that start as a file's diff does in a diff of several, and one in which a file's
+// diff starts after a carriage return.
+const diffStarts = "diff --git a/a b/a\ndiff --cc a\n* Unmerged path a\nb\rdiff --git a/a b/a\n";
 
 test("reads with a diff of several a file whose lines start as a file's diff does", async () => {
   await inRepository(async (repository) => {
