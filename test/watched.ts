@@ -17,11 +17,13 @@ export function nextInOrder(): number {
 export interface Check {
   order: number;
   started: number;
+  // When it ended, or was told to stop.
   ended: number;
-  // The version as the check started, which it finds.
+  // The version as the check started, which it finds unless it fails.
   version: string;
-  // Whether it was told to stop.
+  // Whether it was told to stop, and whether it failed, as one told to stop does.
   stopped: boolean;
+  failed: boolean;
 }
 
 export interface Answer {
@@ -91,10 +93,13 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
         ended: Number.NaN,
         version: found,
         stopped: false,
+        failed: false,
       };
 
       stop.addEventListener("abort", () => {
         check.stopped = true;
+        check.failed = true;
+        check.ended = now();
       });
       checks.push(check);
       await new Promise((resolve) => {
@@ -105,6 +110,7 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
       check.ended = now();
 
       if (fails) {
+        check.failed = true;
         throw new Error("git status failed");
       }
 
