@@ -1,7 +1,8 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { numberLines, unchangedLines } from "./lines";
+import { hunkLines } from "../test/hunk-lines";
+import { lineKey, numberLines, unchangedLines } from "./lines";
 import type { NumberedLine } from "./lines";
 
 type Kind = "context" | "removed" | "added";
@@ -223,6 +224,29 @@ test("the unchanged lines are those of both versions before the first hunk and a
         before: read(versions, before),
         after: after.map((lines) => read(versions, lines)),
       }).toStrictEqual(found);
+    }),
+  );
+});
+
+// The keys of the lines the old version has.
+function oldKeys(lines: readonly NumberedLine[]): string[] {
+  return lines.flatMap((line) => (line.kind === "added" ? [] : [lineKey(line)]));
+}
+
+test("each of a hunk's lines has a key none of its other lines has", () => {
+  fc.assert(
+    fc.property(hunkLines, (lines) => {
+      const keys = lines.map(lineKey);
+
+      expect(new Set(keys).size).toBe(keys.length);
+    }),
+  );
+});
+
+test("the keys of a hunk's unchanged and removed lines stay as lines are added or removed above it in the new version", () => {
+  fc.assert(
+    fc.property(hunkLines, fc.integer({ min: 2, max: 20 }), (lines, newStart) => {
+      expect(oldKeys(numberLines({ oldStart: 1, newStart, lines }))).toStrictEqual(oldKeys(lines));
     }),
   );
 });

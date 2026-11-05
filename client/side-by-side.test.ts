@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { hunkLines } from "../test/hunk-lines";
 import { blocksOf, numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
-import { numbersOf, rowsOf, shows } from "./side-by-side";
+import { numbersOf, rowKey, rowsOf, shows } from "./side-by-side";
 import type { Row, Side } from "./side-by-side";
 
 type Kind = NumberedLine["kind"];
@@ -200,4 +200,36 @@ test("an inline line shows its old number, then its new one", () => {
 test("a side's line shows only its number in that side's version", () => {
   expect(numbersOf(line, "old")).toStrictEqual([{ side: "old", number: 3 }]);
   expect(numbersOf(line, "new")).toStrictEqual([{ side: "new", number: 5 }]);
+});
+
+test("each of a hunk's rows side by side has a key none of its other rows has", () => {
+  fc.assert(
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      const keys = rowsOf(lines, partners).map(rowKey);
+
+      expect(new Set(keys).size).toBe(keys.length);
+    }),
+  );
+});
+
+// The keys of the rows that have an unchanged or removed line.
+function oldRowKeys(
+  lines: readonly NumberedLine[],
+  partners: ReadonlyMap<number, number>,
+): string[] {
+  return rowsOf(lines, partners).flatMap((row) => (row.old === undefined ? [] : [rowKey(row)]));
+}
+
+test("the keys of a hunk's rows with unchanged and removed lines stay as lines are added or removed above it in the new version", () => {
+  fc.assert(
+    fc.property(
+      pairedHunkLines,
+      fc.integer({ min: 2, max: 20 }),
+      ({ lines, partners }, newStart) => {
+        const moved = numberLines({ oldStart: 1, newStart, lines });
+
+        expect(oldRowKeys(moved, partners)).toStrictEqual(oldRowKeys(lines, partners));
+      },
+    ),
+  );
 });

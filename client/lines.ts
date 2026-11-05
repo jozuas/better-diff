@@ -37,6 +37,13 @@ export function numberLines({ oldStart, newStart, lines }: Hunk): NumberedLine[]
   return numbered;
 }
 
+// Tells the line apart from the others shown with it, the same as lines are added or removed above
+// it in the new version, as by an agent's changes: by its number in the old version, or an added
+// line by its number in the new one.
+export function lineKey({ kind, oldNumber, newNumber }: NumberedLine): string {
+  return kind === "added" ? `+${String(newNumber)}` : `-${String(oldNumber)}`;
+}
+
 // A line with its index among the lines it's shown from.
 export interface IndexedLine {
   index: number;

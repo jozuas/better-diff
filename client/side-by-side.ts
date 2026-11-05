@@ -1,4 +1,4 @@
-import { blocksOf } from "./lines";
+import { blocksOf, lineKey } from "./lines";
 import type { IndexedLine, NumberedLine, Run } from "./lines";
 
 type Kind = NumberedLine["kind"];
@@ -88,4 +88,13 @@ export function rowsOf(
   return blocksOf(lines).flatMap((block) =>
     "removed" in block ? runRows(block, partners) : [{ old: block, new: block }],
   );
+}
+
+// Tells the row apart from the others shown with it, as its line on the old side does, or on the new
+// one if it has none there.
+export function rowKey(row: Row): string {
+  const shown = row.old ?? row.new;
+
+  // Stryker disable next-line ConditionalExpression,StringLiteral: rowsOf makes no row without a line.
+  return shown === undefined ? "" : lineKey(shown.line);
 }

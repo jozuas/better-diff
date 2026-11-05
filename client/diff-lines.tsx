@@ -10,12 +10,12 @@ import { pairingOf } from "./changed-words";
 import { DiffLine } from "./diff-line";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
-import { numberLines } from "./lines";
+import { lineKey, numberLines } from "./lines";
 import type { IndexedLine, NumberedLine } from "./lines";
 import type { PointedHunk } from "./pointed";
 import { isSelected, lineId, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
-import { rowsOf, sides } from "./side-by-side";
+import { rowKey, rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
 
 declare module "react-native" {
@@ -160,7 +160,7 @@ function Lines({
   if (focus === undefined) {
     return lines.map((line, index) => (
       <DiffLine
-        key={`${line.oldNumber},${line.newNumber}`}
+        key={lineKey(line)}
         id={idOf({ index, line }, true)}
         line={line}
         selected={selected(index)}
@@ -174,7 +174,7 @@ function Lines({
 
   return rowsOf(lines, partners).map((row) => (
     <SideBySideRow
-      key={`${row.old?.line.oldNumber},${row.new?.line.newNumber}`}
+      key={rowKey(row)}
       row={row}
       idOf={idOf}
       selected={selected}

@@ -1,14 +1,13 @@
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { memo, useContext } from "react";
 import type { TextStyle } from "react-native";
 import { Text, View } from "react-native";
 
-import type { TextRange } from "./changed-text";
 import type { Styles } from "./diff-styles";
 import { FontSizesContext, textPadding } from "./fonts";
-import type { NumberedLine } from "./lines";
+import { lineAsBefore, textAsBefore } from "./line-content";
+import type { LineContent, TextContent } from "./line-content";
 import { numbersOf } from "./side-by-side";
-import type { Side } from "./side-by-side";
 import { segmentsOf, SyntaxColorsContext } from "./syntax";
 import type { Mark, Segment } from "./syntax";
 import { trailingWhitespaceAt } from "./whitespace";
@@ -37,21 +36,43 @@ function SegmentText({
   return <Text style={[{ color }, mark !== undefined && markStyles[mark]]}>{text}</Text>;
 }
 
-interface DiffLineProps {
-  // By which a selection finds a hunk's line, and the view keeps its place.
-  id: string;
-  line: NumberedLine;
-  selected: boolean;
-  // The side it shows on, with only that version's number, or undefined inline, with both.
-  side: Side | undefined;
-  selectable: boolean;
-  changes: readonly TextRange[];
+interface DiffLineProps extends LineContent {
   styles: Styles;
 }
 
+interface LineSegmentsProps extends TextContent {
+  styles: Styles;
+}
+
+// The line's text in its syntax's colours, with its changed words and trailing whitespace
+// highlighted.
+function SegmentsOfLine({ line, changes, styles }: LineSegmentsProps): ReactNode[] {
+  const colors = useContext(SyntaxColorsContext);
+
+  const markStyles = {
+    changed: styles[`${line.kind}Words`],
+    "trailing whitespace": styles.trailingWhitespace,
+  };
+
+  return segmentsOf(line.text, line.runs, colors, changes, trailingWhitespaceAt(line)).map(
+    (segment) =>
+      segment.color === undefined && segment.mark === undefined ? (
+        segment.text
+      ) : (
+        <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
+      ),
+  );
+}
+
+// Rendered again only once the pieces render differently, and not as the line's numbers or id
+// change, as lines added or removed above it change them.
+const LineSegments = memo(
+  SegmentsOfLine,
+  (before, after) => before.styles === after.styles && textAsBefore(before, after),
+);
+
 // Only the line's text can be selected, so copying a selection copies what the lines say. The
-// numbers of a selected line stand out. Its text is in its syntax's colours, and its changed words
-// and trailing whitespace are highlighted.
+// numbers of a selected line stand out.
 function Line({
   id,
   line,
@@ -63,13 +84,7 @@ function Line({
 }: DiffLineProps): ReactElement {
   const numbers = numbersOf(line, side);
   const fonts = useContext(FontSizesContext);
-  const colors = useContext(SyntaxColorsContext);
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
-
-  const markStyles = {
-    changed: styles[`${line.kind}Words`],
-    "trailing whitespace": styles.trailingWhitespace,
-  };
 
   return (
     <View>
@@ -80,14 +95,7 @@ function Line({
           </Text>
         ))}
         <Text nativeID={id} selectable={selectable} style={styles.text}>
-          {segmentsOf(line.text, line.runs, colors, changes, trailingWhitespaceAt(line)).map(
-            (segment) =>
-              segment.color === undefined && segment.mark === undefined ? (
-                segment.text
-              ) : (
-                <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
-              ),
-          )}
+          <LineSegments line={line} changes={changes} styles={styles} />
         </Text>
       </View>
       {line.newline ? null : (
@@ -102,6 +110,10 @@ function Line({
   );
 }
 
-// Rendered again only once what it's rendered with changes, so a line selected or unselected
-// doesn't render the others again.
-export const DiffLine = memo(Line);
+// Rendered again only once it renders differently, so a line selected or unselected doesn't render
+// the others again, and nor does reading its diff again, which makes all it's rendered with anew,
+// though most lines are as they were.
+export const DiffLine = memo(
+  Line,
+  (before, after) => before.styles === after.styles && lineAsBefore(before, after),
+);
