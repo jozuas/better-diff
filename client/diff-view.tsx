@@ -2,7 +2,7 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useContext, useEffect, useMemo } from "react";
+import { useCallback, useContext, useEffect, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -75,7 +75,12 @@ function ShownDiff({
   controls,
   theme,
 }: ShownDiffProps): ReactElement {
-  const { group, path } = open;
+  const { group } = open;
+
+  const expanded = useCallback(
+    (file: OpenFile, entire?: boolean) => fileQuery(file, true, entire),
+    [fileQuery],
+  );
 
   if ("paths" in open) {
     // All of them, whatever the filter, as the open file shows.
@@ -83,7 +88,7 @@ function ShownDiff({
       <GroupDiff
         key={`${group}:${JSON.stringify(open.paths)}`}
         query={groupQuery(group, open.paths)}
-        expanded={(file, entire) => fileQuery(file, true, entire)}
+        expanded={expanded}
         group={group}
         filter=""
         layout={layout}
@@ -93,12 +98,12 @@ function ShownDiff({
     );
   }
 
-  if (path === undefined) {
+  if (open.path === undefined) {
     return (
       <GroupDiff
         key={group}
         query={groupQuery(group)}
-        expanded={(file, entire) => fileQuery(file, true, entire)}
+        expanded={expanded}
         group={group}
         filter={filter}
         layout={layout}
@@ -108,17 +113,19 @@ function ShownDiff({
     );
   }
 
+  // The open file itself, the same while it stays open, so its hunks' bars aren't rendered again
+  // with each of the panel's renders.
   return (
     <>
       <FileDiff
-        key={`${group}:${path}`}
-        query={(expand, entire) => fileQuery({ group, path }, expand, entire)}
-        file={{ group, path }}
+        key={`${group}:${open.path}`}
+        query={(expand, entire) => fileQuery(open, expand, entire)}
+        file={open}
         layout={layout}
         controls={controls}
         theme={theme}
       />
-      <ReadAhead query={fileQuery} open={{ group, path }} next={next} />
+      <ReadAhead query={fileQuery} open={open} next={next} />
     </>
   );
 }

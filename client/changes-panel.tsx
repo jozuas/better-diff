@@ -90,7 +90,8 @@ function useDiffQueries(directory: string) {
 // Runs the actions the panel's buttons ask for, once confirmed where they ask for it, one at a time,
 // on the diff `shownDiff` gives where they act on the one shown. After each, the page's selection
 // is cleared, since what it selected may be gone, `onApplied` hears of it, and a refused one says
-// why.
+// why. The controls stay the same until another button is armed or an action starts or ends, so the
+// bars rendered with them aren't rendered again with each of the panel's renders.
 function useControls(
   directory: string,
   shownDiff: Server["shownDiff"],
@@ -108,7 +109,7 @@ function useControls(
     applyGroup: useRpc(applyGroupRpc),
   };
 
-  const run = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationFn: async ({ operation, target }: Request) => {
       const status = await apply(server, directory, operation, target);
 
@@ -130,16 +131,19 @@ function useControls(
 
   useEffect(() => confirm.dispose, [confirm]);
 
-  return {
-    armed,
-    busy: run.isPending,
-    press: (button, action, target, onRun) => {
-      confirm.press(button, action.confirmation !== undefined, () => {
-        onRun?.();
-        run.mutate({ operation: action.operation, target });
-      });
-    },
-  };
+  return useMemo(
+    () => ({
+      armed,
+      busy: isPending,
+      press: (button, action, target, onRun) => {
+        confirm.press(button, action.confirmation !== undefined, () => {
+          onRun?.();
+          mutate({ operation: action.operation, target });
+        });
+      },
+    }),
+    [armed, isPending, confirm, mutate],
+  );
 }
 
 // Shows the directory's changes as they are whenever they may have changed, as while an agent edits
