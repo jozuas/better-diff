@@ -15,7 +15,7 @@ test("at Paseo's default font sizes, the panel's text is Paseo's sizes, and its 
     fileIconGap: 8,
     code: 12,
     codeLine: 18,
-    number: 44,
+    number: 45,
   });
 });
 
@@ -42,15 +42,25 @@ test.each([
 );
 
 test.each([
-  [9, { code: 9, codeLine: 14, number: 35 }],
-  [16, { code: 16, codeLine: 24, number: 56 }],
-  [22, { code: 22, codeLine: 33, number: 74 }],
+  [9, { code: 9, codeLine: 14, number: 36 }],
+  [16, { code: 16, codeLine: 24, number: 57 }],
+  [22, { code: 22, codeLine: 33, number: 76 }],
 ])(
   "at a diff font size of %i, the lines are half as tall again, and their numbers' column scales with it",
   (size, sizes) => {
     expect(fontSizes({ panelFontSize: 14, diffFontSize: size })).toMatchObject(sizes);
   },
 );
+
+test("the numbers' column has room for five digits of Menlo, 0.602 of the size wide, and a gap of 8", () => {
+  fc.assert(
+    fc.property(panelFontSize, diffFontSize, (panel, diff) => {
+      const { number } = fontSizes({ panelFontSize: panel, diffFontSize: diff });
+
+      expect(number - 8).toBeGreaterThanOrEqual(5 * 0.602 * diff);
+    }),
+  );
+});
 
 test("the panel font size sizes only the panel's text, and the diff font size only the diff's lines", () => {
   fc.assert(

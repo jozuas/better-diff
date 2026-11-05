@@ -152,6 +152,23 @@ test("a diff's lines are in a monospace font, not Paseo's UI font", async ({
   expect(narrow).toBe(await textWidth(page, "MMMMMMMM"));
 });
 
+test("a line's five-digit numbers each show on one line", async ({ app, page, repository }) => {
+  const lines = Array.from({ length: 10_001 }, (_, index) => `line ${index + 1}`);
+
+  writeFile(repository, "a.txt", `${lines.join("\n")}\n`);
+  commitAll(repository);
+  writeFile(repository, "a.txt", `${lines.with(9999, "changed").join("\n")}\n`);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  // A line with four-digit numbers, which fit.
+  const { height } = await box(line(page, "9999").first());
+
+  expect(await box(line(page, "10000").first())).toMatchObject({ height });
+  expect(await box(line(page, "10001").first())).toMatchObject({ height });
+});
+
 test("a partly staged file is in modified and staged files, and shows the unstaged part from one and the staged part from the other", async ({
   app,
   page,

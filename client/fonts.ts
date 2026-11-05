@@ -18,8 +18,8 @@ export interface FontSizes {
   code: number;
   // The height of a diff's line.
   codeLine: number;
-  // The width of a line number's column: five digits, each about 0.6 of the size wide in a monospace
-  // font, and a gap.
+  // The width of a line number's column: five digits, each a little over 0.6 of the size wide in a
+  // monospace font, as Menlo's are 0.602, and a gap.
   number: number;
 }
 
@@ -43,7 +43,7 @@ export function fontSizes({
     fileIconGap: Math.round(8 * scale),
     code: diffFontSize,
     codeLine: Math.round(1.5 * diffFontSize),
-    number: 3 * diffFontSize + 8,
+    number: Math.ceil(5 * 0.61 * diffFontSize) + 8,
   };
 }
 

@@ -115,7 +115,7 @@ async function diffWidth(page: Page, path: string): Promise<number> {
   return bar.width;
 }
 
-// At the lines' 13-pixel font, each side of a diff 1,374 pixels wide has room for 80 characters
+// At the lines' 13-pixel font, each side of a diff 1,376 pixels wide has room for 80 characters
 // beside its line numbers.
 test("Auto, the default style, shows a diff side by side where each side has room beside its line numbers for a line of 80 characters, the default line length, and inline where it hasn't", async ({
   app,
@@ -131,15 +131,15 @@ test("Auto, the default style, shows a diff side by side where each side has roo
 
   const around = wide.width - (await diffWidth(page, "a.txt"));
 
-  await page.setViewportSize({ width: around + 1373, height: wide.height });
+  await page.setViewportSize({ width: around + 1375, height: wide.height });
 
   await expect(line(page, "a kept")).toHaveCount(1);
-  expect(await diffWidth(page, "a.txt")).toBe(1373);
+  expect(await diffWidth(page, "a.txt")).toBe(1375);
 
-  await page.setViewportSize({ width: around + 1374, height: wide.height });
+  await page.setViewportSize({ width: around + 1376, height: wide.height });
 
   await expect(line(page, "a kept")).toHaveCount(2);
-  expect(await diffWidth(page, "a.txt")).toBe(1374);
+  expect(await diffWidth(page, "a.txt")).toBe(1376);
 });
 
 test("a group's view shows its files' diffs side by side too, and inline where it's narrow", async ({
