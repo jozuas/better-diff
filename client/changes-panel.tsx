@@ -23,6 +23,7 @@ import { apply, staleMessage } from "./apply";
 import type { Server, Target } from "./apply";
 import { confirmation } from "./confirmation";
 import type { Layout } from "./diff-style";
+import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
@@ -343,9 +344,11 @@ export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelPr
 
   return (
     <FontSizesProvider settings={settings}>
-      <SyntaxColorsProvider theme={theme}>
-        <Changes directory={directory} layout={settings} tab={tab} theme={theme} />
-      </SyntaxColorsProvider>
+      <TabSizeContext value={settings.tabSize}>
+        <SyntaxColorsProvider theme={theme}>
+          <Changes directory={directory} layout={settings} tab={tab} theme={theme} />
+        </SyntaxColorsProvider>
+      </TabSizeContext>
     </FontSizesProvider>
   );
 }

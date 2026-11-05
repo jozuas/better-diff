@@ -10,10 +10,11 @@ function valid(values: Record<string, number>): boolean {
 // Halfway between two whole sizes.
 const fraction = fc.integer({ min: 0, max: 30 }).map((size) => size + 0.5);
 
-test("without a document, diffs show in the auto style with room for lines of 80 characters, and the font sizes are 13, for the diff and the rest of the panel", () => {
+test("without a document, diffs show in the auto style with room for lines of 80 characters, tab stops 8 columns apart, and the font sizes are 13, for the diff and the rest of the panel", () => {
   expect(viewSettings.schema.parse({})).toStrictEqual({
     diffStyle: "auto",
     lineLength: 80,
+    tabSize: 8,
     diffFontSize: 13,
     panelFontSize: 13,
   });
@@ -43,6 +44,24 @@ test("the line length takes no number outside 20 to 400, nor a fraction", () => 
       },
     ),
     { examples: [[19], [401], [80.5]] },
+  );
+});
+
+test("the tab size takes each whole number of columns from 1 to 16", () => {
+  fc.assert(
+    fc.property(fc.integer({ min: 1, max: 16 }), (tabSize) => {
+      expect(viewSettings.schema.parse({ tabSize })).toMatchObject({ tabSize });
+    }),
+    { examples: [[1], [16]] },
+  );
+});
+
+test("the tab size takes no number outside 1 to 16, nor a fraction", () => {
+  fc.assert(
+    fc.property(fc.oneof(fc.integer({ max: 0 }), fc.integer({ min: 17 }), fraction), (tabSize) => {
+      expect(valid({ tabSize })).toBe(false);
+    }),
+    { examples: [[0], [17], [4.5]] },
   );
 });
 

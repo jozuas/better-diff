@@ -10,6 +10,7 @@ const refused = "The diff settings couldn't be changed. Try again.";
 const read: ViewValues = {
   diffStyle: "side by side",
   lineLength: 100,
+  tabSize: 4,
   diffFontSize: 16,
   panelFontSize: 18,
 };
@@ -17,6 +18,7 @@ const read: ViewValues = {
 const defaults: ViewValues = {
   diffStyle: "auto",
   lineLength: 80,
+  tabSize: 8,
   diffFontSize: 13,
   panelFontSize: 13,
 };

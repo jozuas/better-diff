@@ -11,6 +11,13 @@ async function pickDiffFontSize(page: Page, size: number): Promise<void> {
   await expect(page.getByRole("button", { name: `Diff font size: ${size}` })).toBeEnabled();
 }
 
+// Picks the tab size on Better Diff's page in Paseo's settings, and waits for it to be saved.
+async function pickTabSize(page: Page, size: number): Promise<void> {
+  await page.getByRole("button", { name: /^Tab size: /u }).click();
+  await page.getByRole("menuitem", { name: String(size), exact: true }).click();
+  await expect(page.getByRole("button", { name: `Tab size: ${size}` })).toBeEnabled();
+}
+
 // The settings are the host's, so each test puts back the defaults it may have changed.
 const test = base.extend<Record<"defaultSettings", void>>({
   defaultSettings: [
@@ -19,6 +26,7 @@ const test = base.extend<Record<"defaultSettings", void>>({
       await app.pickDiffStyle("Auto");
       await app.saveLineLength(80);
       await pickDiffFontSize(page, 13);
+      await pickTabSize(page, 8);
     },
     { auto: true },
   ],
@@ -163,4 +171,67 @@ test("a line length typed is saved once typing pauses, for every client of the h
     expect(await lineLength(other).inputValue()).toBe("100");
   }).toPass();
   await other.close();
+});
+
+// A node of the page, and an element with its text, which the tests typecheck without the DOM
+// library to describe.
+interface PageNode {
+  textContent: string | null;
+}
+
+interface TextElement {
+  firstChild: PageNode;
+  ownerDocument: {
+    createRange: () => {
+      setStart: (node: PageNode, offset: number) => void;
+      setEnd: (node: PageNode, offset: number) => void;
+      getBoundingClientRect: () => { left: number };
+    };
+  };
+}
+
+// Where on the page the line shows its character at the offset.
+async function characterAt(page: Page, text: string, offset: number): Promise<number> {
+  const left = await line(page, text).evaluate((element: TextElement, at: number) => {
+    const range = element.ownerDocument.createRange();
+
+    range.setStart(element.firstChild, at);
+    range.setEnd(element.firstChild, at + 1);
+
+    return range.getBoundingClientRect().left;
+  }, offset);
+
+  return left;
+}
+
+test("a tab reaches the next tab stop, as in a terminal, every 8 columns unless the tab size on Better Diff's page in Paseo's settings is changed", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "\tone\n    two\n        three\nab\tfour\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
+  const eight = await characterAt(page, "        three", 8);
+
+  expect(await characterAt(page, "\tone", 1)).toBe(eight);
+  expect(await characterAt(page, "ab\tfour", 3)).toBe(eight);
+
+  await app.openSettings();
+  await pickTabSize(page, 4);
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
+  const four = await characterAt(page, "    two", 4);
+
+  await expect
+    .poll(async () => {
+      const left = await characterAt(page, "\tone", 1);
+
+      return left;
+    })
+    .toBe(four);
+  expect(await characterAt(page, "ab\tfour", 3)).toBe(four);
 });

@@ -10,7 +10,7 @@ import {
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import { fontSizeRanges, lineLengthRange, viewSettings } from "../shared/settings";
+import { fontSizeRanges, lineLengthRange, tabSizeRange, viewSettings } from "../shared/settings";
 import { debounced } from "./debounce";
 import { sizeOptions } from "./fonts";
 import { lineLengthOf, viewSettingsOf } from "./settings";
@@ -25,6 +25,7 @@ const diffStyles = [
 
 const diffSizes = sizeOptions(fontSizeRanges.diff);
 const panelSizes = sizeOptions(fontSizeRanges.panel);
+const tabSizes = sizeOptions(tabSizeRange);
 
 // How long typing pauses before the line length typed is saved.
 const typingPause = 500;
@@ -102,6 +103,15 @@ export function SettingsScreen(): ReactElement {
             }}
           />
           <LineLength settings={settings} />
+          <SettingsSelect
+            label="Tab size"
+            hint="Columns between tab stops in diff lines"
+            value={String(settings.values.tabSize)}
+            options={tabSizes}
+            onValueChange={(size) => {
+              void settings.change({ tabSize: Number(size) });
+            }}
+          />
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Font sizes" info={sizesInfo}>

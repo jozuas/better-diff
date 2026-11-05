@@ -17,6 +17,9 @@ export const fontSizeRanges = {
 // The line lengths the settings take, in characters, and the one they start at.
 export const lineLengthRange = { min: 20, max: 400, default: 80 } satisfies Range;
 
+// The tab sizes the settings take, in columns, and the one they start at, a terminal's.
+export const tabSizeRange = { min: 1, max: 16, default: 8 } satisfies Range;
+
 function wholeNumber(range: Range) {
   return z.number().int().min(range.min).max(range.max).default(range.default);
 }
@@ -32,6 +35,8 @@ export const viewSettings = defineSettings({
     // How long a line the auto style has room for on each side before it shows a diff side by side,
     // such as the length the code wraps at.
     lineLength: wholeNumber(lineLengthRange),
+    // How many columns apart the tab stops of a diff's lines are, the next of which a tab reaches.
+    tabSize: wholeNumber(tabSizeRange),
     // Paseo doesn't pass its own font sizes on to plugins, so Better Diff has these.
     diffFontSize: wholeNumber(fontSizeRanges.diff),
     panelFontSize: wholeNumber(fontSizeRanges.panel),

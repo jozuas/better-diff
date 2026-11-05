@@ -1,17 +1,28 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
 import type { PluginTheme } from "@getpaseo/plugin";
-import { useContext, useMemo } from "react";
+import { createContext, useContext, useMemo } from "react";
 import { processColor, StyleSheet } from "react-native";
 
+import { viewSettings } from "../shared/settings";
 import { FontSizesContext, textPadding } from "./fonts";
 import type { FontSizes } from "./fonts";
 import { tintOf } from "./tints";
+
+declare module "react-native" {
+  interface TextStyle {
+    // CSS's, which React Native Web passes on.
+    tabSize?: number;
+  }
+}
+
+// How many columns apart a diff's lines' tab stops are, as the settings say.
+export const TabSizeContext = createContext(viewSettings.schema.parse({}).tabSize);
 
 // Paseo's own monospace fonts.
 const monospace =
   "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 
-function stylesOf(theme: PluginTheme, fonts: FontSizes) {
+function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
   return StyleSheet.create({
     line: { flexDirection: "row" },
     // A line's tint as removed or added, as its own background: a translucent layer under it would
@@ -42,6 +53,7 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
       fontSize: fonts.code,
       lineHeight: fonts.codeLine,
       color: theme.colors.foreground,
+      tabSize,
     },
     noNewline: {
       fontSize: fonts.code,
@@ -62,6 +74,7 @@ export type Styles = ReturnType<typeof stylesOf>;
 // The styles of a diff's lines, inline or side by side.
 export function useStyles(theme: PluginTheme): Styles {
   const fonts = useContext(FontSizesContext);
+  const tabSize = useContext(TabSizeContext);
 
-  return useMemo(() => stylesOf(theme, fonts), [theme, fonts]);
+  return useMemo(() => stylesOf(theme, fonts, tabSize), [theme, fonts, tabSize]);
 }
