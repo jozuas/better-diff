@@ -109,7 +109,7 @@ function useControls(
     applyGroup: useRpc(applyGroupRpc),
   };
 
-  const { mutate, isPending } = useMutation({
+  const { mutateAsync, isPending } = useMutation({
     mutationFn: async ({ operation, target }: Request) => {
       const status = await apply(server, directory, operation, target);
 
@@ -136,13 +136,13 @@ function useControls(
       armed,
       busy: isPending,
       press: (button, action, target, onRun) => {
-        confirm.press(button, action.confirmation !== undefined, () => {
+        confirm.press(button, action.confirmation !== undefined, async () => {
           onRun?.();
-          mutate({ operation: action.operation, target });
+          await mutateAsync({ operation: action.operation, target });
         });
       },
     }),
-    [armed, isPending, confirm, mutate],
+    [armed, isPending, confirm, mutateAsync],
   );
 }
 

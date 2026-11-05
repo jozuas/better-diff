@@ -148,7 +148,8 @@ export function buttonOf(bar: string, { operation }: Pick<Action, "operation">):
 }
 
 // What the panel's buttons share: the one armed, whether an action is running, and pressing one,
-// which calls `onRun` just before the action runs, if it does.
+// which calls `onRun` just before the action runs, if it does. A press while one is running does
+// nothing: the buttons are disabled then, but shortcuts still press them.
 export interface Controls {
   armed: string | undefined;
   busy: boolean;

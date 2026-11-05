@@ -320,3 +320,32 @@ test("with focus in a file's bar, Shift+Backspace discards the file once pressed
   await expect(group(page, "STAGED FILES (1)")).toHaveText(["b.txt"]);
   expect(status(repository)).toBe("M  b.txt\n");
 });
+
+test("one action runs at a time: while one runs, the buttons that run actions are disabled, and a key that runs one does nothing", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  const release = await app.holdAction();
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await button(page, "Stage Hunk").first().click();
+
+  await expect(button(page, "Stage")).toBeDisabled();
+  await expect(button(page, "Stage Hunk").nth(1)).toBeDisabled();
+
+  // The toggle isn't an action's, so it keeps focus in the second hunk's bar.
+  await button(page, "Show entire file").nth(1).focus();
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Shift+Enter");
+  release();
+
+  await expect(line(page, "first")).toBeHidden();
+  expect(staged(repository)).toContain("+first\n");
+  expect(staged(repository)).not.toContain("+last");
+  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
+});

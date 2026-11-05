@@ -33,6 +33,9 @@ interface App {
   // Lets only the first of the plugin's reads of the file's diff reach the daemon, as if those after
   // it never finished, and gives whether the daemon has answered it. Before openPanel.
   readDiffOnce: (path: string) => Promise<() => boolean>;
+  // Keeps the plugin's first action from reaching the daemon until the function it gives is called,
+  // as if it ran until then, and lets those after it through. Before openPanel.
+  holdAction: () => Promise<() => void>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
@@ -62,6 +65,14 @@ const diffReadRequest = z.object({
     pluginId: z.literal(pluginId),
     method: z.literal("diff.read"),
     input: z.object({ path: z.string() }),
+  }),
+});
+
+const actionRequest = z.object({
+  message: z.object({
+    type: z.literal("plugin.rpc.invoke.request"),
+    pluginId: z.literal(pluginId),
+    method: z.string().startsWith("diff.apply-"),
   }),
 });
 
@@ -213,6 +224,27 @@ export const test = base.extend<Fixtures>({
         });
 
         return () => answered;
+      },
+      holdAction: async () => {
+        let release: (() => void) | undefined;
+
+        await page.routeWebSocket(/./u, (socket) => {
+          const server = socket.connectToServer();
+
+          socket.onMessage((message) => {
+            if (release === undefined && read(actionRequest, message) !== undefined) {
+              release = () => {
+                server.send(message);
+              };
+            } else {
+              server.send(message);
+            }
+          });
+        });
+
+        return () => {
+          release?.();
+        };
       },
     });
   },

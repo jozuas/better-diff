@@ -34,6 +34,7 @@ Replicates Sublime Merge as much as possible:
 - With focus in a hunk's bar, ↓ and ↑ move focus to the next hunk or the one before, in a group's view from one file's diff to the next's, and the view shows that hunk from its start. Focus lands on its Stage Hunk button, or Unstage Hunk, so Enter stages or unstages it. ← moves focus back to its file's row in the sidebar.
 - With focus in a hunk's bar, Backspace discards the hunk, or unstages it in STAGED, and Shift+Enter and Shift+Backspace stage and discard, or unstage, its whole file, as the file bar's buttons do. They do that with focus in the file bar too. Enter on its own presses the button with focus, as it does anywhere.
 - Once an action on a hunk or its lines runs with focus in the hunk's bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left. So Enter stages one hunk after another. Once an action on its file runs from there, focus moves to the next file's first hunk.
+- One action runs at a time: while one runs, the buttons that run actions are disabled, and a key that runs one does nothing.
 
 ### Selecting lines
 
