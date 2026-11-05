@@ -68,6 +68,10 @@ export function collapsed<D extends UnhighlightedDiff>(diff: D, generated: boole
     ...diff,
     collapsed: generated ? "generated" : "large",
     hunks: [],
-    contents: { old: [], new: [] },
+    contents: {
+      // Stryker disable next-line ArrayDeclaration: with no hunks, no line of the old version shows.
+      old: [],
+      new: [],
+    },
   };
 }

@@ -57,18 +57,16 @@ function pathsOf({ path, listing }: ListedFile): string[] {
   return listing.original === undefined ? [path] : [listing.original, path];
 }
 
-// The diff of the files, with the options.
+// The diff between the paths, with the options, and with the files added intent-to-add, where
+// they're moved.
 async function diffOf(
   directory: string,
   batch: Batch,
   side: Side,
-  files: readonly ListedFile[],
+  paths: string[],
+  added: string[],
   options: readonly string[],
 ): Promise<Buffer> {
-  const paths = files.flatMap(pathsOf);
-  // The files a moved file's diff has intent-to-add.
-  const added = files.map(({ path }) => path);
-
   const diff =
     batch === "moved"
       ? await withIntentToAdd(directory, added, async (index) => {
@@ -101,16 +99,22 @@ async function diffsOf(
   files: readonly ListedFile[],
   hideWhitespace: boolean | undefined,
 ): Promise<Diffs | undefined> {
+  const paths = files.flatMap(pathsOf);
+  // The files a moved file's diff has intent-to-add.
+  const added = files.map(({ path }) => path);
+
   try {
     const [diff, withoutWhitespace] = await Promise.all([
-      diffOf(directory, batch, side, files, []),
+      diffOf(directory, batch, side, paths, added, []),
       hideWhitespace === true
-        ? diffOf(directory, batch, side, files, ignoringWhitespace)
+        ? diffOf(directory, batch, side, paths, added, ignoringWhitespace)
         : undefined,
     ]);
 
     return { diff, withoutWhitespace };
-  } catch {
+  }
+  // Stryker disable next-line BlockStatement: an empty catch has it return undefined all the same.
+  catch {
     return undefined;
   }
 }
