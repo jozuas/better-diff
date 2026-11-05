@@ -27,7 +27,7 @@ import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
-import { groups, openAfter, placeholder, toggled } from "./groups";
+import { fileAfter, groups, openAfter, placeholder, toggled } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { viewSettingsOf } from "./settings";
@@ -56,32 +56,35 @@ function useDiffQueries(directory: string) {
   const readDiff = useRpc(diffRpc);
   const readGroup = useRpc(groupRpc);
 
-  return {
-    groupQuery: (group: GroupName, paths?: readonly string[]) =>
-      queryOptions({
-        queryKey: [directory, "group", group, ...(paths ?? [])],
-        queryFn: async () => {
-          const read = await readGroup({ directory, group, paths });
+  return useMemo(
+    () => ({
+      groupQuery: (group: GroupName, paths?: readonly string[]) =>
+        queryOptions({
+          queryKey: [directory, "group", group, ...(paths ?? [])],
+          queryFn: async () => {
+            const read = await readGroup({ directory, group, paths });
 
-          return read;
-        },
-      }),
-    query: (file: OpenFile, expand: boolean, entire = false) =>
-      queryOptions({
-        queryKey: [directory, "diff", groups[file.group].side, file.path, expand, entire],
-        queryFn: async () => {
-          const read = await readDiff({
-            directory,
-            path: file.path,
-            side: groups[file.group].side,
-            expand,
-            entire,
-          });
+            return read;
+          },
+        }),
+      query: (file: OpenFile, expand: boolean, entire = false) =>
+        queryOptions({
+          queryKey: [directory, "diff", groups[file.group].side, file.path, expand, entire],
+          queryFn: async () => {
+            const read = await readDiff({
+              directory,
+              path: file.path,
+              side: groups[file.group].side,
+              expand,
+              entire,
+            });
 
-          return read;
-        },
-      }),
-  };
+            return read;
+          },
+        }),
+    }),
+    [directory, readDiff, readGroup],
+  );
 }
 
 // Runs the actions the panel's buttons ask for, once confirmed where they ask for it, one at a time,
@@ -255,6 +258,7 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const focus = useMemo(() => keyboardFocus(), []);
   const diffs = useDiffQueries(directory);
+  const next = useMemo(() => fileAfter(sidebar.open, changes.data), [sidebar.open, changes.data]);
   const readVersion = useRpc(versionRpc);
   const refresh = useMemo(() => refreshOf(queryClient, directory), [queryClient, directory]);
 
@@ -321,6 +325,7 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
               layout={layout}
               fileQuery={diffs.query}
               groupQuery={diffs.groupQuery}
+              next={next}
               filter={sidebar.filter}
               controls={controls}
               theme={theme}

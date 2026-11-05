@@ -261,6 +261,26 @@ function reopened(shown: Open | undefined, changes: Changes): Open | undefined {
   );
 }
 
+// The file of the group that opens once the files at the paths leave it, from its list before and
+// after: the next file in the list before that it still lists, after the last of them, or else the
+// closest one before it, or else the first one it lists now. None if it lists none.
+function movedOn(
+  group: GroupName,
+  paths: readonly string[],
+  previous: readonly string[],
+  listed: readonly string[],
+): OpenFile | undefined {
+  const last = Math.max(...paths.map((path) => previous.indexOf(path)));
+
+  // Searched after the files that follow the last one, which are gone by then, the reversed list
+  // finds the closest one before it.
+  const path = [...previous.slice(last + 1), ...previous.toReversed(), ...listed].find(
+    (candidate) => listed.includes(candidate),
+  );
+
+  return path === undefined ? undefined : { group, path };
+}
+
 // What to show once the changes are listed, from what was open and the lists before, if they were
 // listed before, and after. Once they're first listed, what's still open of what the tab showed
 // before Paseo reloaded, or else the first file listed. After that, as after an action, the open
@@ -288,15 +308,24 @@ export function openAfter(
     return kept;
   }
 
-  const paths = openPaths(open);
-  const previous = before[open.group];
-  const last = Math.max(...paths.map((path) => previous.indexOf(path)));
+  return movedOn(open.group, openPaths(open), before[open.group], listed);
+}
 
-  // Searched after the files that follow the last one, which are gone by then, the reversed list
-  // finds the closest one before it.
-  const path = [...previous.slice(last + 1), ...previous.toReversed(), ...listed].find(
-    (candidate) => listed.includes(candidate),
+// The file that opens once the open file leaves its group, as after an action on it, whose diff is
+// worth reading before then. None unless a file is open, not a group or files selected, and its
+// group lists another.
+export function fileAfter(open: Open | undefined, changes?: Changes): OpenFile | undefined {
+  if (open?.path === undefined || changes === undefined) {
+    return undefined;
+  }
+
+  const { group, path } = open;
+  const listed = changes[group];
+
+  return movedOn(
+    group,
+    [path],
+    listed,
+    listed.filter((other) => other !== path),
   );
-
-  return path === undefined ? undefined : { group: open.group, path };
 }

@@ -1,7 +1,8 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useContext, useMemo } from "react";
+import { useContext, useEffect, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
@@ -30,16 +31,45 @@ interface ShownDiffProps {
     group: GroupName,
     paths?: readonly string[],
   ) => UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
+  // The file that opens once the open file leaves its group, if any.
+  next: OpenFile | undefined;
   // What the sidebar's files are filtered by.
   filter: string;
   controls: Controls;
   theme: PluginTheme;
 }
 
+interface ReadAheadProps {
+  query: ShownDiffProps["fileQuery"];
+  open: OpenFile;
+  next: OpenFile | undefined;
+}
+
+// Reads the next file's diff, if there's one, as it first shows, once the open file's is read, so
+// that it shows at once when the file opens, without slowing the open file's down. Read again only
+// once a refresh has found it may have changed, and then once the open file's is read again.
+function ReadAhead({ query, open, next }: ReadAheadProps): null {
+  const queryClient = useQueryClient();
+  const shown = useQuery({ ...query(open, false), enabled: false });
+  const read = shown.isSuccess && !shown.isFetching;
+
+  useEffect(() => {
+    if (read && next !== undefined) {
+      void queryClient.prefetchQuery({
+        ...query(next, false),
+        staleTime: Number.POSITIVE_INFINITY,
+      });
+    }
+  }, [queryClient, query, read, next]);
+
+  return null;
+}
+
 function ShownDiff({
   open,
   fileQuery,
   groupQuery,
+  next,
   filter,
   layout,
   controls,
@@ -79,14 +109,17 @@ function ShownDiff({
   }
 
   return (
-    <FileDiff
-      key={`${group}:${path}`}
-      query={(expand, entire) => fileQuery({ group, path }, expand, entire)}
-      file={{ group, path }}
-      layout={layout}
-      controls={controls}
-      theme={theme}
-    />
+    <>
+      <FileDiff
+        key={`${group}:${path}`}
+        query={(expand, entire) => fileQuery({ group, path }, expand, entire)}
+        file={{ group, path }}
+        layout={layout}
+        controls={controls}
+        theme={theme}
+      />
+      <ReadAhead query={fileQuery} open={{ group, path }} next={next} />
+    </>
   );
 }
 

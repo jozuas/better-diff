@@ -194,6 +194,19 @@ export function FileBar({
   );
 }
 
+interface SettledFocusProps {
+  busy: boolean;
+}
+
+// useSettledFocus each time the diff's layout renders, after the diff's hunks: the layout shows them
+// only once it's measured, which, for a diff read before the file opened, is after the file's view
+// first renders.
+function SettledFocus({ busy }: SettledFocusProps): null {
+  useSettledFocus(busy);
+
+  return null;
+}
+
 interface FileDiffProps {
   // The query of its diff, collapsed or not, and with every line of the file or not.
   query: (
@@ -217,35 +230,36 @@ export function FileDiff({ query, file, layout, controls, theme }: FileDiffProps
   const diff = useQuery(query(expand));
   const selection = useSelectedLines(view, () => diff.data?.version);
 
-  useSettledFocus(controls.busy);
-
   return (
     <View style={styles.file}>
       <FileBar file={file} diff={diff.data} controls={controls} theme={theme} />
       <DiffLayout layout={layout} view={view}>
         {(sideBySide) => (
-          <Queried query={diff} theme={theme}>
-            {(data) => (
-              <DiffBody
-                diff={data}
-                file={file}
-                view={view}
-                fileIndex={0}
-                selection={selection}
-                scrolls
-                entireQuery={query(true, true)}
-                sideBySide={sideBySide}
-                onHunkRun={(top, barHeight) => {
-                  scrollUpTo(view, top, barHeight);
-                }}
-                controls={controls}
-                onExpand={() => {
-                  setExpand(true);
-                }}
-                theme={theme}
-              />
-            )}
-          </Queried>
+          <>
+            <Queried query={diff} theme={theme}>
+              {(data) => (
+                <DiffBody
+                  diff={data}
+                  file={file}
+                  view={view}
+                  fileIndex={0}
+                  selection={selection}
+                  scrolls
+                  entireQuery={query(true, true)}
+                  sideBySide={sideBySide}
+                  onHunkRun={(top, barHeight) => {
+                    scrollUpTo(view, top, barHeight);
+                  }}
+                  controls={controls}
+                  onExpand={() => {
+                    setExpand(true);
+                  }}
+                  theme={theme}
+                />
+              )}
+            </Queried>
+            <SettledFocus busy={controls.busy} />
+          </>
         )}
       </DiffLayout>
     </View>
