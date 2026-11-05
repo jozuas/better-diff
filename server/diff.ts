@@ -6,6 +6,7 @@ import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { git } from "./git";
 import { highlighted } from "./highlight";
+import type { UnhighlightedDiff } from "./highlight";
 import { buildModePatch, buildPatch, isRename, kindOf, modeOf, parseDiff, reverse } from "./patch";
 import type { FileDiff } from "./patch";
 import { versionOf } from "./version";
@@ -165,9 +166,6 @@ async function changesOf(directory: string, path: string, side: Side): Promise<C
 function text(content: Buffer): string {
   return content.toString("utf8");
 }
-
-// A diff as the plugin shows it, before `highlighted` adds its highlights.
-export type UnhighlightedDiff = Omit<RpcOutput<typeof diffRpc>, "highlights">;
 
 // The diff of the changes.
 export function diffOf({ diff, renamedFrom }: Changes): UnhighlightedDiff {

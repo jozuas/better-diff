@@ -9,8 +9,8 @@ import { FontSizesContext, textPadding } from "./fonts";
 import type { NumberedLine } from "./lines";
 import { numbersOf } from "./side-by-side";
 import type { Side } from "./side-by-side";
-import { runsOf, segmentsOf, SyntaxColorsContext } from "./syntax";
-import type { Highlights, Mark, Segment } from "./syntax";
+import { segmentsOf, SyntaxColorsContext } from "./syntax";
+import type { Mark, Segment } from "./syntax";
 import { trailingWhitespaceAt } from "./whitespace";
 
 declare module "react-native" {
@@ -45,7 +45,6 @@ interface DiffLineProps {
   // The side it shows on, with only that version's number, or undefined inline, with both.
   side: Side | undefined;
   selectable: boolean;
-  highlights: Highlights;
   changes: readonly TextRange[];
   styles: Styles;
 }
@@ -59,7 +58,6 @@ function Line({
   selected,
   side,
   selectable,
-  highlights,
   changes,
   styles,
 }: DiffLineProps): ReactElement {
@@ -82,18 +80,13 @@ function Line({
           </Text>
         ))}
         <Text nativeID={id} selectable={selectable} style={styles.text}>
-          {segmentsOf(
-            line.text,
-            runsOf(line, highlights),
-            colors,
-            changes,
-            trailingWhitespaceAt(line),
-          ).map((segment) =>
-            segment.color === undefined && segment.mark === undefined ? (
-              segment.text
-            ) : (
-              <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
-            ),
+          {segmentsOf(line.text, line.runs, colors, changes, trailingWhitespaceAt(line)).map(
+            (segment) =>
+              segment.color === undefined && segment.mark === undefined ? (
+                segment.text
+              ) : (
+                <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
+              ),
           )}
         </Text>
       </View>

@@ -4,11 +4,8 @@ import { createContext } from "react";
 import type { diffRpc } from "../shared/diff";
 import type { syntaxColorsRpc } from "../shared/syntax";
 import type { TextRange } from "./changed-text";
-import type { NumberedLine } from "./lines";
 
-export type Highlights = RpcOutput<typeof diffRpc>["highlights"];
-
-type Runs = Highlights["new"][number];
+type Runs = RpcOutput<typeof diffRpc>["contents"][number]["runs"];
 
 type Scheme = keyof RpcOutput<typeof syntaxColorsRpc>;
 
@@ -17,16 +14,6 @@ export type SyntaxColors = Readonly<Record<string, string>>;
 
 // The colours for the panel's theme, none until they're read.
 export const SyntaxColorsContext = createContext<SyntaxColors>({});
-
-// The line's runs in its version: a removed line's in the old one, any other's in the new one.
-export function runsOf(line: NumberedLine, highlights: Highlights): Runs {
-  const runs =
-    line.kind === "removed"
-      ? highlights.old[(line.oldNumber ?? 0) - 1]
-      : highlights.new[(line.newNumber ?? 0) - 1];
-
-  return runs ?? [];
-}
 
 // What a piece of a line's text is marked as: changed text, or the whitespace an added line ends
 // with.

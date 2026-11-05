@@ -108,15 +108,19 @@ test("works out how many files are rendered still in a group of more of them tha
 
 type Diff = RpcOutput<typeof diffRpc>;
 
-const line: Diff["hunks"][number]["lines"][number] = { kind: "context", text: "a", newline: true };
+const line: Diff["hunks"][number]["lines"][number] = {
+  kind: "context",
+  text: "a",
+  newline: true,
+  runs: [],
+};
 
 const diff: Omit<Diff, "hunks"> = {
   version: "v",
   kind: "text",
   added: 0,
   removed: 0,
-  contents: { old: [], new: [] },
-  highlights: { old: [], new: [] },
+  contents: [],
 };
 
 test("a file's diff shows its hunks' lines, or one line in their place", () => {

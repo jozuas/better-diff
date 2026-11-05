@@ -137,7 +137,7 @@ test("a line on the side without focus has an id of its own, which a selection d
 
 // A line outside the hunks, with its number in each version.
 function unchangedLine(oldNumber: number, newNumber: number): NumberedLine {
-  return { kind: "context", text: "kept", newline: true, oldNumber, newNumber };
+  return { kind: "context", text: "kept", newline: true, runs: [], oldNumber, newNumber };
 }
 
 test("a line outside the hunks has an id on each side no other line has, by its number in the new version, which a selection leaves out", () => {
@@ -257,7 +257,7 @@ test("gives each of a file's hunks only the range of its own lines, as it is", (
 // A hunk's lines of each kind, in the order git gives them.
 const mixed = (
   ["context", "removed", "removed", "added", "added", "context", "removed", "added"] as const
-).map((kind) => ({ kind, text: kind, newline: true }));
+).map((kind) => ({ kind, text: kind, newline: true, runs: [] }));
 
 test("names each of a range's lines by its hunk's index and its own", () => {
   expect(rangeLines({ file: 1, hunk: 2, first: 2, last: 6 }, mixed)).toStrictEqual([

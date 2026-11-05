@@ -10,7 +10,7 @@ import type { NumberedLine } from "./lines";
 
 // A hunk's line, of the kind.
 function hunkLine(kind: NumberedLine["kind"], line: string) {
-  return { kind, text: line, newline: true };
+  return { kind, text: line, newline: true, runs: [] };
 }
 
 // The pairing of a hunk's lines.

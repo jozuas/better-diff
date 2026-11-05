@@ -31,7 +31,13 @@ test("shows a diff with lines", () => {
   expect(
     labelOf({
       kind: "text",
-      hunks: [{ oldStart: 1, newStart: 1, lines: [{ kind: "added", text: "a", newline: true }] }],
+      hunks: [
+        {
+          oldStart: 1,
+          newStart: 1,
+          lines: [{ kind: "added", text: "a", newline: true, runs: [] }],
+        },
+      ],
     }),
   ).toBeUndefined();
 });

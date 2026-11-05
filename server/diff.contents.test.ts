@@ -17,11 +17,8 @@ import { readDiff } from "./diff";
 
 const sides: Side[] = ["unstaged", "staged"];
 
-// The versions each side's diff goes from and to.
-const diffVersions: Record<Side, readonly [keyof FileVersions, keyof FileVersions]> = {
-  unstaged: ["index", "worktree"],
-  staged: ["head", "index"],
-};
+// The version each side's diff goes to.
+const diffedTo: Record<Side, keyof FileVersions> = { unstaged: "worktree", staged: "index" };
 
 // git's own diff of the file on the side, with its default three lines of context. git diff leaves
 // out an untracked file, which `git diff --no-index` diffs as new.
@@ -46,7 +43,8 @@ function kindOf(prefix: string): Line["kind"] {
 }
 
 // The hunks of git's diff, each started by a line that starts with `@@`, which no line of a hunk
-// does, as each starts with " ", "-" or "+".
+// does, as each starts with " ", "-" or "+". Their lines have no runs, in a file whose name the
+// highlighter knows no language by.
 function hunksOf(diff: string): Diff["hunks"] {
   const hunks: Diff["hunks"] = [];
 
@@ -64,6 +62,7 @@ function hunksOf(diff: string): Diff["hunks"] {
         kind: kindOf(line.charAt(0)),
         text: Buffer.from(line.slice(1), "latin1").toString("utf8"),
         newline: true,
+        runs: [],
       });
     }
   }
@@ -81,17 +80,16 @@ function linesOf(version: Buffer | undefined): string[] {
   );
 }
 
-// A text diff's contents are each version's lines, and another kind's are none.
+// A text diff's contents are the lines of the version it goes to, without runs in a file whose
+// name the highlighter knows no language by, and another kind's are none.
 function expectedContents(
   kind: Diff["kind"],
   side: Side,
   versions: FileVersions,
 ): Diff["contents"] {
-  const [from, to] = diffVersions[side];
-
   return kind === "text"
-    ? { old: linesOf(versions[from]), new: linesOf(versions[to]) }
-    : { old: [], new: [] };
+    ? linesOf(versions[diffedTo[side]]).map((text) => ({ text, runs: [] }))
+    : [];
 }
 
 // Changes with six unchanged lines between them, which git puts in one hunk, and with seven, which
@@ -155,7 +153,7 @@ test.each([
 });
 
 test.each(sides)(
-  "%s diff: has every line of each version a text diff goes between, once it's asked for them",
+  "%s diff: has every line of the version a text diff goes to, once it's asked for them",
   async (side) => {
     await fc.assert(
       fc.asyncProperty(file, async ({ path, versions }) => {
@@ -178,7 +176,7 @@ test.each(sides)(
   timeout,
 );
 
-test("a renamed file's contents are its original's and its own", async () => {
+test("a renamed file's contents are its own", async () => {
   await inRepository(async (repository) => {
     commitTenLines(repository);
     runGit(repository, ["mv", "--", "a", "b"]);
@@ -194,10 +192,9 @@ test("a renamed file's contents are its original's and its own", async () => {
 
     expect(renamedFrom).toBe("a");
     expect(hunks.map(({ oldStart, newStart }) => [oldStart, newStart])).toStrictEqual([[2, 2]]);
-    expect(contents).toStrictEqual({
-      old: tenLines.split("\n").slice(0, -1),
-      new: tenLines.replace("5", "five").split("\n").slice(0, -1),
-    });
+    expect(contents.map(({ text }) => text)).toStrictEqual(
+      tenLines.replace("5", "five").split("\n").slice(0, -1),
+    );
   });
 });
 
@@ -213,6 +210,6 @@ test("a binary file has no contents", async () => {
     });
 
     expect(kind).toBe("binary");
-    expect(contents).toStrictEqual({ old: [], new: [] });
+    expect(contents).toStrictEqual([]);
   });
 });

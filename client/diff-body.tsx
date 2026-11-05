@@ -290,14 +290,12 @@ function Hunks({
           selection={selected}
           pointed={pointed}
           focus={focus}
-          highlights={shownDiff.highlights}
           theme={theme}
         />
         <UnchangedLines
           lines={unchanged.after[index] ?? noLines}
           container={container}
           focus={focus}
-          highlights={shownDiff.highlights}
           theme={theme}
         />
       </View>,
@@ -310,7 +308,6 @@ function Hunks({
       lines={unchanged.before}
       container={container}
       focus={focus}
-      highlights={shownDiff.highlights}
       style={styles.spaced}
       theme={theme}
     />,

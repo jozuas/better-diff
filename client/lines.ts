@@ -105,11 +105,13 @@ function spanOf({ oldStart, newStart, lines }: Hunk): Span {
 
 // The new version's lines after `from` and before the one at the index `to`, which both versions
 // have. Each is shown with a newline: git marks a file's last line without one only in a hunk.
-function unchanged(lines: readonly string[], from: Counts, to: number): NumberedLine[] {
+function unchanged(lines: Diff["contents"], from: Counts, to: number): NumberedLine[] {
   return numberLines({
     oldStart: from.old + 1,
     newStart: from.new + 1,
-    lines: lines.slice(from.new, to).map((text) => ({ kind: "context", text, newline: true })),
+    lines: lines
+      .slice(from.new, to)
+      .map(({ text, runs }) => ({ kind: "context", text, newline: true, runs })),
   });
 }
 
@@ -125,11 +127,11 @@ export function unchangedLines({ hunks, contents }: Pick<Diff, "hunks" | "conten
 
   // Where the unchanged lines before the hunk at the index end, or those after the last hunk.
   function upTo(index: number): number {
-    return spans[index]?.start.new ?? contents.new.length;
+    return spans[index]?.start.new ?? contents.length;
   }
 
   return {
-    before: unchanged(contents.new, { old: 0, new: 0 }, upTo(0)),
-    after: spans.map(({ end }, index) => unchanged(contents.new, end, upTo(index + 1))),
+    before: unchanged(contents, { old: 0, new: 0 }, upTo(0)),
+    after: spans.map(({ end }, index) => unchanged(contents, end, upTo(index + 1))),
   };
 }

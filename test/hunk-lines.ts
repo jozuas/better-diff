@@ -12,6 +12,7 @@ export const hunkLines = fc
       kind: fc.constantFrom<Kind>("context", "removed", "added"),
       text: fc.string({ unit: "binary" }),
       newline: fc.boolean(),
+      runs: fc.constant<NumberedLine["runs"]>([]),
     }),
     { maxLength: 20 },
   )

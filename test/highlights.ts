@@ -3,11 +3,11 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import { highlighted } from "../server/highlight";
 import type { diffRpc } from "../shared/diff";
 
-type Highlights = RpcOutput<typeof diffRpc>["highlights"];
+type Runs = RpcOutput<typeof diffRpc>["contents"][number]["runs"];
 
-// The highlights of each of the lines of a new file at the path.
-export async function highlightLines(lines: string[], path: string): Promise<Highlights["new"]> {
-  const { highlights } = await highlighted(
+// The runs of each of the lines of a new file at the path.
+export async function highlightLines(lines: string[], path: string): Promise<Runs[]> {
+  const { contents } = await highlighted(
     {
       version: "",
       kind: "text",
@@ -20,5 +20,5 @@ export async function highlightLines(lines: string[], path: string): Promise<Hig
     true,
   );
 
-  return highlights.new;
+  return contents.map(({ runs }) => runs);
 }

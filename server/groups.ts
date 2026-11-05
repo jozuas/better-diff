@@ -6,8 +6,9 @@ import { groupsOf, readStatus } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
-import type { ChangedFile, Changes, UnhighlightedDiff } from "./diff";
+import type { ChangedFile, Changes } from "./diff";
 import { highlighted } from "./highlight";
+import type { UnhighlightedDiff } from "./highlight";
 
 type Group = RpcInput<typeof groupRpc>["group"];
 

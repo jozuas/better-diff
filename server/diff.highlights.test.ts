@@ -1,3 +1,4 @@
+import { highlightCode } from "@getpaseo/highlight";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
@@ -9,19 +10,34 @@ import { readDiff } from "./diff";
 import { readGroup } from "./groups";
 import { syntaxColors } from "./highlight";
 
+type Line = Diff["hunks"][number]["lines"][number];
+
+type Runs = Line["runs"];
+
+// Each of the diff's hunks' lines, as its kind, its text, and the first of its runs.
+function firstRuns({ hunks }: Diff): [Line["kind"], string, Runs[number] | undefined][] {
+  return hunks.flatMap(({ lines }) => lines.map(({ kind, text, runs }) => [kind, text, runs[0]]));
+}
+
 test("highlights a diff's removed lines as part of the old version, and its added and unchanged lines as part of the new one, as the diff's schema has them", async () => {
   await inRepository(async (repository) => {
-    writeFile(repository, "a.ts", "/*\nconst a = 1;\n*/\nconst b = 2;\n");
+    writeFile(repository, "a.ts", "/*\nconst r = 1;\nconst c = 2;\n*/\n");
     commitAll(repository);
-    writeFile(repository, "a.ts", "const a = 1;\nconst b = 2;\n");
+    writeFile(repository, "a.ts", "const c = 2;\nconst a = 3;\n");
 
-    const diff = await readDiff({ directory: repository, path: "a.ts", side: "unstaged" });
-    const { highlights } = diff;
+    const diff = await readDiff({
+      directory: repository,
+      path: "a.ts",
+      side: "unstaged",
+      entire: true,
+    });
 
-    expect(highlights.old[1]).toStrictEqual([[12, "comment"]]);
-    expect([highlights.new[0]?.[0], highlights.new[1]?.[0]]).toStrictEqual([
-      [5, "keyword"],
-      [5, "keyword"],
+    expect(firstRuns(diff)).toStrictEqual([
+      ["removed", "/*", [2, "comment"]],
+      ["removed", "const r = 1;", [12, "comment"]],
+      ["context", "const c = 2;", [5, "keyword"]],
+      ["removed", "*/", [2, "comment"]],
+      ["added", "const a = 3;", [5, "keyword"]],
     ]);
     expect(diffRpc.output.parse(diff)).toStrictEqual(diff);
   });
@@ -31,7 +47,7 @@ test("the syntax colours are as their schema has them", () => {
   expect(syntaxColorsRpc.output.parse(syntaxColors())).toStrictEqual(syntaxColors());
 });
 
-test("highlights a renamed file's old version in the language of the path it was renamed from", async () => {
+test("highlights a renamed file's removed lines in the language of the path it was renamed from", async () => {
   await inRepository(async (repository) => {
     const code = Array.from({ length: 10 }, (_, index) => `const a${index} = ${index};\n`);
 
@@ -41,18 +57,16 @@ test("highlights a renamed file's old version in the language of the path it was
     writeFile(repository, "a.txt", ["const b = 0;\n", ...code.slice(1)].join(""));
     runGit(repository, ["add", "a.txt"]);
 
-    const { renamedFrom, highlights } = await readDiff({
-      directory: repository,
-      path: "a.txt",
-      side: "staged",
-      entire: true,
-    });
+    const diff = await readDiff({ directory: repository, path: "a.txt", side: "staged" });
 
-    expect(renamedFrom).toBe("a.ts");
-    expect(highlights.old.map((runs) => runs[0])).toStrictEqual(
-      Array.from({ length: 10 }, () => [5, "keyword"]),
-    );
-    expect(highlights.new).toStrictEqual([]);
+    expect(diff.renamedFrom).toBe("a.ts");
+    expect(firstRuns(diff)).toStrictEqual([
+      ["removed", "const a0 = 0;", [5, "keyword"]],
+      ["added", "const b = 0;", undefined],
+      ["context", "const a1 = 1;", undefined],
+      ["context", "const a2 = 2;", undefined],
+      ["context", "const a3 = 3;", undefined],
+    ]);
   });
 });
 
@@ -63,7 +77,7 @@ function declarations(names: readonly string[]): string {
 
 const twenty = Array.from({ length: 20 }, (_, index) => `c${index}`);
 
-test("highlights each of a group's files as its own diff is highlighted, without every line of the versions", async () => {
+test("highlights each of a group's files as its own diff is highlighted, without contents", async () => {
   await inRepository(async (repository) => {
     writeFile(repository, "c.ts", declarations(twenty));
     commitAll(repository);
@@ -71,14 +85,10 @@ test("highlights each of a group's files as its own diff is highlighted, without
     writeFile(repository, "b.py", "def b():\n  return 2\n");
     writeFile(repository, "c.ts", declarations(twenty.with(0, "changed")));
 
-    async function own(path: string): Promise<Pick<Diff, "highlights" | "contents">> {
-      const { highlights, contents } = await readDiff({
-        directory: repository,
-        path,
-        side: "unstaged",
-      });
+    async function own(path: string): Promise<Pick<Diff, "hunks" | "contents">> {
+      const { hunks, contents } = await readDiff({ directory: repository, path, side: "unstaged" });
 
-      return { highlights, contents };
+      return { hunks, contents };
     }
 
     const untracked = await readGroup({ directory: repository, group: "untracked" });
@@ -100,64 +110,57 @@ const changes = fc
   )
   .filter((lines) => lines.some((change) => change !== "kept"));
 
+// The names lines declare, of a different length each, so that each line's runs tell it apart: an
+// odd one for those of the version before the changes, and an even one for those the changes make.
+function before(index: number): string {
+  return "a".repeat(2 * index + 1);
+}
+
+function made(index: number): string {
+  return "b".repeat(2 * index + 2);
+}
+
 // The names each line of the version before the changes and after them declares.
 function namesBefore(lines: readonly Change[]): string[] {
-  return lines.flatMap((change, index) => (change === "added" ? [] : [`a${index}`]));
+  return lines.flatMap((change, index) => (change === "added" ? [] : [before(index)]));
 }
 
 const namesAfterChange: Record<Change, (index: number) => string[]> = {
-  kept: (index) => [`a${index}`],
-  changed: (index) => [`b${index}`],
+  kept: (index) => [before(index)],
+  changed: (index) => [made(index)],
   removed: () => [],
-  added: (index) => [`added${index}`, `a${index}`],
+  added: (index) => [made(index), before(index)],
 };
 
 function namesAfter(lines: readonly Change[]): string[] {
   return lines.flatMap((change, index) => namesAfterChange[change](index));
 }
 
-// The numbers of the lines of each version git's hunks have, from their headers.
-interface HunkLineNumbers {
-  old: Set<number>;
-  new: Set<number>;
+// The lines of a version of a.ts, and their runs, as Paseo's highlighter highlights it whole.
+interface Version {
+  lines: string[];
+  runs: Runs[];
 }
 
-function numbersFrom(start: string | undefined, count: string | undefined): number[] {
-  return Array.from({ length: Number(count ?? "1") }, (_, line) => Number(start) + line);
+function versionOf(code: string): Version {
+  return {
+    lines: code.split("\n").slice(0, -1),
+    runs: highlightCode(code, "a.ts").map((tokens) =>
+      tokens.flatMap(({ text, style }): Runs => (text.length > 0 ? [[text.length, style]] : [])),
+    ),
+  };
 }
 
-function hunkLineNumbers(repository: string, path: string): HunkLineNumbers {
-  const numbers: HunkLineNumbers = { old: new Set(), new: new Set() };
+// The runs the line has in its version, a removed line in the old one and any other in the new one,
+// found by its text, which no other line of the version has.
+function runsIn(versions: Record<"old" | "new", Version>, { kind, text }: Line): Runs | undefined {
+  const version = versions[kind === "removed" ? "old" : "new"];
 
-  const headers = runGit(repository, ["diff", "--", path]).matchAll(
-    /^@@ -(?<oldStart>\d+)(?:,(?<oldCount>\d+))? \+(?<newStart>\d+)(?:,(?<newCount>\d+))? @@/gmu,
-  );
-
-  for (const { groups } of headers) {
-    for (const number of numbersFrom(groups?.["oldStart"], groups?.["oldCount"])) {
-      numbers.old.add(number);
-    }
-
-    for (const number of numbersFrom(groups?.["newStart"], groups?.["newCount"])) {
-      numbers.new.add(number);
-    }
-  }
-
-  return numbers;
-}
-
-type Runs = Diff["highlights"]["old"];
-
-// The version's highlights as a diff without every line of it has them: those of the lines git's
-// hunks have, and none of the others before the last of those.
-function hunksHighlights(every: Runs, numbers: ReadonlySet<number>): Runs {
-  return every
-    .slice(0, Math.max(0, ...numbers))
-    .map((runs, index) => (numbers.has(index + 1) ? runs : []));
+  return version.runs[version.lines.indexOf(text)];
 }
 
 test(
-  "a diff has the highlights of its hunks' lines as it has them with every line of the versions, and no others, nor the versions' lines, unless it's asked for them",
+  "each of a diff's hunks' lines has the runs it has in its version, highlighted whole, and a diff has every line of the new version, with its runs, only if it's asked for them",
   async () => {
     await fc.assert(
       fc.asyncProperty(changes, async (lines) => {
@@ -166,22 +169,22 @@ test(
           commitAll(repository);
           writeFile(repository, "a.ts", declarations(namesAfter(lines)));
 
+          const versions = {
+            old: versionOf(declarations(namesBefore(lines))),
+            new: versionOf(declarations(namesAfter(lines))),
+          };
+
           const read = { directory: repository, path: "a.ts", side: "unstaged" } as const;
           const entire = await readDiff({ ...read, entire: true });
-          const numbers = hunkLineNumbers(repository, "a.ts");
+          const hunkLines = entire.hunks.flatMap((hunk) => hunk.lines);
 
-          await expect(readDiff(read)).resolves.toStrictEqual({
-            ...entire,
-            contents: { old: [], new: [] },
-            highlights: {
-              old: hunksHighlights(entire.highlights.old, numbers.old),
-              new: hunksHighlights(entire.highlights.new, numbers.new),
-            },
-          });
-          expect(entire.contents).toStrictEqual({
-            old: declarations(namesBefore(lines)).split("\n").slice(0, -1),
-            new: declarations(namesAfter(lines)).split("\n").slice(0, -1),
-          });
+          expect(hunkLines.map(({ runs }) => runs)).toStrictEqual(
+            hunkLines.map((line) => runsIn(versions, line)),
+          );
+          expect(entire.contents).toStrictEqual(
+            versions.new.lines.map((text, index) => ({ text, runs: versions.new.runs[index] })),
+          );
+          await expect(readDiff(read)).resolves.toStrictEqual({ ...entire, contents: [] });
         });
       }),
       { numRuns: 20 },

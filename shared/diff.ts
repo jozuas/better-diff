@@ -7,6 +7,11 @@ const index = z.int().nonnegative();
 // how many, as JavaScript counts a string's length, and the style.
 const run = z.tuple([z.int().positive(), z.string().nullable()]);
 
+// The runs that make up a line, highlighted as part of the whole version it's in: for a removed line
+// the version the diff goes from, and for any other the one it goes to. None for a version in a
+// language the highlighter doesn't know, or too long to highlight.
+const runs = z.array(run);
+
 const diff = z.object({
   // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
   // date.
@@ -39,20 +44,16 @@ const diff = z.object({
           text: z.string(),
           // False only for a file's last line, when the file doesn't end with a newline.
           newline: z.boolean(),
+          runs,
         }),
       ),
     }),
   ),
-  // Every line of the versions a text diff goes between, the hunks' and the unchanged ones
-  // around them, as the hunks' lines have them, where they're asked for. None for a diff of another
-  // kind, or a version without the file.
-  contents: z.object({ old: z.array(z.string()), new: z.array(z.string()) }),
-  // Each line of each version, by its number in it, as the runs that make it up, highlighted as
-  // part of the whole version: every line's, where they're asked for, or else only the hunks'
-  // lines', and none for the lines before them. None for a version in a language the highlighter
-  // doesn't know, or too long to highlight, nor for the old version of a diff that removes no
-  // lines, since only removed lines are shown in it.
-  highlights: z.object({ old: z.array(z.array(run)), new: z.array(z.array(run)) }),
+  // Every line of the version a text diff goes to, the hunks' and the unchanged ones around them,
+  // as the hunks' lines have them, where they're asked for. None for a diff of another kind, or a
+  // version without the file. Only removed lines are shown from the version the diff goes from,
+  // and the hunks have them all.
+  contents: z.array(z.object({ text: z.string(), runs })),
 });
 
 export const diffRpc = defineRpc({
@@ -65,9 +66,9 @@ export const diffRpc = defineRpc({
     side: z.enum(["unstaged", "staged"]),
     // Whether to send a diff's hunks and contents though it would be collapsed.
     expand: z.boolean().optional(),
-    // Whether to send every line of the versions, in contents and highlights, as showing the entire
-    // file takes, rather than only what showing the hunks takes. The hunks of a large file are a
-    // small part of it.
+    // Whether to send every line of the version, in contents, as showing the entire file takes,
+    // rather than only what showing the hunks takes. The hunks of a large file are a small part of
+    // it.
     entire: z.boolean().optional(),
   }),
   output: diff,
@@ -85,9 +86,9 @@ export const groupRpc = defineRpc({
   input: z.object({ directory: z.string(), group, paths }),
   output: z.object({
     // The group's files, or those of them at the paths, in the order changes.list lists them, each
-    // with its diff as diff.read reads it, collapsed as it collapses it, and without every line of
-    // the versions: the staged one for a staged file, the unstaged one for the others. A file whose diff can't be read, such as one git can't open, has
-    // why in its place.
+    // with its diff as diff.read reads it, collapsed as it collapses it, and without contents: the
+    // staged one for a staged file, the unstaged one for the others. A file whose diff can't be
+    // read, such as one git can't open, has why in its place.
     files: z.array(
       z.union([
         diff.extend({ path: z.string() }),

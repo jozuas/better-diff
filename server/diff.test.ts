@@ -103,8 +103,9 @@ test("discarding some of an untracked file's lines leaves it untracked with the 
 
 type Line = Diff["hunks"][number]["lines"][number];
 
+// A line of a file whose name the highlighter knows no language by, without runs.
 function line(kind: Line["kind"], text: string, newline = true): Line {
-  return { kind, text, newline };
+  return { kind, text, newline, runs: [] };
 }
 
 test("reads each hunk's lines as text, with where the hunk starts in each version", async () => {

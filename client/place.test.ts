@@ -197,7 +197,7 @@ test("a view settles once for all that renders before it settles", () => {
 
 // A line both versions have, with its number in each.
 function unchangedLine(text: string, number: number): NumberedLine {
-  return { kind: "context", text, newline: true, oldNumber: number, newNumber: number };
+  return { kind: "context", text, newline: true, runs: [], oldNumber: number, newNumber: number };
 }
 
 test("a file shown is each hunk's lines, after the unchanged ones before it while the entire file shows, each with its element's id", () => {
@@ -207,13 +207,17 @@ test("a file shown is each hunk's lines, after the unchanged ones before it whil
         oldStart: 2,
         newStart: 2,
         lines: [
-          { kind: "removed" as const, text: "old", newline: true },
-          { kind: "added" as const, text: "new", newline: true },
+          { kind: "removed" as const, text: "old", newline: true, runs: [] },
+          { kind: "added" as const, text: "new", newline: true, runs: [] },
         ],
       },
-      { oldStart: 3, newStart: 4, lines: [{ kind: "added" as const, text: "end", newline: true }] },
+      {
+        oldStart: 3,
+        newStart: 4,
+        lines: [{ kind: "added" as const, text: "end", newline: true, runs: [] }],
+      },
     ],
-    contents: { old: ["first", "old", "kept"], new: ["first", "new", "kept", "end"] },
+    contents: ["first", "new", "kept", "end"].map((text) => ({ text, runs: [] })),
   };
 
   expect(shownFileOf("a.txt", diff.hunks, unchangedLines(diff), "view:0")).toStrictEqual({

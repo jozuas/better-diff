@@ -2,9 +2,8 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { TextRange } from "./changed-text";
-import { numberLines } from "./lines";
-import { runsOf, schemeOf, segmentsOf } from "./syntax";
-import type { Highlights, Mark, Segment, SyntaxColors } from "./syntax";
+import { schemeOf, segmentsOf } from "./syntax";
+import type { Mark, Segment, SyntaxColors } from "./syntax";
 
 // Among them one named "null", which a run without a style isn't.
 const styles = ["keyword", "string", "comment", "variable", "null"];
@@ -138,42 +137,6 @@ test("no segment is empty, and none has both the colour of the one before it and
       expect(likeTheOneBefore(segments)).toStrictEqual([]);
     }),
   );
-});
-
-test("a line's runs are its version's where its number there says: a removed line's the old version's, an added or unchanged line's the new one's", () => {
-  const highlights: Highlights = {
-    old: [[[1, "old 1"]], [[1, "old 2"]], [[1, "old 3"]]],
-    new: [[[1, "new 1"]], [[1, "new 2"]], [[1, "new 3"]]],
-  };
-
-  const lines = numberLines({
-    oldStart: 2,
-    newStart: 1,
-    lines: [
-      { kind: "removed", text: "a", newline: true },
-      { kind: "added", text: "b", newline: true },
-      { kind: "context", text: "c", newline: true },
-    ],
-  });
-
-  expect(lines.map((line) => runsOf(line, highlights))).toStrictEqual([
-    [[1, "old 2"]],
-    [[1, "new 1"]],
-    [[1, "new 2"]],
-  ]);
-});
-
-test("a line has no runs where its version has no highlights", () => {
-  const lines = numberLines({
-    oldStart: 1,
-    newStart: 1,
-    lines: [
-      { kind: "removed", text: "a", newline: true },
-      { kind: "added", text: "b", newline: true },
-    ],
-  });
-
-  expect(lines.map((line) => runsOf(line, { old: [], new: [] }))).toStrictEqual([[], []]);
 });
 
 function grey(value: number): string {

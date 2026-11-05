@@ -1,12 +1,7 @@
 import { posix } from "node:path";
 
-import type { RpcOutput } from "@getpaseo/plugin";
-
-import type { diffRpc } from "../shared/diff";
 import { git } from "./git";
-
-// Collapsing comes before highlighting, which a collapsed diff is spared.
-type Diff = Omit<RpcOutput<typeof diffRpc>, "highlights">;
+import type { UnhighlightedDiff } from "./highlight";
 
 // What package managers write, by name, which GitHub collapses too.
 const lockfiles = new Set([
@@ -62,7 +57,7 @@ export async function generatedPaths(
 
 // The diff without its hunks and contents, where it has some and the file is generated or the diff
 // large: thousands of lines are slow to show, and a generated file's are seldom read.
-export function collapsed<D extends Diff>(diff: D, generated: boolean): D {
+export function collapsed<D extends UnhighlightedDiff>(diff: D, generated: boolean): D {
   const large = diff.added + diff.removed > largeDiff;
 
   if (diff.hunks.length === 0 || !(generated || large)) {

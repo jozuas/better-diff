@@ -144,14 +144,14 @@ test("a run's lines are lined up as delta lines them up, in the order git gives 
     oldStart: 4,
     newStart: 4,
     lines: [
-      { kind: "removed", text: "a", newline: true },
-      { kind: "removed", text: "b", newline: true },
-      { kind: "removed", text: "c", newline: true },
-      { kind: "added", text: "x", newline: true },
-      { kind: "added", text: "b2", newline: true },
-      { kind: "added", text: "y", newline: true },
-      { kind: "context", text: "d", newline: true },
-      { kind: "added", text: "e", newline: true },
+      { kind: "removed", text: "a", newline: true, runs: [] },
+      { kind: "removed", text: "b", newline: true, runs: [] },
+      { kind: "removed", text: "c", newline: true, runs: [] },
+      { kind: "added", text: "x", newline: true, runs: [] },
+      { kind: "added", text: "b2", newline: true, runs: [] },
+      { kind: "added", text: "y", newline: true, runs: [] },
+      { kind: "context", text: "d", newline: true, runs: [] },
+      { kind: "added", text: "e", newline: true, runs: [] },
     ],
   });
 
@@ -185,6 +185,7 @@ const line: NumberedLine = {
   kind: "context",
   text: "a",
   newline: true,
+  runs: [],
   oldNumber: 3,
   newNumber: 5,
 };

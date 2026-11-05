@@ -243,7 +243,7 @@ test("names a sidebar button by what it does to its file, if it acts on one, unt
 });
 
 test("names each of a hunk's lines by the hunk's index and its own", () => {
-  const line = { kind: "added", text: "a", newline: true } as const;
+  const line = { kind: "added" as const, text: "a", newline: true, runs: [] };
 
   expect(hunkLines([line, line, line], 2)).toStrictEqual([
     { hunk: 2, line: 0 },

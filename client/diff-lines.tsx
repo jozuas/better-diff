@@ -17,7 +17,6 @@ import { isSelected, lineId, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
 import { rowsOf, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
-import type { Highlights } from "./syntax";
 
 declare module "react-native" {
   interface ViewStyle {
@@ -59,7 +58,6 @@ interface HalfProps {
   focused: boolean;
   selected: Selected;
   focus: Focus;
-  highlights: Highlights;
   changes: ChangedText;
   styles: Styles;
 }
@@ -72,7 +70,6 @@ function Half({
   focused,
   selected,
   focus,
-  highlights,
   changes,
   styles,
 }: HalfProps): ReactElement {
@@ -92,7 +89,6 @@ function Half({
           selected={selected(shown.index, side)}
           side={side}
           selectable={focused}
-          highlights={highlights}
           changes={changes(shown.index)}
           styles={styles}
         />
@@ -106,7 +102,6 @@ interface SideBySideRowProps {
   idOf: IdOf;
   selected: Selected;
   focus: Focus;
-  highlights: Highlights;
   changes: ChangedText;
   styles: Styles;
 }
@@ -118,7 +113,6 @@ function SideBySideRow({
   idOf,
   selected,
   focus,
-  highlights,
   changes,
   styles,
 }: SideBySideRowProps): ReactElement {
@@ -133,7 +127,6 @@ function SideBySideRow({
           focused={focus.side === side}
           selected={selected}
           focus={focus}
-          highlights={highlights}
           changes={changes}
           styles={styles}
         />
@@ -148,7 +141,6 @@ interface LinesProps {
   selected: Selected;
   // Undefined for an inline view.
   focus: Focus | undefined;
-  highlights: Highlights;
   changes: ChangedText;
   // The index of the added line each paired removed line is paired with, by the removed line's.
   partners: ReadonlyMap<number, number>;
@@ -161,7 +153,6 @@ function Lines({
   idOf,
   selected,
   focus,
-  highlights,
   changes,
   partners,
   styles,
@@ -175,7 +166,6 @@ function Lines({
         selected={selected(index)}
         side={undefined}
         selectable
-        highlights={highlights}
         changes={changes(index)}
         styles={styles}
       />
@@ -189,7 +179,6 @@ function Lines({
       idOf={idOf}
       selected={selected}
       focus={focus}
-      highlights={highlights}
       changes={changes}
       styles={styles}
     />
@@ -207,7 +196,6 @@ interface HunkLinesProps {
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The diff's.
-  highlights: Highlights;
   theme: PluginTheme;
 }
 
@@ -218,7 +206,6 @@ function LinesOfHunk({
   selection,
   pointed,
   focus,
-  highlights,
   theme,
 }: HunkLinesProps): ReactElement {
   const styles = useStyles(theme);
@@ -232,7 +219,6 @@ function LinesOfHunk({
         idOf={(line, focused) => lineId(container, index, line.index, focused)}
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
-        highlights={highlights}
         changes={(line) => pairing.changes[line] ?? unchanged}
         partners={pairing.partners}
         styles={styles}
@@ -252,7 +238,6 @@ interface UnchangedLinesProps {
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The diff's.
-  highlights: Highlights;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
 }
@@ -263,7 +248,6 @@ function LinesOutsideHunks({
   lines,
   container,
   focus,
-  highlights,
   style,
   theme,
 }: UnchangedLinesProps): ReactElement | null {
@@ -276,7 +260,6 @@ function LinesOutsideHunks({
         idOf={({ line }, focused) => unchangedLineId(container, line, focused)}
         selected={() => false}
         focus={focus}
-        highlights={highlights}
         changes={() => unchanged}
         partners={unpaired}
         styles={styles}

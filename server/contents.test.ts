@@ -65,7 +65,7 @@ test("decodes bytes that aren't UTF-8 as the diff's lines do", async () => {
 
     await expect(read(repository, "a")).resolves.toStrictEqual({
       status: "read",
-      text: contents.new.join("\n"),
+      text: contents.map((line) => line.text).join("\n"),
     });
   });
 });

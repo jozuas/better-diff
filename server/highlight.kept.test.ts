@@ -1,6 +1,8 @@
 import { expect, test } from "vitest";
 
 import { highlightLines } from "../test/highlights";
+import { highlighted } from "./highlight";
+import type { UnhighlightedDiff } from "./highlight";
 
 // The most characters a version can have to be highlighted, and the most the versions whose
 // highlights are kept can have in all.
@@ -112,4 +114,40 @@ test("keeps a version's highlights apart from those of the same code at another 
       [2, "heading"],
     ],
   ]);
+});
+
+// The diff of a.ts from a version of one line to the line with another after it, or to the other in
+// its place.
+function diffFrom([line = ""]: readonly string[], replaces: boolean): UnhighlightedDiff {
+  return {
+    version: "",
+    kind: "text",
+    added: 1,
+    removed: replaces ? 1 : 0,
+    hunks: [
+      {
+        oldStart: 1,
+        newStart: 1,
+        lines: [
+          { kind: replaces ? "removed" : "context", text: line, newline: true },
+          { kind: "added", text: "b", newline: true },
+        ],
+      },
+    ],
+    contents: { old: [line], new: replaces ? ["b"] : [line, "b"] },
+  };
+}
+
+test("highlights a diff's old version only where the diff removes lines, as only removed lines are shown from it", async () => {
+  const followed = newVersion(1);
+  const replaced = newVersion(1);
+
+  // Telling whether a version is kept reads it as a new file's, whose old version has no lines:
+  // kept from here on, so telling never waits on highlighting that.
+  await highlightLines([], "a.ts");
+  await highlighted(diffFrom(followed, false), "a.ts", false);
+  await highlighted(diffFrom(replaced, true), "a.ts", false);
+
+  await expect(kept(followed)).resolves.toBe(false);
+  await expect(kept(replaced)).resolves.toBe(true);
 });

@@ -4,11 +4,7 @@ import { diffRpc } from "../shared/diff";
 import { commitAll, inRepository, writeFile } from "../test/repository";
 import { readDiff } from "./diff";
 
-const emptied = {
-  hunks: [],
-  contents: { old: [], new: [] },
-  highlights: { old: [], new: [] },
-};
+const emptied = { hunks: [], contents: [] };
 
 const generated = { kind: "text", collapsed: "generated", ...emptied };
 
@@ -176,13 +172,12 @@ test("reads a collapsed diff's hunks and contents when asked to expand it, and i
           oldStart: 1,
           newStart: 1,
           lines: [
-            { kind: "removed", text: "a", newline: true },
-            { kind: "added", text: "b", newline: true },
+            { kind: "removed", text: "a", newline: true, runs: [] },
+            { kind: "added", text: "b", newline: true, runs: [] },
           ],
         },
       ],
-      contents: { old: ["a"], new: ["b"] },
-      highlights: { old: [], new: [] },
+      contents: [{ text: "b", runs: [] }],
     });
     await expect(readDiff({ ...read, expand: false })).resolves.toStrictEqual(collapsed);
   });

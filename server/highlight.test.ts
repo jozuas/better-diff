@@ -100,61 +100,51 @@ test("highlights each line as part of the whole version, so a line inside a comm
 });
 
 test.each(["a.txt", "Makefile", "a.ts.orig"])(
-  "leaves a version in a language the highlighter doesn't know, such as %s's, without highlights",
+  "leaves the lines of a version in a language the highlighter doesn't know, such as %s's, without runs",
   async (path) => {
-    await expect(highlightLines(["const a = 1;"], path)).resolves.toStrictEqual([]);
+    await expect(highlightLines(["const a = 1;", "const b = 2;"], path)).resolves.toStrictEqual([
+      [],
+      [],
+    ]);
   },
 );
 
-test("leaves a version Paseo's highlighter fails on, as its Nix grammar fails on a file ending in a backslash, without highlights, and still highlights the other", async () => {
-  const { highlights } = await highlighted(
+test("leaves the lines of a version Paseo's highlighter fails on, as its Nix grammar fails on a file ending in a backslash, without runs, and still highlights the other version", async () => {
+  const { hunks } = await highlighted(
     {
       version: "",
       kind: "text",
       added: 1,
       removed: 1,
-      hunks: [],
+      hunks: [
+        {
+          oldStart: 1,
+          newStart: 1,
+          lines: [
+            { kind: "removed", text: "const{\\", newline: true },
+            { kind: "added", text: "const a = 1;", newline: true },
+          ],
+        },
+      ],
       contents: { old: ["const{\\"], new: ["const a = 1;"] },
       renamedFrom: "a.nix",
     },
     "a.ts",
-    true,
+    false,
   );
 
-  expect(highlights.old).toStrictEqual([]);
-  expect(highlights.new[0]?.[0]).toStrictEqual([5, "keyword"]);
+  expect(hunks[0]?.lines.map(({ runs }) => runs[0])).toStrictEqual([undefined, [5, "keyword"]]);
 });
 
-test("leaves the old version without highlights where the diff removes no lines, as none of its lines is shown", async () => {
-  const { highlights } = await highlighted(
-    {
-      version: "",
-      kind: "text",
-      added: 1,
-      removed: 0,
-      hunks: [],
-      contents: { old: ["const a = 1;"], new: ["const a = 1;", "const b = 2;"] },
-    },
-    "a.ts",
-    true,
-  );
-
-  expect(highlights.old).toStrictEqual([]);
-  expect(highlights.new.map((runs) => runs[0])).toStrictEqual([
-    [5, "keyword"],
-    [5, "keyword"],
-  ]);
-});
-
-test("gives a version without lines, as of a file it doesn't have, no highlights", async () => {
+test("gives a version without lines, as of a file it doesn't have, no runs", async () => {
   await expect(highlightLines([], "a.ts")).resolves.toStrictEqual([]);
 });
 
-test("highlights a version of up to 786,432 characters, as Paseo's own diff does, and leaves a longer one without highlights", async () => {
+test("highlights a version of up to 786,432 characters, as Paseo's own diff does, and leaves a longer one's lines without runs", async () => {
   await expect(highlightLines(["a".repeat(786_432)], "a.ts")).resolves.toStrictEqual([
     [[786_432, "variable"]],
   ]);
-  await expect(highlightLines(["a".repeat(786_433)], "a.ts")).resolves.toStrictEqual([]);
+  await expect(highlightLines(["a".repeat(786_433)], "a.ts")).resolves.toStrictEqual([[]]);
 });
 
 test("lets the plugin's other work take turns with highlighting", async () => {

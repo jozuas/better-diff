@@ -124,12 +124,20 @@ function withSelectedChanges(
   );
 }
 
-// Each changed line of git's diff, as the plugin shows it.
+// Each changed line of git's diff, as the plugin shows it in a file whose name the highlighter knows
+// no language by, without runs.
 function asShown(lines: readonly DiffLine[]): Line[] {
   return lines.flatMap(({ prefix, bytes, newline }) =>
     prefix === " "
       ? []
-      : [{ kind: prefix === "-" ? "removed" : "added", text: bytes.toString("utf8"), newline }],
+      : [
+          {
+            kind: prefix === "-" ? "removed" : "added",
+            text: bytes.toString("utf8"),
+            newline,
+            runs: [],
+          },
+        ],
   );
 }
 
