@@ -2,33 +2,26 @@ import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
-import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
-import {
-  applyFileRpc,
-  applyGroupRpc,
-  applyLinesRpc,
-  applyModeRpc,
-  diffRpc,
-  groupRpc,
-} from "../shared/diff";
+import { applyFileRpc, applyGroupRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
 import { viewSettings } from "../shared/settings";
 import type { ViewValues } from "../shared/settings";
 import type { Controls } from "./actions";
-import { apply, staleMessage } from "./apply";
-import type { Server, Target } from "./apply";
+import { apply, misalignedMessage, staleMessage } from "./apply";
+import type { Server, Target, Where } from "./apply";
 import { confirmation } from "./confirmation";
 import type { Layout } from "./diff-style";
 import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
-import { fileAfter, groups, openAfter, placeholder, toggled } from "./groups";
-import type { GroupName, Open, OpenFile } from "./groups";
+import { fileAfter, openAfter, placeholder, toggled } from "./groups";
+import type { Open } from "./groups";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { viewSettingsOf } from "./settings";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
@@ -49,51 +42,13 @@ interface Request {
   target: Target;
 }
 
-// The queries of a file's diff, as opened from its group, collapsed or not, with every line of the
-// file or only what its hunks take, and of the diffs of all of a group's files or of those of them
-// at the paths.
-function useDiffQueries(directory: string) {
-  const readDiff = useRpc(diffRpc);
-  const readGroup = useRpc(groupRpc);
-
-  return useMemo(
-    () => ({
-      groupQuery: (group: GroupName, paths?: readonly string[]) =>
-        queryOptions({
-          queryKey: [directory, "group", group, ...(paths ?? [])],
-          queryFn: async () => {
-            const read = await readGroup({ directory, group, paths });
-
-            return read;
-          },
-        }),
-      query: (file: OpenFile, expand: boolean, entire = false) =>
-        queryOptions({
-          queryKey: [directory, "diff", groups[file.group].side, file.path, expand, entire],
-          queryFn: async () => {
-            const read = await readDiff({
-              directory,
-              path: file.path,
-              side: groups[file.group].side,
-              expand,
-              entire,
-            });
-
-            return read;
-          },
-        }),
-    }),
-    [directory, readDiff, readGroup],
-  );
-}
-
 // Runs the actions the panel's buttons ask for, once confirmed where they ask for it, one at a time,
-// on the diff `shownDiff` gives where they act on the one shown. After each, the page's selection
-// is cleared, since what it selected may be gone, `onApplied` hears of it, and a refused one says
-// why. The controls stay the same until another button is armed or an action starts or ends, so the
+// on the diff `shownDiff` gives where they act on the one shown, as read with whitespace changes
+// hidden or not. After each, the page's selection is cleared, since what it selected may be gone,
+// `onApplied` hears of it, and a refused one says why. The controls stay the same until another button is armed or an action starts or ends, so the
 // bars rendered with them aren't rendered again with each of the panel's renders.
 function useControls(
-  directory: string,
+  where: Where,
   shownDiff: Server["shownDiff"],
   onApplied: () => Promise<void>,
 ): Controls {
@@ -111,13 +66,17 @@ function useControls(
 
   const { mutateAsync, isPending } = useMutation({
     mutationFn: async ({ operation, target }: Request) => {
-      const status = await apply(server, directory, operation, target);
+      const status = await apply(server, where, operation, target);
 
       return status;
     },
-    onSuccess: (status, { target }) => {
+    onSuccess: (status, { operation, target }) => {
       if (status === "stale") {
         toast.show(staleMessage(target), { variant: "warning" });
+      }
+
+      if (status === "misaligned") {
+        toast.show(misalignedMessage(operation), { variant: "warning" });
       }
     },
     onError: (error) => {
@@ -261,7 +220,8 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const focus = useMemo(() => keyboardFocus(), []);
-  const diffs = useDiffQueries(directory);
+  const [hideWhitespace, setHideWhitespace] = useState(false);
+  const where = { directory, hideWhitespace };
   const next = useMemo(() => fileAfter(sidebar.open, changes.data), [sidebar.open, changes.data]);
   const readVersion = useRpc(versionRpc);
   const refresh = useMemo(() => refreshOf(queryClient, directory), [queryClient, directory]);
@@ -286,7 +246,17 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
     }
   }
 
-  const controls = useControls(directory, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
+  const controls = useControls(where, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
+
+  const whitespace = useMemo(
+    () => ({
+      hidden: hideWhitespace,
+      onToggle: () => {
+        setHideWhitespace((hidden) => !hidden);
+      },
+    }),
+    [hideWhitespace],
+  );
 
   const styles = useMemo(
     () =>
@@ -327,10 +297,10 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
               open={sidebar.open}
               placeholder={placeholder(changes.data)}
               layout={layout}
-              fileQuery={diffs.query}
-              groupQuery={diffs.groupQuery}
+              directory={directory}
               next={next}
               filter={sidebar.filter}
+              whitespace={whitespace}
               controls={controls}
               theme={theme}
             />

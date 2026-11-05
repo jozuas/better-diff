@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "../test/repository";
 import { batchedChanges } from "./batches";
-import type { Side } from "./diff";
+import type { Side } from "./file-changes";
 
 const groups: [Group, Side][] = [
   ["modified", "unstaged"],
@@ -22,19 +22,19 @@ const groups: [Group, Side][] = [
 ];
 
 test.each(groups)(
-  "reads each %s file a diff of several reads as its own diff does, however the files changed",
+  "reads each %s file a diff of several reads as its own diff does, however the files changed, with whitespace changes hidden or not",
   async (group, side) => {
     await fc.assert(
-      fc.asyncProperty(changedFiles, fc.boolean(), async (files, renames) => {
+      fc.asyncProperty(changedFiles, fc.boolean(), fc.boolean(), async (files, renames, hide) => {
         await inRepository(async (repository) => {
           runGit(repository, ["config", "status.renames", String(renames)]);
           changeFiles(repository, files);
 
           const listings = await listingsOf(repository, group);
-          const batched = await batchedChanges(repository, listings, side);
+          const batched = await batchedChanges(repository, listings, side, hide);
 
           expect(batched).toStrictEqual(
-            await eachOnItsOwn(repository, listings, side, [...batched.keys()]),
+            await eachOnItsOwn(repository, listings, side, [...batched.keys()], hide),
           );
         });
       }),
@@ -93,6 +93,28 @@ test("reads with a diff of several a file whose lines start as a file's diff doe
 
     await expect(batchedChanges(repository, listings, "unstaged")).resolves.toStrictEqual(
       await eachOnItsOwn(repository, listings, "unstaged", ["a", "b"]),
+    );
+  });
+});
+
+test("reads with a diff of several, with whitespace changes hidden, files whose changes are all to whitespace", async () => {
+  await inRepository(async (repository) => {
+    for (const path of ["a", "b", "c"]) {
+      writeFile(repository, path, `${path}\n`);
+    }
+
+    commitAll(repository);
+    writeFile(repository, "a", " a\n");
+    writeFile(repository, "b", "b\r\n");
+    writeFile(repository, "c", "x\n");
+
+    const listings = await listingsOf(repository, "modified");
+    const batched = await batchedChanges(repository, listings, "unstaged", true);
+
+    expect([...batched.keys()].toSorted()).toStrictEqual(["a", "b", "c"]);
+    expect(batched.get("a")?.withoutWhitespace).toStrictEqual(Buffer.alloc(0));
+    expect(batched).toStrictEqual(
+      await eachOnItsOwn(repository, listings, "unstaged", ["a", "b", "c"], true),
     );
   });
 });

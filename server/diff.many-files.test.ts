@@ -3,7 +3,8 @@ import { expect, test } from "vitest";
 import { manyPaths } from "../test/many-files";
 import { inRepository, runGit, timeout, writeFile } from "../test/repository";
 import { applyChanges } from "./diff";
-import type { ChangedFile, Changes } from "./diff";
+import type { ChangedFile } from "./diff";
+import type { Changes } from "./file-changes";
 
 // Each file, with changes that give only what an action goes by: that there are some, and how git
 // status lists the file.

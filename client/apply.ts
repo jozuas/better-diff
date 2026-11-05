@@ -6,7 +6,7 @@ import type { GroupName, OpenFile } from "./groups";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
 
-type Status = RpcOutput<typeof applyFileRpc>["status"];
+type Status = RpcOutput<typeof applyLinesRpc>["status"];
 
 type Selection = RpcInput<typeof applyLinesRpc>["lines"];
 
@@ -41,6 +41,13 @@ interface ListedGroup {
 
 export type Target = ShownFile | ShownMode | ListedFile | ListedGroup;
 
+// The worktree's directory, and whether diffs are read with whitespace changes hidden, as the
+// version an action on one is chosen from was.
+export interface Where {
+  directory: string;
+  hideWhitespace: boolean;
+}
+
 // What an action asks the server, and the diff shown.
 export interface Server {
   // Undefined until it's read.
@@ -56,7 +63,7 @@ export interface Server {
 // doesn't list, and one on the files selected reaches only them.
 async function applyToGroup(
   server: Server,
-  directory: string,
+  { directory }: Where,
   operation: Operation,
   { group, paths, selected }: ListedGroup,
 ): Promise<Status> {
@@ -75,11 +82,11 @@ function listedVersion(server: Server, { file, shown }: ListedFile): string | nu
 
 async function applyToFile(
   server: Server,
-  directory: string,
+  where: Where,
   operation: Operation,
   target: ShownFile | ListedFile,
 ): Promise<Status> {
-  const action = { directory, path: target.file.path, operation };
+  const action = { ...where, path: target.file.path, operation };
 
   if ("shown" in target) {
     const { status } = await server.applyFile({
@@ -101,32 +108,38 @@ async function applyToFile(
 
 async function applyToMode(
   server: Server,
-  directory: string,
+  where: Where,
   operation: Operation,
   { file, version }: ShownMode,
 ): Promise<Status> {
-  const { status } = await server.applyMode({ directory, path: file.path, operation, version });
+  const { status } = await server.applyMode({ ...where, path: file.path, operation, version });
 
   return status;
 }
 
 export async function apply(
   server: Server,
-  directory: string,
+  where: Where,
   operation: Operation,
   target: Target,
 ): Promise<Status> {
   if ("group" in target) {
-    const status = await applyToGroup(server, directory, operation, target);
+    const status = await applyToGroup(server, where, operation, target);
 
     return status;
   }
 
   const status = await ("mode" in target
-    ? applyToMode(server, directory, operation, target)
-    : applyToFile(server, directory, operation, target));
+    ? applyToMode(server, where, operation, target)
+    : applyToFile(server, where, operation, target));
 
   return status;
+}
+
+// Why an action on lines selected with whitespace changes hidden was refused, as git lines them up
+// otherwise without hiding them.
+export function misalignedMessage(operation: Operation): string {
+  return `With whitespace changes shown, git lines these lines up differently, so nothing was done. Show whitespace changes to ${operation} them.`;
 }
 
 // Why an action on the target was refused as stale.

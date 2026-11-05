@@ -37,12 +37,13 @@ export interface ChangedFile {
   changed: string;
 }
 
-// Ten lines, or ten with one of the first few changed, so a file is often similar enough to
-// another for git to pair them as a rename, and often the same, which leaves git a choice of
-// which to pair.
+// Ten lines, or ten with one of the first few changed or indented, so a file is often similar
+// enough to another for git to pair them as a rename, and often the same, which leaves git a choice
+// of which to pair, or the same but for whitespace.
 const content = fc.constantFrom(
   tenLines,
   ...["1", "2", "3"].map((line) => tenLines.replace(`${line}\n`, "x\n")),
+  tenLines.replace("4\n", "\t4\n"),
 );
 
 // A few committed files, and what happens to each after the commit.

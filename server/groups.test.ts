@@ -26,18 +26,24 @@ type Group = (typeof groups)[number];
 // The diff each group's files are shown with.
 const groupSides = { modified: "unstaged", untracked: "unstaged", staged: "staged" } as const;
 
-// Each file changes.list lists in the group, with its diff as diff.read reads it, or the error
-// diff.read fails with.
+// Each file changes.list lists in the group, with its diff as diff.read reads it, with whitespace
+// changes hidden or not, or the error diff.read fails with.
 async function eachFile(
   repository: string,
   group: Group,
+  hideWhitespace = false,
 ): Promise<RpcOutput<typeof groupRpc>["files"]> {
   const { [group]: paths } = await listChanges({ directory: repository });
 
   const diffs = await Promise.all(
     paths.map(async (path) => {
       try {
-        const diff = await readDiff({ directory: repository, path, side: groupSides[group] });
+        const diff = await readDiff({
+          directory: repository,
+          path,
+          side: groupSides[group],
+          hideWhitespace,
+        });
 
         return Object.assign(diff, { path });
       } catch (error) {
@@ -50,16 +56,16 @@ async function eachFile(
 }
 
 test.each(groups)(
-  "reads each %s file as changes.list lists it and diff.read reads it",
+  "reads each %s file as changes.list lists it and diff.read reads it, with whitespace changes hidden or not",
   async (group) => {
     await fc.assert(
-      fc.asyncProperty(files, async (all) => {
+      fc.asyncProperty(files, fc.boolean(), async (all, hideWhitespace) => {
         await inRepository(async (repository) => {
           setUp(repository, all, "myers");
 
-          const { files: read } = await readGroup({ directory: repository, group });
+          const { files: read } = await readGroup({ directory: repository, group, hideWhitespace });
 
-          expect(read).toStrictEqual(await eachFile(repository, group));
+          expect(read).toStrictEqual(await eachFile(repository, group, hideWhitespace));
         });
       }),
       { numRuns: 20 },

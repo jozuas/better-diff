@@ -9,7 +9,7 @@ test("counts a text diff's added and removed lines, with thousands separated", (
   });
 });
 
-test.each(["unchanged", "renamed", "symlink", "binary", "mode", "unmerged"] as const)(
+test.each(["unchanged", "renamed", "symlink", "binary", "mode", "unmerged", "whitespace"] as const)(
   "counts nothing for a diff of kind %s",
   (kind) => {
     expect(countsOf({ kind, added: 0, removed: 0 })).toBeUndefined();

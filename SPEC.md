@@ -42,6 +42,15 @@ Replicates Sublime Merge as much as possible:
 - A selection stays within one hunk.
 - In side-by-side, the selection is in whichever side has focus: removals or additions.
 
+### Whitespace changes
+
+- A "Hide whitespace" switch on the file bar hides changes only to whitespace, as `git diff --ignore-all-space` hides them, and as lazygit does: a line whose only change is to whitespace shows unchanged, as the new version has it, and a hunk with no other changes doesn't show. The counts on the file bar are of the lines shown.
+- It's for the whole panel: it stays on across files and groups until it's switched off, and it isn't kept once Paseo reloads, so a later session never stages or discards changes it doesn't show. While it's on, it's in the accent colour on every file bar.
+- Switching it keeps the line at the top of the view where it was, or the next line the diff still shows.
+- Hunk and line actions act only on the changes shown, as in lazygit and Magit: changes only to whitespace stay as they are. File actions, and actions on a group or on the selected files, act on all of each file's changes, as they include a mode change.
+- Where hiding whitespace changes lines the versions up differently from git's full diff, so that acting on the selected lines would make other changes than the ones shown, the action changes nothing, and says to show whitespace changes to act on those lines.
+- A file whose only changes are to whitespace shows "Only whitespace changes" instead of its diff, and its file actions stage, unstage or discard them.
+
 ### Refreshing
 
 - The view refreshes as the worktree and the index change, as an agent changes them, within a second or so, whether or not Paseo's window has focus.
@@ -123,7 +132,6 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 ### Later
 
 - Sending line comments to an agent.
-- Show/hide whitespace changes.
 - Keyboard shortcuts for the other actions: on lines, mode changes, and in the sidebar.
 - The actions of a file's and a group's buttons in right-click menus too.
 - Mobile.

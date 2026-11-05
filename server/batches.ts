@@ -1,7 +1,7 @@
 import { withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
-import { changesFrom, diffOptions, listingOf } from "./diff";
-import type { Changes, Listing, Side } from "./diff";
+import { changesFrom, diffOptions, ignoringWhitespace, listingOf } from "./file-changes";
+import type { Changes, Listing, Side } from "./file-changes";
 import { git } from "./git";
 import { headerOf, lineStarts } from "./patch";
 import type { Header } from "./patch";
@@ -57,36 +57,61 @@ function pathsOf({ path, listing }: ListedFile): string[] {
   return listing.original === undefined ? [path] : [listing.original, path];
 }
 
-// The diff of the files, or an empty one, of none of them, where git fails, as where it can't read
-// one of them, or one moved is gone.
+// The diff of the files, with the options.
 async function diffOf(
   directory: string,
   batch: Batch,
   side: Side,
   files: readonly ListedFile[],
+  options: readonly string[],
 ): Promise<Buffer> {
   const paths = files.flatMap(pathsOf);
   // The files a moved file's diff has intent-to-add.
   const added = files.map(({ path }) => path);
 
+  const diff =
+    batch === "moved"
+      ? await withIntentToAdd(directory, added, async (index) => {
+          const movedDiff = await git(directory, "diff", options, paths, { index });
+
+          return movedDiff;
+        })
+      : await git(
+          directory,
+          "diff",
+          [...diffOptions[side], ...(batch === "own" ? ["--no-renames"] : []), ...options],
+          paths,
+        );
+
+  return diff;
+}
+
+interface Diffs {
+  diff: Buffer;
+  // Where whitespace changes are to be hidden.
+  withoutWhitespace: Buffer | undefined;
+}
+
+// The diff of the files, and with whitespace changes hidden where they're to be hidden, or undefined
+// where git fails, as where it can't read one of the files, or one moved is gone.
+async function diffsOf(
+  directory: string,
+  batch: Batch,
+  side: Side,
+  files: readonly ListedFile[],
+  hideWhitespace: boolean | undefined,
+): Promise<Diffs | undefined> {
   try {
-    const diff =
-      batch === "moved"
-        ? await withIntentToAdd(directory, added, async (index) => {
-            const movedDiff = await git(directory, "diff", [], paths, { index });
+    const [diff, withoutWhitespace] = await Promise.all([
+      diffOf(directory, batch, side, files, []),
+      hideWhitespace === true
+        ? diffOf(directory, batch, side, files, ignoringWhitespace)
+        : undefined,
+    ]);
 
-            return movedDiff;
-          })
-        : await git(
-            directory,
-            "diff",
-            batch === "own" ? [...diffOptions[side], "--no-renames"] : diffOptions[side],
-            paths,
-          );
-
-    return diff;
+    return { diff, withoutWhitespace };
   } catch {
-    return Buffer.alloc(0);
+    return undefined;
   }
 }
 
@@ -164,44 +189,58 @@ function isPartOf({ path, listing: { original } }: ListedFile): (header: Header)
   return (header) => header["rename from"] === from && header["rename to"] === to;
 }
 
-// Each file's changes in the diff of several. A file the diff has no part for is left out: git pairs
-// a renamed file with another than git status did, or none, or a file's changes are gone, or the
-// diff of a file `a` leaves out what's in a directory `a/`, as where one replaced it. The diff of a
-// file with merge conflicts is a part of no file's.
-function changesIn(diff: Buffer, files: readonly ListedFile[]): [string, Changes][] {
+// The file's parts of a diff of several, together.
+function ownDiff(parts: readonly DiffPart[], file: ListedFile): Buffer {
+  const isOwn = isPartOf(file);
+
+  return Buffer.concat(parts.flatMap(({ header, diff }) => (isOwn(header) ? [diff] : [])));
+}
+
+// Each file's changes in the diffs of several. A file the diff has no part for is left out: git
+// pairs a renamed file with another than git status did, or none, or a file's changes are gone, or
+// the diff of a file `a` leaves out what's in a directory `a/`, as where one replaced it. The diff
+// of a file with merge conflicts is a part of no file's. The diff with whitespace changes hidden
+// has no part for a file whose changes are all to whitespace, unless it's renamed or its mode
+// changed.
+function changesIn(
+  { diff, withoutWhitespace }: Diffs,
+  files: readonly ListedFile[],
+): [string, Changes][] {
   const parts = partsOf(diff);
+  const hiddenParts = withoutWhitespace === undefined ? undefined : partsOf(withoutWhitespace);
 
   return files.flatMap((file) => {
     const { path, listing } = file;
-    const isOwn = isPartOf(file);
-    const own = parts.filter(({ header }) => isOwn(header));
+    const own = ownDiff(parts, file);
 
-    return own.length === 0
-      ? []
-      : [
-          [
-            path,
-            changesFrom(
-              Buffer.concat(own.map((part) => part.diff)),
-              path,
-              listing.original,
-              listing,
-            ),
-          ],
-        ];
+    if (own.length === 0) {
+      return [];
+    }
+
+    const changes = changesFrom(own, path, listing.original, listing);
+
+    return [
+      [
+        path,
+        hiddenParts === undefined
+          ? changes
+          : { ...changes, withoutWhitespace: ownDiff(hiddenParts, file) },
+      ],
+    ];
   });
 }
 
-// Each file's changes that the diff of several reads.
+// Each file's changes that the diffs of several read.
 async function readBatch(
   directory: string,
   side: Side,
   batch: Batch,
   files: readonly ListedFile[],
+  hideWhitespace: boolean | undefined,
 ): Promise<[string, Changes][]> {
-  const diff = await diffOf(directory, batch, side, files);
+  const diffs = await diffsOf(directory, batch, side, files, hideWhitespace);
 
-  return changesIn(diff, files);
+  return diffs === undefined ? [] : changesIn(diffs, files);
 }
 
 // Fifty items at a time: as arguments, the paths of as many files as a group can have would be
@@ -210,12 +249,14 @@ function chunksOf<T>(items: readonly T[]): T[][] {
   return items.length === 0 ? [] : [items.slice(0, 50), ...chunksOf(items.slice(50))];
 }
 
-// The changes on the side of each of the files, by path, that diffs of several read. They're the
-// changes the file's diff on its own would read: a file left out has to be read on its own.
+// The changes on the side of each of the files, by path, that diffs of several read, with their diffs
+// with whitespace changes hidden where they're to be hidden. They're the changes the file's diff on
+// its own would read: a file left out has to be read on its own.
 export async function batchedChanges(
   directory: string,
   listings: ReadonlyMap<string, readonly Entry[]>,
   side: Side,
+  hideWhitespace?: boolean,
 ): Promise<Map<string, Changes>> {
   const files = [...listings].map(([path, listed]) => ({ path, listing: listingOf(listed, side) }));
 
@@ -227,7 +268,7 @@ export async function batchedChanges(
   );
 
   const read = await readEach(batches, async ({ batch, chunk }) => {
-    const changes = await readBatch(directory, side, batch, chunk);
+    const changes = await readBatch(directory, side, batch, chunk, hideWhitespace);
 
     return changes;
   });

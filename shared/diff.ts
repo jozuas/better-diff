@@ -12,15 +12,29 @@ const run = z.tuple([z.int().positive(), z.string().nullable()]);
 // language the highlighter doesn't know, or too long to highlight.
 const runs = z.array(run);
 
+// Whether to hide changes only to whitespace, as `git diff --ignore-all-space` hides them: a line
+// whose only change is to whitespace is unchanged, as the new version has it.
+const hideWhitespace = z.boolean().optional();
+
 const diff = z.object({
   // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
-  // date.
+  // date, and with whitespace changes hidden or shown, which shows other lines.
   version: z.string(),
   // Text, which has hunks unless the file is new or deleted and empty, or a change shown without
   // lines: none, a rename on its own, a symlink's, a binary file's, a mode change on its own, or a
   // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
-  // A renamed file with other changes is what they are.
-  kind: z.enum(["text", "unchanged", "renamed", "symlink", "binary", "mode", "unmerged"]),
+  // A renamed file with other changes is what they are. With whitespace changes hidden, a text diff
+  // whose changes to lines are all to whitespace is a whitespace one, without lines.
+  kind: z.enum([
+    "text",
+    "unchanged",
+    "renamed",
+    "symlink",
+    "binary",
+    "mode",
+    "unmerged",
+    "whitespace",
+  ]),
   // The path the file had before the side's changes, if they rename it. On the unstaged side,
   // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.
   renamedFrom: z.string().optional(),
@@ -70,6 +84,7 @@ export const diffRpc = defineRpc({
     // rather than only what showing the hunks takes. The hunks of a large file are a small part of
     // it.
     entire: z.boolean().optional(),
+    hideWhitespace,
   }),
   output: diff,
 });
@@ -83,7 +98,7 @@ const paths = z.array(z.string()).readonly().optional();
 
 export const groupRpc = defineRpc({
   name: "diff.read-group",
-  input: z.object({ directory: z.string(), group, paths }),
+  input: z.object({ directory: z.string(), group, paths, hideWhitespace }),
   output: z.object({
     // The group's files, or those of them at the paths, in the order changes.list lists them, each
     // with its diff as diff.read reads it, collapsed as it collapses it, and without contents: the
@@ -104,6 +119,8 @@ const action = {
   // Stage and discard act on the unstaged diff, unstage on the staged one.
   operation: z.enum(["stage", "unstage", "discard"]),
   version: z.string(),
+  // As the diff the action was chosen from was read.
+  hideWhitespace,
 };
 
 // Stale, and nothing changed, if the diff has changed since it was read.
@@ -114,10 +131,15 @@ export const applyLinesRpc = defineRpc({
   input: z.object({
     ...action,
     // Each line by its hunk's index in the diff and its own index in the hunk, unchanged lines
-    // included. Selecting an unchanged line changes nothing.
+    // included. Selecting an unchanged line changes nothing. With whitespace changes hidden, the
+    // changes the lines are in the diff that shows them all are acted on, and changes only to
+    // whitespace are left as they are.
     lines: z.array(z.object({ hunk: index, line: index })),
   }),
-  output: status,
+  // Misaligned, and nothing changed, where acting on the changes in the diff that shows them all
+  // would leave other lines than the diff with whitespace changes hidden shows, as where hiding
+  // them lines the versions up differently.
+  output: z.object({ status: z.enum(["applied", "stale", "misaligned"]) }),
 });
 
 // All of the file's changes, of any kind.

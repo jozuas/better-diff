@@ -8,6 +8,7 @@ test.each([
   ["symlink", "Symlink"],
   ["binary", "Binary file"],
   ["unmerged", "Merge conflicts"],
+  ["whitespace", "Only whitespace changes"],
 ] as const)("labels a diff of kind %s %j instead of showing it", (kind, label) => {
   expect(labelOf({ kind, hunks: [] })).toBe(label);
 });

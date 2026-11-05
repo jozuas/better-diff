@@ -12,6 +12,7 @@ const labels: Record<Exclude<Diff["kind"], "text">, string | undefined> = {
   binary: "Binary file",
   mode: undefined,
   unmerged: "Merge conflicts",
+  whitespace: "Only whitespace changes",
 };
 
 const collapsedLabels: Record<NonNullable<Diff["collapsed"]>, string> = {

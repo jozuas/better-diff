@@ -1,21 +1,32 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
-import { aloneIntentToAdd, indexOf, readStatus, withIntentToAdd } from "./changes";
-import type { Entry } from "./changes";
+import { indexOf } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
+import { changesOf, versionOfChanges } from "./file-changes";
+import type { Changes, Side } from "./file-changes";
 import { git } from "./git";
 import { highlighted } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
-import { buildModePatch, buildPatch, isRename, modeOf, parseDiff, reverse } from "./patch";
+import {
+  buildModePatch,
+  buildPatch,
+  kindOf,
+  lineStarts,
+  modeOf,
+  parseDiff,
+  reverse,
+} from "./patch";
 import type { FileDiff } from "./patch";
-import { versionOf } from "./version";
-
-export type Side = RpcInput<typeof diffRpc>["side"];
+import { sameChanges } from "./same-changes";
 
 type Action = RpcInput<typeof applyFileRpc>;
 
 type Status = RpcOutput<typeof applyFileRpc>;
+
+type LinesStatus = RpcOutput<typeof applyLinesRpc>;
+
+type Kind = RpcOutput<typeof diffRpc>["kind"];
 
 // The diff each operation acts on.
 const sides: Record<Action["operation"], Side> = {
@@ -28,153 +39,43 @@ const sides: Record<Action["operation"], Side> = {
 // `git restore --staged` can't, before the first commit.
 const fileCommands = { stage: "add", unstage: "reset", discard: "restore" } as const;
 
-export const diffOptions: Record<Side, string[]> = { unstaged: [], staged: ["--cached"] };
+// Whether the diff changes lines, whatever else it changes, such as the file's mode: git prints a
+// hunk, with every line of context, only for a change to lines, and no other line starts as a
+// hunk's start does.
+function changesLines(diff: Buffer): boolean {
+  const [hunk] = lineStarts(diff, "@@ -");
 
-export interface Changes {
-  diff: Buffer;
-  renamedFrom: string | undefined;
-  // What the diff covers: the file, and a renamed one's original path.
-  paths: string[];
-  // Whether the file isn't in the index, or is there intent-to-add.
-  untracked: boolean;
-  intentToAdd: boolean;
+  return hunk !== undefined;
 }
 
-// An untracked file's diff as a new file, as git diffs one added with --intent-to-add. `git diff
-// --no-index` reads a file named `-` from its input, and `git apply` refuses one spelled `./-`, so
-// that one is diffed intent-to-add, in an index of its own.
-async function newFileDiff(directory: string, path: string): Promise<Buffer> {
-  const diff =
-    path === "-"
-      ? await aloneIntentToAdd(directory, [path], async (index) => {
-          // Stryker disable next-line ArrayDeclaration: the index has only the file, so git diffs it alone either way.
-          const added = await git(directory, "diff", [], [path], { index });
-
-          return added;
-        })
-      : await git(directory, "diff", ["--no-index"], ["/dev/null", path]);
-
-  return diff;
-}
-
-// A file's own diff on the side. `git diff` leaves an untracked file out, though its changes are
-// all of its lines, so it's diffed as a new file.
-async function ownDiff(
-  directory: string,
-  path: string,
-  side: Side,
-  untracked: boolean,
-): Promise<Buffer> {
-  const diff = untracked
-    ? await newFileDiff(directory, path)
-    : await git(directory, "diff", diffOptions[side], [path]);
-
-  return diff;
-}
-
-// The diff of a renamed file's two paths, which shows the rename, where one of either path shows a
-// deletion or a new file. An untracked file is diffed intent-to-add, as git status found the
-// rename. There's no rename to diff where git status named the path a file was copied from, or
-// renamed from on the other side, or where the files changed after git status paired them, so git
-// no longer pairs them, or won't add a file that's gone.
-async function renameDiff(
-  directory: string,
-  paths: readonly [string, string],
-  side: Side,
-  untracked: boolean,
-): Promise<Buffer | undefined> {
-  const diff = untracked
-    ? await withIntentToAdd(directory, [paths[1]], async (index) => {
-        const renamed = await git(directory, "diff", [], paths, { index });
-
-        return renamed;
-      }).catch(() => Buffer.alloc(0))
-    : await git(directory, "diff", diffOptions[side], paths);
-
-  return isRename(diff) ? diff : undefined;
-}
-
-// How the entries git status lists a file in say its changes on a side are read. A file listed
-// twice, as deleted from the index and untracked, isn't renamed.
-export interface Listing {
-  // The path git status names as the one the file was renamed or copied from.
-  original: string | undefined;
-  untracked: boolean;
-  intentToAdd: boolean;
-}
-
-export function listingOf(listed: readonly Entry[], side: Side): Listing {
-  return {
-    original: listed[0]?.original,
-    untracked: side === "unstaged" && listed.some((entry) => entry.untracked),
-    intentToAdd: listed[0]?.intentToAdd === true,
-  };
-}
-
-// The file's changes, as its diff makes them: a rename where it renames the file from a path.
-export function changesFrom(
-  diff: Buffer,
-  path: string,
-  renamedFrom: string | undefined,
-  { untracked, intentToAdd }: Listing,
-): Changes {
-  return {
-    diff,
-    renamedFrom,
-    paths: renamedFrom === undefined ? [path] : [renamedFrom, path],
-    untracked,
-    intentToAdd,
-  };
-}
-
-// The file's changes on the side, as the entries git status lists it in say.
-export async function changesIn(
-  directory: string,
-  listed: readonly Entry[],
-  path: string,
-  side: Side,
-): Promise<Changes> {
-  const listing = listingOf(listed, side);
-  const { original, untracked } = listing;
-
-  if (original !== undefined) {
-    const renamed = await renameDiff(directory, [original, path], side, untracked);
-
-    if (renamed !== undefined) {
-      return changesFrom(renamed, path, original, listing);
-    }
+// What the changes' diff is, as shown, from what the diff shown is: with whitespace changes
+// hidden, what the diff that shows them is, but for a text diff whose changes to lines are all to
+// whitespace, which is a whitespace one.
+function kindShown({ diff, withoutWhitespace }: Changes, shown: Kind): Kind {
+  if (withoutWhitespace === undefined) {
+    return shown;
   }
 
-  const diff = await ownDiff(directory, path, side, untracked);
+  const kind = kindOf(diff);
 
-  return changesFrom(diff, path, undefined, listing);
-}
-
-async function changesOf(directory: string, path: string, side: Side): Promise<Changes> {
-  const entries = await readStatus(directory);
-
-  const changes = await changesIn(
-    directory,
-    entries.filter((entry) => entry.path === path),
-    path,
-    side,
-  );
-
-  return changes;
+  return kind === "text" && changesLines(diff) && !changesLines(withoutWhitespace)
+    ? "whitespace"
+    : kind;
 }
 
 function text(content: Buffer): string {
   return content.toString("utf8");
 }
 
-// The diff of the changes.
-export function diffOf({ diff, renamedFrom }: Changes): UnhighlightedDiff {
-  const { kind: diffKind, header, hunks, lines } = parseDiff(diff);
+// The diff of the changes, with whitespace changes hidden where they're hidden.
+export function diffOf(changes: Changes): UnhighlightedDiff {
+  const { diff, withoutWhitespace, renamedFrom } = changes;
+  const { kind: shownKind, header, hunks, lines } = parseDiff(withoutWhitespace ?? diff);
   const changed = hunks.flatMap((hunk) => hunk.lines);
 
   return {
-    version: versionOf(diff),
-    kind: diffKind,
+    version: versionOfChanges(changes),
+    kind: kindShown(changes, shownKind),
     renamedFrom,
     mode: modeOf(header),
     added: changed.filter(({ kind }) => kind === "added").length,
@@ -201,9 +102,10 @@ export async function readDiff({
   side,
   expand,
   entire,
+  hideWhitespace,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
   const [changes, generated] = await Promise.all([
-    changesOf(directory, path, side),
+    changesOf(directory, path, side, hideWhitespace),
     expand === true ? undefined : generatedPaths(directory, [path]),
   ]);
 
@@ -217,10 +119,10 @@ export async function readDiff({
 // The last apply to start on each index.
 const applying = new Map<string, Promise<unknown>>();
 
-async function after(
+async function after<Applied>(
   previous: Promise<unknown> | undefined,
-  apply: () => Promise<Status>,
-): Promise<Status> {
+  apply: () => Promise<Applied>,
+): Promise<Applied> {
   await Promise.allSettled([previous]);
 
   const status = await apply();
@@ -231,7 +133,10 @@ async function after(
 // Applies once the previous apply to the directory's index has finished. Two at once could both
 // find the diff unchanged, and the second would then apply to what the first left, where
 // `git apply` can find a patch's lines in another place.
-export async function inTurn(directory: string, apply: () => Promise<Status>): Promise<Status> {
+export async function inTurn<Applied>(
+  directory: string,
+  apply: () => Promise<Applied>,
+): Promise<Applied> {
   const index = await indexOf(directory);
   const applied = after(applying.get(index), apply);
 
@@ -244,20 +149,20 @@ export async function inTurn(directory: string, apply: () => Promise<Status>): P
 
 // In turn, acts on the diff the operation acts on, if it is still the one the action was chosen
 // from, or as it is, without a version.
-async function applyToFile(
-  { directory, path, operation, version }: Action,
-  act: (changes: Changes) => Promise<void>,
-): Promise<Status> {
+async function applyToFile<Applied>(
+  { directory, path, operation, version, hideWhitespace }: Action,
+  act: (changes: Changes) => Promise<Applied>,
+): Promise<Applied | { status: "stale" }> {
   const status = await inTurn(directory, async () => {
-    const changes = await changesOf(directory, path, sides[operation]);
+    const changes = await changesOf(directory, path, sides[operation], hideWhitespace);
 
-    if (version !== null && versionOf(changes.diff) !== version) {
-      return { status: "stale" };
+    if (version !== null && versionOfChanges(changes) !== version) {
+      return { status: "stale" } as const;
     }
 
-    await act(changes);
+    const applied = await act(changes);
 
-    return { status: "applied" };
+    return applied;
   });
 
   return status;
@@ -280,31 +185,37 @@ async function applyPatch(
   });
 }
 
-// Stages, unstages or discards the selected lines' changes.
+// Stages, unstages or discards the selected lines' changes, found in the diff that shows them all
+// where whitespace changes are hidden, unless they leave other lines there than in the diff shown.
 export async function applyLines({
   lines,
   ...action
-}: RpcInput<typeof applyLinesRpc>): Promise<Status> {
+}: RpcInput<typeof applyLinesRpc>): Promise<LinesStatus> {
   const { directory, operation } = action;
 
-  const status = await applyToFile(action, async ({ diff }) => {
+  const status = await applyToFile(action, async ({ diff, withoutWhitespace }) => {
     const parsed = parseDiff(diff);
+    const shown = withoutWhitespace === undefined ? parsed : parseDiff(withoutWhitespace);
 
     for (const { hunk, line } of lines) {
-      if (parsed.hunks[hunk]?.lines[line] === undefined) {
+      if (shown.hunks[hunk]?.lines[line] === undefined) {
         throw new Error(`The diff has no line ${line} in hunk ${hunk}.`);
       }
     }
 
-    const selected = new Set(lines.map(({ hunk, line }) => `${hunk}:${line}`));
+    const isSelected = sameChanges(parsed, shown, lines, operation !== "stage");
 
-    const patch = buildPatch(patchedBy(operation, parsed), (hunk, line) =>
-      selected.has(`${hunk}:${line}`),
-    );
+    if (isSelected === undefined) {
+      return { status: "misaligned" } as const;
+    }
+
+    const patch = buildPatch(patchedBy(operation, parsed), isSelected);
 
     if (patch.length > 0) {
       await applyPatch(directory, operation, patch);
     }
+
+    return { status: "applied" } as const;
   });
 
   return status;
@@ -322,6 +233,8 @@ export async function applyMode(action: RpcInput<typeof applyModeRpc>): Promise<
     }
 
     await applyPatch(directory, operation, buildModePatch(patchedBy(operation, parsed)));
+
+    return { status: "applied" } as const;
   });
 
   return status;
@@ -410,6 +323,8 @@ export async function applyFile(action: Action): Promise<Status> {
     const paths = operation === "unstage" ? [path] : changes.paths;
 
     await applyChanges(directory, operation, [{ path, changes: { ...changes, paths } }]);
+
+    return { status: "applied" } as const;
   });
 
   return status;

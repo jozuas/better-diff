@@ -5,8 +5,10 @@ import { batchedChanges, readEach } from "./batches";
 import { groupsOf, readStatus } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
-import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
-import type { ChangedFile, Changes } from "./diff";
+import { applyChanges, diffOf, inTurn } from "./diff";
+import type { ChangedFile } from "./diff";
+import { changesIn } from "./file-changes";
+import type { Changes } from "./file-changes";
 import { highlightedTogether } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
 
@@ -35,9 +37,12 @@ async function readFile(
   path: string,
   group: Group,
   batched: Changes | undefined,
+  hideWhitespace: boolean | undefined,
 ): Promise<GroupFile> {
   try {
-    const changes = batched ?? (await changesIn(directory, listed, path, groupSides[group]));
+    const changes =
+      batched ?? (await changesIn(directory, listed, path, groupSides[group], hideWhitespace));
+
     const diff = diffOf(changes);
 
     return { shown: Object.assign(diff, { path }), changed: { path, changes } };
@@ -64,12 +69,14 @@ function groupPaths(
 }
 
 // The group's files at the paths, as git status lists them, each with the entries that list it:
-// two for a file deleted from the index and untracked.
+// two for a file deleted from the index and untracked, and with whitespace changes hidden where
+// they're to be hidden.
 async function filesOf(
   directory: string,
   entries: readonly Entry[],
   group: Group,
   read: readonly string[],
+  hideWhitespace?: boolean,
 ): Promise<GroupFile[]> {
   const listings = new Map<string, Entry[]>(read.map((path) => [path, []]));
 
@@ -77,10 +84,10 @@ async function filesOf(
     listings.get(entry.path)?.push(entry);
   }
 
-  const batched = await batchedChanges(directory, listings, groupSides[group]);
+  const batched = await batchedChanges(directory, listings, groupSides[group], hideWhitespace);
 
   const files = await readEach([...listings], async ([path, listed]) => {
-    const file = await readFile(directory, listed, path, group, batched.get(path));
+    const file = await readFile(directory, listed, path, group, batched.get(path), hideWhitespace);
 
     return file;
   });
@@ -92,9 +99,17 @@ export async function readGroup({
   directory,
   group,
   paths,
+  hideWhitespace,
 }: RpcInput<typeof groupRpc>): Promise<RpcOutput<typeof groupRpc>> {
   const entries = await readStatus(directory);
-  const files = await filesOf(directory, entries, group, groupPaths(entries, group, paths));
+
+  const files = await filesOf(
+    directory,
+    entries,
+    group,
+    groupPaths(entries, group, paths),
+    hideWhitespace,
+  );
 
   const generated = await generatedPaths(
     directory,
@@ -129,7 +144,7 @@ export async function applyGroup({
     const listed = new Set(paths);
 
     if (read.length !== listed.size || read.some((path) => !listed.has(path))) {
-      return { status: "stale" };
+      return { status: "stale" } as const;
     }
 
     const files = await filesOf(directory, entries, group, read);
@@ -140,7 +155,7 @@ export async function applyGroup({
       files.flatMap(({ changed }) => changed ?? []),
     );
 
-    return { status: "applied" };
+    return { status: "applied" } as const;
   });
 
   return status;

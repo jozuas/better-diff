@@ -32,6 +32,7 @@ import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
 import { KeptPlaceContext, scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
+import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -187,6 +188,7 @@ interface GroupFilesProps {
   group: GroupName;
   // What the sidebar's files are filtered by.
   filter: string;
+  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -198,6 +200,7 @@ function GroupFiles({
   expanded,
   group,
   filter,
+  whitespace,
   controls,
   theme,
 }: GroupFilesProps): ReactElement {
@@ -284,6 +287,7 @@ function GroupFiles({
               onRun={() => {
                 onFileRun(index);
               }}
+              whitespace={whitespace}
               controls={controls}
               theme={theme}
             />,
@@ -317,7 +321,7 @@ function GroupFiles({
 
 interface GroupDiffProps extends Omit<GroupFilesProps, "read" | "view" | "sideBySide"> {
   // The query of the group's files' diffs.
-  query: UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
+  query: UseQueryOptions<GroupRead, Error, GroupRead, (string | boolean)[]>;
   layout: Layout;
 }
 

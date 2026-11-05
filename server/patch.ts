@@ -1,4 +1,4 @@
-interface Line {
+export interface Line {
   kind: "context" | "removed" | "added";
   // Without its prefix or newline.
   content: Buffer;
@@ -6,7 +6,7 @@ interface Line {
   newline: boolean;
 }
 
-interface Hunk {
+export interface Hunk {
   oldStart: number;
   newStart: number;
   lines: Line[];
@@ -145,7 +145,7 @@ function isSymlink(diff: Buffer): boolean {
 // What a file's diff is, from the lines git prints instead of hunks. For a file with merge
 // conflicts, git prints a diff against each side of the merge, or only names the file. A renamed
 // file is whatever its other changes are, and renamed only without any.
-function kindOf(diff: Buffer): Kind {
+export function kindOf(diff: Buffer): Kind {
   if (diff.length === 0) {
     return "unchanged";
   }
@@ -289,10 +289,13 @@ function narrow(lines: readonly Line[]): Hunk[] {
   return hunks;
 }
 
+// A file's diff, with what it is and every line of both versions.
+export type ParsedDiff = FileDiff & { kind: Kind; lines: Line[] };
+
 // A file's diff as git prints it with more lines of context than either version has, whose one
 // hunk has all of their lines, and its hunks as git prints them with three lines of context. A
 // diff of another kind has no lines.
-export function parseDiff(diff: Buffer): FileDiff & { kind: Kind; lines: Line[] } {
+export function parseDiff(diff: Buffer): ParsedDiff {
   const header = headerOf(diff);
   const kind = kindOf(diff);
 

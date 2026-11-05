@@ -1,21 +1,76 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRpc } from "@getpaseo/plugin/client";
+import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useCallback, useContext, useEffect, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
-import type { diffRpc, groupRpc } from "../shared/diff";
+import { diffRpc, groupRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import type { Where } from "./apply";
 import type { Layout } from "./diff-style";
 import { FileDiff } from "./file-diff";
 import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
+import { groups } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
+import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
 type GroupRead = RpcOutput<typeof groupRpc>;
+
+// The queries of a file's diff, as opened from its group, collapsed or not, with every line of the
+// file or only what its hunks take, and of the diffs of all of a group's files or of those of them
+// at the paths, with whitespace changes hidden or not. What one read last stays shown while it
+// reads another, as once whitespace changes are hidden or shown, but for every line of the file,
+// which shows the hunks of the diff it was read with: only the hunks show until it's read.
+function useDiffQueries({ directory, hideWhitespace }: Where) {
+  const readDiff = useRpc(diffRpc);
+  const readGroup = useRpc(groupRpc);
+
+  return useMemo(
+    () => ({
+      groupQuery: (group: GroupName, paths?: readonly string[]) =>
+        queryOptions({
+          queryKey: [directory, "group", group, hideWhitespace, ...(paths ?? [])],
+          queryFn: async () => {
+            const read = await readGroup({ directory, group, paths, hideWhitespace });
+
+            return read;
+          },
+          placeholderData: keepPreviousData,
+        }),
+      query: (file: OpenFile, expand: boolean, entire = false) =>
+        queryOptions({
+          queryKey: [
+            directory,
+            "diff",
+            groups[file.group].side,
+            file.path,
+            expand,
+            entire,
+            hideWhitespace,
+          ],
+          queryFn: async () => {
+            const read = await readDiff({
+              directory,
+              path: file.path,
+              side: groups[file.group].side,
+              expand,
+              entire,
+              hideWhitespace,
+            });
+
+            return read;
+          },
+          placeholderData: (previous) => (entire ? undefined : previous),
+        }),
+    }),
+    [directory, hideWhitespace, readDiff, readGroup],
+  );
+}
 
 interface ShownDiffProps {
   open: Open;
@@ -30,11 +85,12 @@ interface ShownDiffProps {
   groupQuery: (
     group: GroupName,
     paths?: readonly string[],
-  ) => UseQueryOptions<GroupRead, Error, GroupRead, string[]>;
+  ) => UseQueryOptions<GroupRead, Error, GroupRead, (string | boolean)[]>;
   // The file that opens once the open file leaves its group, if any.
   next: OpenFile | undefined;
   // What the sidebar's files are filtered by.
   filter: string;
+  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -72,6 +128,7 @@ function ShownDiff({
   next,
   filter,
   layout,
+  whitespace,
   controls,
   theme,
 }: ShownDiffProps): ReactElement {
@@ -92,6 +149,7 @@ function ShownDiff({
         group={group}
         filter=""
         layout={layout}
+        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -107,6 +165,7 @@ function ShownDiff({
         group={group}
         filter={filter}
         layout={layout}
+        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -122,6 +181,7 @@ function ShownDiff({
         query={(expand, entire) => fileQuery(open, expand, entire)}
         file={open}
         layout={layout}
+        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -130,16 +190,19 @@ function ShownDiff({
   );
 }
 
-interface DiffViewProps extends Omit<ShownDiffProps, "open"> {
+interface DiffViewProps extends Omit<ShownDiffProps, "open" | "fileQuery" | "groupQuery"> {
+  // The worktree's.
+  directory: string;
   open: Open | undefined;
   // What shows while nothing is open.
   placeholder: string;
 }
 
 // The open file's diff, or the diffs of the files the open group lists or of the files selected,
-// shown as the host's settings say.
-export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactElement {
+// shown as the host's settings say, with whitespace changes hidden or not.
+export function DiffView({ directory, open, placeholder, ...shown }: DiffViewProps): ReactElement {
   const fonts = useContext(FontSizesContext);
+  const diffs = useDiffQueries({ directory, hideWhitespace: shown.whitespace.hidden });
 
   const styles = useMemo(
     () =>
@@ -153,5 +216,5 @@ export function DiffView({ open, placeholder, ...shown }: DiffViewProps): ReactE
     return <Text style={styles.hint}>{placeholder}</Text>;
   }
 
-  return <ShownDiff open={open} {...shown} />;
+  return <ShownDiff open={open} fileQuery={diffs.query} groupQuery={diffs.groupQuery} {...shown} />;
 }

@@ -16,7 +16,7 @@ import {
 import { withSubmodule } from "../test/submodules";
 import { batchedChanges } from "./batches";
 import type { Entry } from "./changes";
-import type { Side } from "./diff";
+import type { Side } from "./file-changes";
 
 test("leaves out a staged file in a directory that replaced a file, which the file's diff leaves out", async () => {
   await inRepository(async (repository) => {
