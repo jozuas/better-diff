@@ -86,26 +86,32 @@ function Line({
   const fonts = useContext(FontSizesContext);
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
 
-  return (
+  const row = (
+    <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]}>
+      {numbers.map(({ side: version, number }) => (
+        <Text key={version} selectable={false} style={numberStyle}>
+          {number}
+        </Text>
+      ))}
+      <Text nativeID={id} selectable={selectable} style={styles.text}>
+        <LineSegments line={line} changes={changes} styles={styles} />
+      </Text>
+    </View>
+  );
+
+  // Only a file's last line can have no newline, and only it needs an element to have the note under
+  // it in, rather than one more element for each of the file's lines.
+  return line.newline ? (
+    row
+  ) : (
     <View>
-      <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]}>
-        {numbers.map(({ side: version, number }) => (
-          <Text key={version} selectable={false} style={numberStyle}>
-            {number}
-          </Text>
-        ))}
-        <Text nativeID={id} selectable={selectable} style={styles.text}>
-          <LineSegments line={line} changes={changes} styles={styles} />
-        </Text>
-      </View>
-      {line.newline ? null : (
-        <Text
-          selectable={false}
-          style={[styles.noNewline, { paddingLeft: numbers.length * fonts.number + textPadding }]}
-        >
-          No newline at end of file
-        </Text>
-      )}
+      {row}
+      <Text
+        selectable={false}
+        style={[styles.noNewline, { paddingLeft: numbers.length * fonts.number + textPadding }]}
+      >
+        No newline at end of file
+      </Text>
     </View>
   );
 }

@@ -60,6 +60,21 @@ function markSpans(changes: readonly TextRange[], trailing: number): Span<Mark |
   ];
 }
 
+// The colour of a piece of the text: its run's, but for whitespace without one, which shows the same
+// in any colour, and so takes the colour of the piece before it, if that's marked as it is. Then a
+// piece of that colour after it runs on from the piece before it, rather than starting another,
+// which the line would render as one more element.
+function colorOf(
+  piece: string,
+  color: string | undefined,
+  mark: Mark | undefined,
+  before: Segment | undefined,
+): string | undefined {
+  return color === undefined && /^\s+$/u.test(piece) && before !== undefined && before.mark === mark
+    ? before.color
+    : color;
+}
+
 // The text in pieces of different colours, each run's in its style's, and any text the runs don't
 // reach in its own, split where changed text and the trailing whitespace from `trailing` start and
 // end.
@@ -83,11 +98,12 @@ export function segmentsOf(
     const end = Math.min(color.end, mark.end);
     const piece = text.slice(start, end);
     const last = segments.at(-1);
+    const value = colorOf(piece, color.value, mark.value, last);
 
-    if (last !== undefined && last.color === color.value && last.mark === mark.value) {
+    if (last !== undefined && last.color === value && last.mark === mark.value) {
       last.text += piece;
     } else if (piece.length > 0) {
-      segments.push({ start, text: piece, color: color.value, mark: mark.value });
+      segments.push({ start, text: piece, color: value, mark: mark.value });
     }
 
     start = end;

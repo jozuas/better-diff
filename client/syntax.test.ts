@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
+import { lineText } from "../test/line-texts";
 import type { TextRange } from "./changed-text";
 import { schemeOf, segmentsOf } from "./syntax";
 import type { Mark, Segment, SyntaxColors } from "./syntax";
@@ -69,15 +70,61 @@ function likeTheOneBefore(segments: readonly Segment[]): Segment[] {
     );
 }
 
-// Text, runs, colours, changed text and where trailing whitespace starts, to make segments of. It
-// starts anywhere up to past the text's end.
+// Text, runs, colours, changed text and where trailing whitespace starts, to make segments of: text
+// of code points, or of words and whitespace of every kind. Trailing whitespace starts anywhere up
+// to past the text's end.
 const segmented = fc.tuple(
-  fc.string({ unit: "binary" }),
+  fc.oneof(fc.string({ unit: "binary" }), lineText),
   runs,
   colors,
   changes,
   fc.nat({ max: 14 }),
 );
+
+// The colour of each of the text's characters in the segments.
+function segmentColors(segments: readonly Segment[]): (string | undefined)[] {
+  return segments.flatMap(({ text: piece, color }) =>
+    Array.from({ length: piece.length }, () => color),
+  );
+}
+
+function isWhitespace(text: string, at: number): boolean {
+  return /^\s$/u.test(text.charAt(at));
+}
+
+// The indices of the text's characters whose colour in the segments isn't that of their run's
+// style, or the text's own: but for whitespace without a colour, which may take the colour of the
+// character before it, if that's marked as it is.
+function miscolored(
+  text: string,
+  segments: readonly Segment[],
+  expected: readonly (string | undefined)[],
+  markOf: (at: number) => Mark | undefined,
+): number[] {
+  const actual = segmentColors(segments);
+
+  return expected.flatMap((color, at) => {
+    const takesColorBefore =
+      color === undefined &&
+      isWhitespace(text, at) &&
+      at > 0 &&
+      actual[at] === actual[at - 1] &&
+      markOf(at) === markOf(at - 1);
+
+    return actual[at] === color || takesColorBefore ? [] : [at];
+  });
+}
+
+// The segments of only whitespace without a colour after a segment marked as they are, which they
+// could run on from.
+function separateWhitespace(segments: readonly Segment[]): Segment[] {
+  return segments
+    .slice(1)
+    .filter(
+      ({ text: piece, color, mark }, index) =>
+        color === undefined && /^\s+$/u.test(piece) && mark === segments[index]?.mark,
+    );
+}
 
 test("the segments make up the text, each starting where the ones before it end", () => {
   fc.assert(
@@ -98,17 +145,87 @@ test("the segments make up the text, each starting where the ones before it end"
   );
 });
 
-test("each of the text's characters is in the colour of its run's style, or the text's own past the runs or where the style has none", () => {
+test("each of the text's characters is in the colour of its run's style, or the text's own past the runs or where the style has none, or whitespace without one in that of the text before it", () => {
   fc.assert(
     fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
       const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing);
 
       expect(
-        segments.flatMap(({ text: piece, color }) =>
-          Array.from({ length: piece.length }, () => color),
+        miscolored(text, segments, colorsOfCharacters(text, textRuns, styleColors), (at) =>
+          markAt(ranges, trailing, at),
         ),
-      ).toStrictEqual(colorsOfCharacters(text, textRuns, styleColors));
+      ).toStrictEqual([]);
     }),
+    {
+      examples: [
+        [
+          [
+            "ab ",
+            [
+              [1, "keyword"],
+              [2, null],
+            ],
+            { keyword: "#111111" },
+            [],
+            14,
+          ],
+        ],
+      ],
+    },
+  );
+});
+
+test("whitespace without a colour runs on from the text before it, where that's marked as it is, rather than starting a segment", () => {
+  fc.assert(
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
+      expect(
+        separateWhitespace(segmentsOf(text, textRuns, styleColors, ranges, trailing)),
+      ).toStrictEqual([]);
+    }),
+    {
+      examples: [
+        [
+          [
+            "a, {",
+            [
+              [1, "keyword"],
+              [1, "variable"],
+              [1, null],
+              [1, "variable"],
+            ],
+            { keyword: "#111111", variable: "#222222" },
+            [],
+            14,
+          ],
+        ],
+        [
+          [
+            "a b",
+            [
+              [1, "keyword"],
+              [1, null],
+              [1, "keyword"],
+            ],
+            { keyword: "#111111" },
+            [{ start: 1, end: 2 }],
+            14,
+          ],
+        ],
+        [
+          [
+            "a  b",
+            [
+              [1, "keyword"],
+              [2, null],
+              [1, "keyword"],
+            ],
+            { keyword: "#111111" },
+            [],
+            14,
+          ],
+        ],
+      ],
+    },
   );
 });
 
