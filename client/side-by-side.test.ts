@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { hunkLines } from "../test/hunk-lines";
-import { numberLines } from "./lines";
+import { blocksOf, numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import { numbersOf, rowsOf, shows } from "./side-by-side";
 import type { Row, Side } from "./side-by-side";
@@ -22,10 +22,43 @@ function linesOf(lines: readonly NumberedLine[], side: Side): Row[Side][] {
   return lines.flatMap((line, index) => (line.kind === without[side] ? [] : [{ index, line }]));
 }
 
+// The index of the added line each removed line is paired with, by the removed line's: the line
+// `skip` after the last one paired, by the removed line's skip, or none where its skip is 0 or the
+// run has no such line.
+function partnersOf(lines: readonly NumberedLine[], skips: readonly number[]): Map<number, number> {
+  const partners = new Map<number, number>();
+
+  for (const block of blocksOf(lines)) {
+    if ("removed" in block) {
+      let next = 0;
+
+      for (const { index } of block.removed) {
+        const skip = skips[index] ?? 0;
+        const partner = block.added[next + skip - 1];
+
+        if (skip > 0 && partner !== undefined) {
+          partners.set(index, partner.index);
+          next += skip;
+        }
+      }
+    }
+  }
+
+  return partners;
+}
+
+// A hunk's lines, and a pairing of each of its runs of changes: each removed line in turn paired
+// with an added line after the last one paired, or with none.
+const pairedHunkLines = hunkLines.chain((lines) =>
+  fc
+    .array(fc.nat({ max: 3 }), { minLength: lines.length, maxLength: lines.length })
+    .map((skips) => ({ lines, partners: partnersOf(lines, skips) })),
+);
+
 test("each side shows the lines of its version, in order, each with its index in the hunk", () => {
   fc.assert(
-    fc.property(hunkLines, (lines) => {
-      const rows = rowsOf(lines);
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      const rows = rowsOf(lines, partners);
 
       expect(shownOn(rows, "old")).toStrictEqual(linesOf(lines, "old"));
       expect(shownOn(rows, "new")).toStrictEqual(linesOf(lines, "new"));
@@ -39,8 +72,8 @@ function isUnchanged(row: Row): boolean {
 
 test("an unchanged line is level with itself", () => {
   fc.assert(
-    fc.property(hunkLines, (lines) => {
-      for (const row of rowsOf(lines).filter(isUnchanged)) {
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      for (const row of rowsOf(lines, partners).filter(isUnchanged)) {
         expect(row.old).toBeDefined();
         expect(row.old).toStrictEqual(row.new);
       }
@@ -48,62 +81,88 @@ test("an unchanged line is level with itself", () => {
   );
 });
 
-// The rows between unchanged lines.
-function runsOf(rows: readonly Row[]): Row[][] {
-  const runs: Row[][] = [[]];
+function isLevel(row: Row): boolean {
+  return row.old !== undefined && row.new !== undefined;
+}
+
+// The indices of the lines level with each other on a row of changed lines.
+function changedLevel(rows: readonly Row[]): [number | undefined, number | undefined][] {
+  return rows.flatMap((row) =>
+    isLevel(row) && !isUnchanged(row) ? [[row.old?.index, row.new?.index]] : [],
+  );
+}
+
+test("a removed line is level with the added line it's paired with, and a changed line that isn't paired is level with nothing", () => {
+  fc.assert(
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      expect(changedLevel(rowsOf(lines, partners))).toStrictEqual([...partners]);
+    }),
+  );
+});
+
+// The rows between lines level with each other.
+function stretchesOf(rows: readonly Row[]): Row[][] {
+  const stretches: Row[][] = [[]];
 
   for (const row of rows) {
-    if (isUnchanged(row)) {
-      runs.push([]);
+    if (isLevel(row)) {
+      stretches.push([]);
     } else {
-      runs.at(-1)?.push(row);
+      stretches.at(-1)?.push(row);
     }
   }
 
-  return runs;
+  return stretches;
 }
 
 function isEmpty(row: Row): boolean {
   return row.old === undefined && row.new === undefined;
 }
 
-// Whether each of the rows has a line on the side.
-function linesIn(rows: readonly Row[], side: Side): boolean[] {
-  return rows.map((row) => row[side] !== undefined);
+// Whether each of the rows has a removed line, rather than an added one.
+function removedIn(rows: readonly Row[]): boolean[] {
+  return rows.map((row) => row.old !== undefined);
 }
 
-test("between unchanged lines, each side's lines are level with the other's from the top, and no row is empty", () => {
+test("between lines level with each other, removed lines come before added ones, and no row is empty", () => {
   fc.assert(
-    fc.property(hunkLines, (lines) => {
-      for (const run of runsOf(rowsOf(lines))) {
-        expect(run.filter(isEmpty)).toStrictEqual([]);
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      for (const stretch of stretchesOf(rowsOf(lines, partners))) {
+        const removed = removedIn(stretch);
 
-        for (const side of ["old", "new"] as const) {
-          expect(linesIn(run, side)).toStrictEqual(
-            linesIn(run, side).toSorted((one, other) => Number(other) - Number(one)),
-          );
-        }
+        expect(stretch.filter(isEmpty)).toStrictEqual([]);
+        expect(removed).toStrictEqual(
+          removed.toSorted((one, other) => Number(other) - Number(one)),
+        );
       }
     }),
   );
 });
 
-test("lines of each run of changes are level from the top, in the order git gives them", () => {
+test("a run's lines are lined up as delta lines them up, in the order git gives them", () => {
   const lines = numberLines({
     oldStart: 4,
     newStart: 4,
     lines: [
       { kind: "removed", text: "a", newline: true },
       { kind: "removed", text: "b", newline: true },
-      { kind: "added", text: "c", newline: true },
+      { kind: "removed", text: "c", newline: true },
+      { kind: "added", text: "x", newline: true },
+      { kind: "added", text: "b2", newline: true },
+      { kind: "added", text: "y", newline: true },
       { kind: "context", text: "d", newline: true },
       { kind: "added", text: "e", newline: true },
     ],
   });
 
-  expect(rowsOf(lines).map((row) => [row.old?.line.text, row.new?.line.text])).toStrictEqual([
-    ["a", "c"],
-    ["b", undefined],
+  expect(
+    rowsOf(lines, new Map([[1, 4]])).map((row) => [row.old?.line.text, row.new?.line.text]),
+  ).toStrictEqual([
+    ["a", undefined],
+    [undefined, "x"],
+    ["b", "b2"],
+    ["c", undefined],
+    [undefined, "y"],
     ["d", "d"],
     [undefined, "e"],
   ]);

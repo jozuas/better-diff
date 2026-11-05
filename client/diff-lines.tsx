@@ -6,7 +6,7 @@ import { View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { TextRange } from "./changed-text";
-import { changedWordsOf } from "./changed-words";
+import { pairingOf } from "./changed-words";
 import { DiffLine } from "./diff-line";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
@@ -36,6 +36,9 @@ type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 // The changed text of a line that has none, the same each time, so a line rendered again with it
 // isn't rendered again for it.
 const unchanged: readonly TextRange[] = [];
+
+// The partners of lines outside hunks, which are unchanged.
+const unpaired: ReadonlyMap<number, number> = new Map();
 
 // Which lines are selected, by their indices among those shown and, side by side, their side.
 type Selected = (index: number, side?: Side) => boolean;
@@ -147,6 +150,8 @@ interface LinesProps {
   focus: Focus | undefined;
   highlights: Highlights;
   changes: ChangedText;
+  // The index of the added line each paired removed line is paired with, by the removed line's.
+  partners: ReadonlyMap<number, number>;
   styles: Styles;
 }
 
@@ -158,6 +163,7 @@ function Lines({
   focus,
   highlights,
   changes,
+  partners,
   styles,
 }: LinesProps): ReactElement[] {
   if (focus === undefined) {
@@ -176,7 +182,7 @@ function Lines({
     ));
   }
 
-  return rowsOf(lines).map((row) => (
+  return rowsOf(lines, partners).map((row) => (
     <SideBySideRow
       key={`${row.old?.line.oldNumber},${row.new?.line.newNumber}`}
       row={row}
@@ -217,7 +223,7 @@ function LinesOfHunk({
 }: HunkLinesProps): ReactElement {
   const styles = useStyles(theme);
   const lines = useMemo(() => numberLines(hunk), [hunk]);
-  const changes = useMemo(() => changedWordsOf(lines), [lines]);
+  const pairing = useMemo(() => pairingOf(lines), [lines]);
 
   return (
     <View style={contained} {...pointed.pointer(index)}>
@@ -227,7 +233,8 @@ function LinesOfHunk({
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
         highlights={highlights}
-        changes={(line) => changes[line] ?? unchanged}
+        changes={(line) => pairing.changes[line] ?? unchanged}
+        partners={pairing.partners}
         styles={styles}
       />
     </View>
@@ -271,6 +278,7 @@ function LinesOutsideHunks({
         focus={focus}
         highlights={highlights}
         changes={() => unchanged}
+        partners={unpaired}
         styles={styles}
       />
     </View>

@@ -66,6 +66,31 @@ test("side by side, removals are on the left level with additions on the right, 
   expect(inlineNew.y).toBeGreaterThan(inlineLast.y);
 });
 
+test("side by side, a removed line paired with an added line is level with it, as delta lines them up, and every other removed or added line has a row of its own", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "kept\ntotal = a + b;\nrewritten(items);\nend\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "kept\n// sum\ntotal = a + b + c;\nend\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  await expect(line(page, "kept")).toHaveCount(2);
+
+  const comment = await box(line(page, "// sum"));
+  const oldTotal = await box(line(page, "total = a + b;"));
+  const newTotal = await box(line(page, "total = a + b + c;"));
+  const rewritten = await box(line(page, "rewritten(items);"));
+
+  expect(oldTotal.y).toBe(newTotal.y);
+  expect(comment.y).toBeLessThan(newTotal.y);
+  expect(rewritten.y).toBeGreaterThan(oldTotal.y);
+  expect(oldTotal.x + oldTotal.width).toBeLessThanOrEqual(newTotal.x);
+});
+
 test("each side numbers its lines in its own version", async ({ app, page, repository }) => {
   writeFile(repository, "a.txt", "first\nremoved\nkept\n");
   commitAll(repository);

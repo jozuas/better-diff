@@ -131,10 +131,13 @@ function pairOf(removedTokens: readonly string[], addedTokens: readonly string[]
   };
 }
 
-// The changed text of each of a run's removed lines and each of its added ones.
+// The changed text of each of a run's removed lines and each of its added ones, and where among the
+// added lines is the one each paired removed line is paired with, by where it is among the removed
+// ones.
 interface RunChanges {
   removed: TextRange[][];
   added: TextRange[][];
+  partners: Map<number, number>;
 }
 
 // The text that changed in each of a run's removed and added lines. Each removed line, in order, is
@@ -146,7 +149,12 @@ export function changedTextOf(
   added: readonly string[],
   maxDistance: number,
 ): RunChanges {
-  const changes: RunChanges = { removed: removed.map(() => []), added: added.map(() => []) };
+  const changes: RunChanges = {
+    removed: removed.map(() => []),
+    added: added.map(() => []),
+    partners: new Map(),
+  };
+
   const addedTokens = added.map(tokensOf);
   let next = 0;
   let cells = 0;
@@ -166,6 +174,7 @@ export function changedTextOf(
       if (pair.distance <= maxDistance) {
         changes.removed[index] = pair.removed;
         changes.added[next + offset] = pair.added;
+        changes.partners.set(index, next + offset);
         next += offset + 1;
         break;
       }

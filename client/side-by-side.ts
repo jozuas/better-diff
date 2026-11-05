@@ -1,5 +1,5 @@
 import { blocksOf } from "./lines";
-import type { IndexedLine, NumberedLine } from "./lines";
+import type { IndexedLine, NumberedLine, Run } from "./lines";
 
 type Kind = NumberedLine["kind"];
 
@@ -52,15 +52,40 @@ export interface Row {
   new: IndexedLine | undefined;
 }
 
-// The lines side by side, an unchanged one level with itself, and the removed lines of each run of
-// changes between unchanged ones level with its added lines, from the top of the run.
-export function rowsOf(lines: readonly NumberedLine[]): Row[] {
+// Added lines each on a row of its own.
+function alone(added: readonly IndexedLine[]): Row[] {
+  return added.map((line) => ({ old: undefined, new: line }));
+}
+
+// A run of changes' rows, as delta lines them up: each removed line in turn level with the added
+// line it's paired with, after the added lines before that one, or on a row of its own, and the
+// added lines after the last one paired.
+function runRows({ removed, added }: Run, partners: ReadonlyMap<number, number>): Row[] {
+  const rows: Row[] = [];
+  let next = 0;
+
+  for (const line of removed) {
+    const partner = added.findIndex(({ index }) => index === partners.get(line.index));
+
+    if (partner === -1) {
+      rows.push({ old: line, new: undefined });
+    } else {
+      rows.push(...alone(added.slice(next, partner)), { old: line, new: added[partner] });
+      next = partner + 1;
+    }
+  }
+
+  return [...rows, ...alone(added.slice(next))];
+}
+
+// The lines side by side, an unchanged one level with itself, and the lines of each run of changes
+// between unchanged ones as delta lines them up, by the index of the added line each paired removed
+// line is paired with.
+export function rowsOf(
+  lines: readonly NumberedLine[],
+  partners: ReadonlyMap<number, number>,
+): Row[] {
   return blocksOf(lines).flatMap((block) =>
-    "removed" in block
-      ? Array.from({ length: Math.max(block.removed.length, block.added.length) }, (_, row) => ({
-          old: block.removed[row],
-          new: block.added[row],
-        }))
-      : [{ old: block, new: block }],
+    "removed" in block ? runRows(block, partners) : [{ old: block, new: block }],
   );
 }

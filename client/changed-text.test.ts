@@ -52,12 +52,13 @@ test("a removed line and the added line it's paired with keep the same text", ()
     fc.property(text, text, (removed, added) => {
       const changes = changedTextOf([removed], [added], 1);
 
+      expect([...changes.partners]).toStrictEqual([[0, 0]]);
       expect(unchangedText([removed], changes.removed)).toBe(unchangedText([added], changes.added));
     }),
   );
 });
 
-test("lines the same as the ones they replace keep all their text", () => {
+test("lines the same as the ones they replace are paired with them, and keep all their text", () => {
   fc.assert(
     fc.property(lines, maxDistance, (same, distance) => {
       const nothing = same.map(() => []);
@@ -65,6 +66,7 @@ test("lines the same as the ones they replace keep all their text", () => {
       expect(changedTextOf(same, same, distance)).toStrictEqual({
         removed: nothing,
         added: nothing,
+        partners: new Map(same.map((_, index) => [index, index])),
       });
     }),
   );
@@ -91,6 +93,7 @@ test("a word replaced by one the line didn't have is the only change of a line p
         ).toStrictEqual({
           removed: [[{ start, end: start + old.length }]],
           added: [[{ start, end: start + replacement.length }]],
+          partners: new Map([[0, 0]]),
         });
       },
     ),
@@ -112,7 +115,7 @@ test("lines with nothing but whitespace in common with any line on the other sid
       linesOfWordsIn(["x", "y", "ß"]),
       fc.double({ min: 0, max: 0.99, noNaN: true }),
       (removed, added, distance) => {
-        expect(changedTextOf(removed, added, distance)).toStrictEqual({
+        expect(changedTextOf(removed, added, distance)).toMatchObject({
           removed: removed.map(() => []),
           added: added.map(() => []),
         });
@@ -148,7 +151,7 @@ function changesOf(
   removed: readonly string[],
   added: readonly string[],
   maxLineDistance: number,
-): [ReturnType<typeof changedTextOf>, ReturnType<typeof changedTextOf>] {
+): [ReturnType<typeof changedTextOf>, Omit<ReturnType<typeof changedTextOf>, "partners">] {
   const removedLines = removed.map(marked);
   const addedLines = added.map(marked);
 
@@ -239,7 +242,7 @@ test.each<[string[], string[], number]>([
   (removed, added, maxLineDistance) => {
     const [changes, expected] = changesOf(removed, added, maxLineDistance);
 
-    expect(changes).toStrictEqual(expected);
+    expect(changes).toMatchObject(expected);
   },
 );
 
@@ -251,7 +254,7 @@ test.each<[number, string, string]>([
   (maxLineDistance, removed, added) => {
     const [changes, expected] = changesOf([removed], [added], maxLineDistance);
 
-    expect(changes).toStrictEqual(expected);
+    expect(changes).toMatchObject(expected);
   },
 );
 
@@ -283,6 +286,7 @@ test.each<[string, number]>([
     expect(replacingAfter(kept, "a", "b", maxLineDistance)).toStrictEqual({
       removed: [[{ start, end: start + 1 }]],
       added: [[{ start, end: start + 1 }]],
+      partners: new Map([[0, 0]]),
     });
   },
 );
@@ -298,6 +302,7 @@ test.each<[string, string, string, number]>([
     expect(replacingAfter(kept, old, replacement, maxLineDistance)).toStrictEqual({
       removed: [[]],
       added: [[]],
+      partners: new Map(),
     });
   },
 );
@@ -307,16 +312,16 @@ function wordsLine(first: string, other: string, count: number): string {
   return [first, ...Array.from({ length: count - 1 }, () => other)].join(" ");
 }
 
-test.each<[number, number, TextRange[]]>([
-  [500, 500, [{ start: 0, end: 1 }]],
-  [500, 501, []],
-  [501, 500, []],
+test.each<[number, number, TextRange[], [number, number][]]>([
+  [500, 500, [{ start: 0, end: 1 }], [[0, 0]]],
+  [500, 501, [], []],
+  [501, 500, [], []],
 ])(
   "a run's lines are paired while the tables aligning them have at most a million cells together: lines of %d and %d words",
-  (removedCount, addedCount, ranges) => {
+  (removedCount, addedCount, ranges, partners) => {
     expect(
       changedTextOf([wordsLine("a", "a", removedCount)], [wordsLine("b", "a", addedCount)], 0.6),
-    ).toStrictEqual({ removed: [ranges], added: [ranges] });
+    ).toStrictEqual({ removed: [ranges], added: [ranges], partners: new Map(partners) });
   },
 );
 
@@ -328,5 +333,6 @@ test("a run's lines aren't paired once the tables aligning them would have more 
   expect(changedTextOf([wordsLine("c", "c", 400), line], [replacement], 0.6)).toStrictEqual({
     removed: [[], []],
     added: [[]],
+    partners: new Map(),
   });
 });
