@@ -19,6 +19,11 @@ export default {
   // a test run that had the machine to itself. Stryker counts a mutant that times out as detected,
   // which would hide one that survives.
   timeoutFactor: 3,
+  // The initial test run runs every test file in turn, in one process: about four minutes on a quiet
+  // machine, and past Stryker's default limit of five while other worktrees run tests, which ends the
+  // run before it tests a mutant. Mutants' time limits come from each test's time in that run, not
+  // from this limit.
+  dryRunTimeoutMinutes: 15,
   reporters: ["clear-text", "html"],
   // The list of every test that ran says nothing about the mutants that survived.
   clearTextReporter: { reportTests: false },
