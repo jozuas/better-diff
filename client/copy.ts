@@ -1,5 +1,6 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
+import { largestContents } from "../shared/contents";
 import type { contentsRpc } from "../shared/contents";
 
 // What a file's menu copies of it.
@@ -38,6 +39,17 @@ const names: Record<
   filename: (_, path) => fileName(path),
 };
 
+// Why the file at the path copies nothing, as the server reads it.
+const refusals: Record<
+  Exclude<RpcOutput<typeof contentsRpc>["status"], "read">,
+  (path: string) => string
+> = {
+  binary: (path) => `${path} is a binary file, so nothing was copied.`,
+  large: (path) =>
+    `${path} is larger than ${largestContents / 1_000_000} MB, so nothing was copied.`,
+  absent: (path) => `There's no file at ${path} to copy.`,
+};
+
 async function copiedOf(
   item: CopyItem,
   directory: string,
@@ -54,12 +66,7 @@ async function copiedOf(
     return { text: contents.text };
   }
 
-  return {
-    refused:
-      contents.status === "binary"
-        ? `${path} is a binary file, so nothing was copied.`
-        : `There's no file at ${path} to copy.`,
-  };
+  return { refused: refusals[contents.status](path) };
 }
 
 // Copies the item of the file at the path, in the workspace's directory, as git status lists it:

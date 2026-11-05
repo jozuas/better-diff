@@ -140,7 +140,10 @@ export function writeFile(repository: string, path: string, content: string | Ui
 }
 
 export function writeSymlink(repository: string, path: string, target: string): void {
-  symlinkSync(target, join(repository, path));
+  const link = join(repository, path);
+
+  mkdirSync(dirname(link), { recursive: true });
+  symlinkSync(target, link);
 }
 
 export function deleteFile(repository: string, path: string): void {

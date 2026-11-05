@@ -80,6 +80,7 @@ test("copies the file's contents as the server reads them", async () => {
 
 test.each([
   [{ status: "binary" }, "src/a is a binary file, so nothing was copied."],
+  [{ status: "large" }, "src/a is larger than 10 MB, so nothing was copied."],
   [{ status: "absent" }, "There's no file at src/a to copy."],
 ] as const)(
   "copies nothing of a file the server reads as %o, and says why",

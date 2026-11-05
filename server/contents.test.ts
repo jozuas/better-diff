@@ -3,12 +3,13 @@ import { join, relative } from "node:path";
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { contentsRpc } from "../shared/contents";
+import { contentsRpc, largestContents } from "../shared/contents";
 import { filePath } from "../test/file-names";
 import {
   commitAll,
   deleteFile,
   diffNoIndex,
+  indexFile,
   inRepository,
   makeUnreadable,
   runGit,
@@ -113,14 +114,63 @@ test(
   timeout,
 );
 
-test("reads the file a symlink points to", async () => {
+test("reads a file of the largest size it reads", async () => {
   await inRepository(async (repository) => {
-    writeFile(repository, "target", "target\n");
-    writeSymlink(repository, "link", "target");
+    writeFile(repository, "a", Buffer.alloc(largestContents, "a"));
 
-    await expect(read(repository, "link")).resolves.toStrictEqual({
-      status: "read",
-      text: "target\n",
+    const contents = await read(repository, "a");
+
+    expect(contents.status).toBe("read");
+  });
+});
+
+test("refuses a larger file without reading it", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a", Buffer.alloc(largestContents + 1, "a"));
+    makeUnreadable(repository, "a");
+
+    await expect(read(repository, "a")).resolves.toStrictEqual({ status: "large" });
+  });
+});
+
+// Where a symlink points: into the worktree, out of it, or by an absolute path, to nothing there.
+const target = fc
+  .tuple(fc.constantFrom("", "../", "/"), filePath)
+  .map(([start, path]) => `${start}${path}`);
+
+test(
+  "reads a symlink as the path it points to, as git stores it",
+  async () => {
+    await fc.assert(
+      fc.asyncProperty(filePath, target, async (path, pointsTo) => {
+        await inRepository(async (repository) => {
+          writeSymlink(repository, path, pointsTo);
+          runGit(repository, ["add", "--", path]);
+
+          await expect(read(repository, path)).resolves.toStrictEqual({
+            status: "read",
+            text: indexFile(repository, path)?.toString("utf8"),
+          });
+        });
+      }),
+      { numRuns: 30 },
+    );
+  },
+  timeout,
+);
+
+test("reads a symlink to a file outside the directory as the path, not the file", async () => {
+  await inRepository(async (repository) => {
+    await inRepository(async (outside) => {
+      const secret = join(outside, "secret");
+
+      writeFile(outside, "secret", "secret\n");
+      writeSymlink(repository, "link", secret);
+
+      await expect(read(repository, "link")).resolves.toStrictEqual({
+        status: "read",
+        text: secret,
+      });
     });
   });
 });
@@ -129,7 +179,6 @@ test.each([
   ["deleted", "gone"],
   ["a directory, as a repository inside the repository is", "inner/"],
   ["under a file", "file/a"],
-  ["a symlink to nothing", "dangling"],
 ])("finds no file at a path that's %s", async (_, path) => {
   await inRepository(async (repository) => {
     writeFile(repository, "gone", "gone\n");
@@ -138,7 +187,6 @@ test.each([
     deleteFile(repository, "gone");
     writeFile(repository, "inner/a", "a\n");
     runGit(join(repository, "inner"), ["init", "--quiet"]);
-    writeSymlink(repository, "dangling", "nothing");
 
     await expect(read(repository, path)).resolves.toStrictEqual({
       status: "absent",

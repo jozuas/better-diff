@@ -94,7 +94,7 @@ Replicates Sublime Merge as much as possible:
   - Copy full path
   - Copy relative path: from the repository's root, as git status lists it.
   - Copy filename
-  - Copy file contents: the file as it is in the worktree, whichever group lists it. A binary file, or one gone from the worktree, copies nothing, and says so.
+  - Copy file contents: the file as it is in the worktree, whichever group lists it, and of a symlink, the path it points to, as git stores it. A binary file, one larger than 10 MB, or one gone from the worktree, copies nothing, and says so.
 
 ### Confirmation
 

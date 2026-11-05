@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { z } from "zod";
 
-import { commitAll, deleteFile, runGit, writeFile } from "../test/repository";
+import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { row } from "./panel";
 
@@ -61,7 +61,21 @@ test("copying a file's contents from its menu copies the file as it is in the wo
   await expect.poll(clipboardOf(page)).toBe("é\tworktree\r\nno final newline");
 });
 
-test("copying the contents of a binary file, or a deleted one, copies nothing, and says why", async ({
+test("copying a symlink's contents copies the path it points to, as git stores it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+  writeSymlink(repository, "link", "a.txt");
+
+  await app.openPanel();
+  await copyFrom(page, "UNTRACKED FILES (2)", "link", "Copy file contents");
+
+  await expect.poll(clipboardOf(page)).toBe("a.txt");
+});
+
+test("copying the contents of a binary file, one larger than 10 MB, or a deleted one, copies nothing, and says why", async ({
   app,
   page,
   repository,
@@ -70,11 +84,16 @@ test("copying the contents of a binary file, or a deleted one, copies nothing, a
   commitAll(repository);
   deleteFile(repository, "gone.txt");
   writeFile(repository, "image.bin", Buffer.from([0x89, 0x50, 0x00, 0x47]));
+  writeFile(repository, "large.txt", `${"a".repeat(99)}\n`.repeat(100_001));
 
   await app.openPanel();
   await page.evaluate("navigator.clipboard.writeText('before')");
-  await copyFrom(page, "UNTRACKED FILES (1)", "image.bin", "Copy file contents");
+  await copyFrom(page, "UNTRACKED FILES (2)", "image.bin", "Copy file contents");
   await expect(page.getByText("image.bin is a binary file, so nothing was copied.")).toBeVisible();
+  await copyFrom(page, "UNTRACKED FILES (2)", "large.txt", "Copy file contents");
+  await expect(
+    page.getByText("large.txt is larger than 10 MB, so nothing was copied."),
+  ).toBeVisible();
   await copyFrom(page, "MODIFIED FILES (1)", "gone.txt", "Copy file contents");
   await expect(page.getByText("There's no file at gone.txt to copy.")).toBeVisible();
 

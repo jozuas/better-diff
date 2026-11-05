@@ -1,7 +1,12 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 
-// The file at the path in the worktree, as it is there, whichever group lists it.
+// The bytes of the largest file whose contents it reads. A larger one is data more than text to
+// paste, and would be held whole on its way to the clipboard.
+export const largestContents = 10_000_000;
+
+// The file at the path in the worktree, as it is there, whichever group lists it: of a symlink, the
+// path it points to, as git stores it.
 export const contentsRpc = defineRpc({
   name: "file.contents",
   input: z.object({ directory: z.string(), path: z.string() }),
@@ -10,6 +15,8 @@ export const contentsRpc = defineRpc({
     z.object({ status: z.literal("read"), text: z.string() }),
     // Binary as git tells: a NUL among its first 8,000 bytes.
     z.object({ status: z.literal("binary") }),
+    // Larger than `largestContents`, so not read.
+    z.object({ status: z.literal("large") }),
     // Gone from the worktree, not a file, as a directory isn't, or outside the directory.
     z.object({ status: z.literal("absent") }),
   ]),
