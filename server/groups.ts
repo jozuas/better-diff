@@ -7,7 +7,7 @@ import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, changesIn, diffOf, inTurn } from "./diff";
 import type { ChangedFile, Changes } from "./diff";
-import { highlighted } from "./highlight";
+import { highlightedTogether } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
 
 type Group = RpcInput<typeof groupRpc>["group"];
@@ -101,13 +101,13 @@ export async function readGroup({
     files.map(({ shown }) => shown.path),
   );
 
-  const shown = await Promise.all(
+  const shown = await highlightedTogether((highlight) =>
     files.map(async ({ shown: file }) => {
       if ("error" in file) {
         return file;
       }
 
-      const read = await highlighted(collapsed(file, generated.has(file.path)), file.path, false);
+      const read = await highlight(collapsed(file, generated.has(file.path)), file.path, false);
 
       return read;
     }),

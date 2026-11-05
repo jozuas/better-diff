@@ -1,13 +1,15 @@
 import { expect, test } from "vitest";
 
-import { highlightLines } from "../test/highlights";
-import { highlighted } from "./highlight";
+import {
+  highlightLines,
+  highlightLinesKept,
+  longestHighlighted,
+  mostKept,
+  newFile,
+  wereKept,
+} from "../test/highlights";
+import { highlighted, highlightedTogether } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
-
-// The most characters a version can have to be highlighted, and the most the versions whose
-// highlights are kept can have in all.
-const longest = 786_432;
-const mostKept = 8_388_608;
 
 let versionsMade = 0;
 
@@ -18,46 +20,21 @@ function newVersion(characters: number): string[] {
   return [String(versionsMade).padStart(characters, "a")];
 }
 
-// The highlights of the lines of a new file at a.ts, and whether highlighting them finished before
-// other work waiting for its turn took it, as it does only where they were kept rather than
-// highlighted anew: highlighting gives other work a turn at least once.
-async function highlight(
-  lines: string[],
-): Promise<{ runs: Awaited<ReturnType<typeof highlightLines>>; kept: boolean }> {
-  let finished = false;
-
-  const otherWork = new Promise<boolean>((resolve) => {
-    setImmediate(() => {
-      resolve(finished);
-    });
-  });
-
-  const highlighting = (async () => {
-    const runs = await highlightLines(lines, "a.ts");
-
-    finished = true;
-
-    return runs;
-  })();
-
-  return { kept: await otherWork, runs: await highlighting };
-}
-
 async function kept(lines: string[]): Promise<boolean> {
-  const highlighting = await highlight(lines);
+  const read = await wereKept(lines, "a.ts");
 
-  return highlighting.kept;
+  return read;
 }
 
 // Highlights as many versions of the most characters a version can have as it takes to forget every
 // other version, which keeps ten of them, and gives the one of those highlighted least lately.
 async function keepOnlyLongest(): Promise<string[]> {
-  const leastLately = newVersion(longest);
+  const leastLately = newVersion(longestHighlighted);
 
   const versions = [
-    newVersion(longest),
+    newVersion(longestHighlighted),
     leastLately,
-    ...Array.from({ length: 9 }, () => newVersion(longest)),
+    ...Array.from({ length: 9 }, () => newVersion(longestHighlighted)),
   ];
 
   await Promise.all(
@@ -70,13 +47,16 @@ async function keepOnlyLongest(): Promise<string[]> {
 }
 
 // The characters the versions kept can have in all besides those ten.
-const room = mostKept - 10 * longest;
+const room = mostKept - 10 * longestHighlighted;
 
 test("highlights a version anew only if it wasn't lately, so highlighting it again finishes before the plugin's other work takes a turn, with the same runs", async () => {
   const version = ['const a = "é";', "// b"];
-  const first = await highlight(version);
+  const first = await highlightLinesKept(version, "a.ts");
 
-  await expect(highlight(version)).resolves.toStrictEqual({ runs: first.runs, kept: true });
+  await expect(highlightLinesKept(version, "a.ts")).resolves.toStrictEqual({
+    runs: first.runs,
+    kept: true,
+  });
   expect(first.kept).toBe(false);
 });
 
@@ -104,6 +84,29 @@ test("counts highlighting a version again as highlighting it lately", async () =
   await highlightLines(newVersion(room + 1), "a.ts");
 
   await expect(kept(highlightedAgain)).resolves.toBe(true);
+});
+
+test("of versions highlighted together that don't fit in 8 MiB characters, keeps the highlights of as many as fit, those highlighted first, as a group's view reads its files in the same order each time", async () => {
+  const first = newVersion(longestHighlighted);
+  const lastFitting = newVersion(longestHighlighted);
+  const notFitting = newVersion(longestHighlighted);
+
+  await highlightedTogether((highlight) =>
+    [
+      first,
+      ...Array.from({ length: 8 }, () => newVersion(longestHighlighted)),
+      lastFitting,
+      notFitting,
+    ].map(async (version) => {
+      const read = await highlight(newFile(version), "a.ts", false);
+
+      return read;
+    }),
+  );
+
+  await expect(kept(first)).resolves.toBe(true);
+  await expect(kept(lastFitting)).resolves.toBe(true);
+  await expect(kept(notFitting)).resolves.toBe(false);
 });
 
 test("keeps a version's highlights apart from those of the same code at another path, which may be in another language", async () => {

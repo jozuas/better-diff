@@ -130,8 +130,14 @@ function forget(key: string): void {
   kept.delete(key);
 }
 
-function forgetLeastLately(): void {
-  for (const key of kept.keys()) {
+// Forgets the runs of versions until those kept fit: first of those the read didn't use, the least
+// lately first, then of its own, the last it used first. A group's view reads its files in the same
+// order each time, so of a group whose versions don't all fit, the first ones stay kept from one
+// read to the next, rather than each read forgetting those the next one reads first.
+function keepWhatFits(read: ReadonlySet<string>): void {
+  const unused = [...kept.keys()].filter((key) => !read.has(key));
+
+  for (const key of [...unused, ...[...read].toReversed()]) {
     if (keptCharacters <= mostKept) {
       return;
     }
@@ -140,15 +146,16 @@ function forgetLeastLately(): void {
   }
 }
 
-// The runs of the code at the path, kept from highlighting it lately, or else highlighted anew.
-async function keptRuns(code: string, path: string): Promise<PackedRuns> {
+// The runs of the code at the path, kept from highlighting it lately, or else highlighted anew, as
+// one of the read's versions.
+async function keptRuns(code: string, path: string, read: Set<string>): Promise<PackedRuns> {
   const key = versionOf(`${path}\0${code}`);
   const version = kept.get(key) ?? { characters: code.length, runs: highlightedRuns(code, path) };
 
   forget(key);
   kept.set(key, version);
   keptCharacters += version.characters;
-  forgetLeastLately();
+  read.add(key);
 
   const runs = await version.runs;
 
@@ -157,15 +164,20 @@ async function keptRuns(code: string, path: string): Promise<PackedRuns> {
 
 const noRuns = packed([]);
 
-// The runs of the lines of a version of the file at the path, in the language its extension names.
-async function versionRuns(version: readonly string[], path: string): Promise<PackedRuns> {
+// The runs of the lines of a version of the file at the path, in the language its extension names,
+// as one of the read's versions.
+async function versionRuns(
+  version: readonly string[],
+  path: string,
+  read: Set<string>,
+): Promise<PackedRuns> {
   const code = version.join("\n");
 
   if (!isLanguageSupported(path) || code.length > longestHighlighted) {
     return noRuns;
   }
 
-  const runs = await keptRuns(code, path);
+  const runs = await keptRuns(code, path, read);
 
   return runs;
 }
@@ -204,18 +216,23 @@ function withRuns(
   };
 }
 
+type Highlighted<D extends UnhighlightedDiff> = Omit<D, "hunks" | "contents"> &
+  Pick<Diff, "hunks" | "contents">;
+
 // The diff of the file at the path with its hunks' lines highlighted, the old version as the file it
 // was renamed from, if it was, and with every line of the new version, if it's to be shown entire,
-// or else none. The old version is highlighted only if the diff removes lines, since only removed
-// lines are shown from it.
-export async function highlighted<D extends UnhighlightedDiff>(
+// or else none, as one of the read's diffs, adding its versions to the read's before it first waits.
+// The old version is highlighted only if the diff removes lines, since only removed lines are shown
+// from it.
+async function highlightedIn<D extends UnhighlightedDiff>(
   { hunks, contents, ...diff }: D,
   path: string,
   entire: boolean,
-): Promise<Omit<D, "hunks" | "contents"> & Pick<Diff, "hunks" | "contents">> {
+  read: Set<string>,
+): Promise<Highlighted<D>> {
   const [old, changed] = await Promise.all([
-    diff.removed === 0 ? noRuns : versionRuns(contents.old, diff.renamedFrom ?? path),
-    versionRuns(contents.new, path),
+    diff.removed === 0 ? noRuns : versionRuns(contents.old, diff.renamedFrom ?? path, read),
+    versionRuns(contents.new, path, read),
   ]);
 
   return {
@@ -225,6 +242,49 @@ export async function highlighted<D extends UnhighlightedDiff>(
       ? contents.new.map((text, line) => ({ text, runs: runsAt(changed, line) }))
       : [],
   };
+}
+
+// The diff of the file at the path highlighted, as a read of its own.
+export async function highlighted<D extends UnhighlightedDiff>(
+  diff: D,
+  path: string,
+  entire: boolean,
+): Promise<Highlighted<D>> {
+  const read = new Set<string>();
+  const highlighting = highlightedIn(diff, path, entire, read);
+
+  keepWhatFits(read);
+
+  const shown = await highlighting;
+
+  return shown;
+}
+
+// Highlights a diff as `highlighted` does, as one of a read's diffs.
+type Highlight = <D extends UnhighlightedDiff>(
+  diff: D,
+  path: string,
+  entire: boolean,
+) => Promise<Highlighted<D>>;
+
+// What highlightAll gives, with the diffs it highlights before it returns highlighted as one read,
+// as a group's view reads its files.
+export async function highlightedTogether<T>(
+  highlightAll: (highlight: Highlight) => readonly T[],
+): Promise<Awaited<T>[]> {
+  const read = new Set<string>();
+
+  const highlighting = highlightAll(async (diff, path, entire) => {
+    const shown = await highlightedIn(diff, path, entire, read);
+
+    return shown;
+  });
+
+  keepWhatFits(read);
+
+  const shown = await Promise.all(highlighting);
+
+  return shown;
 }
 
 // Paseo's default syntax theme.

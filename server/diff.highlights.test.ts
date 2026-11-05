@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 
 import { diffRpc } from "../shared/diff";
 import { syntaxColorsRpc } from "../shared/syntax";
+import { longestHighlighted, wereKept } from "../test/highlights";
 import { commitAll, inRepository, runGit, timeout, writeFile } from "../test/repository";
 import type { Diff } from "../test/staging";
 import { readDiff } from "./diff";
@@ -96,6 +97,22 @@ test("highlights each of a group's files as its own diff is highlighted, without
 
     expect(untracked.files).toMatchObject(await Promise.all(["a.ts", "b.py"].map(own)));
     expect(modified.files).toMatchObject([await own("c.ts")]);
+  });
+});
+
+test("highlights a group's files together, so of a group too large for all their highlights to be kept, reading it again finds those of its first file kept", async () => {
+  await inRepository(async (repository) => {
+    const versions = Array.from({ length: 11 }, (_, index) =>
+      String(index).padStart(longestHighlighted, "a"),
+    );
+
+    for (const [index, version] of versions.entries()) {
+      writeFile(repository, `${index}.ts`, version);
+    }
+
+    await readGroup({ directory: repository, group: "untracked" });
+
+    await expect(wereKept(versions.slice(0, 1), "0.ts")).resolves.toBe(true);
   });
 });
 
