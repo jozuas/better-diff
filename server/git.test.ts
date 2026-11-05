@@ -303,17 +303,68 @@ test("adds a repository inside the repository, which git status names with a `/`
   });
 });
 
-test("selects exactly the files its paths name, though the user's environment says pathspecs are literal", async () => {
-  await inRepository(async (repository) => {
-    writeFile(repository, "a", "");
-    process.env["GIT_LITERAL_PATHSPECS"] = "1";
+// Runs the action with the variable set in the environment, as the daemon's could have it.
+async function withVariable<T>(name: string, value: string, action: () => Promise<T>): Promise<T> {
+  const environment = process.env;
 
-    try {
-      const status = await git(repository, "status", ["--porcelain"], ["a"]);
+  process.env = { ...environment, [name]: value };
 
-      expect(status.toString()).toBe("?? a\0");
-    } finally {
-      delete process.env["GIT_LITERAL_PATHSPECS"];
-    }
-  });
-});
+  try {
+    const result = await action();
+
+    return result;
+  } finally {
+    process.env = environment;
+  }
+}
+
+// Each variable, the path that selects a file `a`, and what git status then prints.
+test.each([
+  ["are literal", "GIT_LITERAL_PATHSPECS", "a", "?? a\0"],
+  ["ignore case", "GIT_ICASE_PATHSPECS", "A", ""],
+])(
+  "selects exactly the files its paths name, though the user's environment says pathspecs %s",
+  async (_, variable, path, selected) => {
+    await inRepository(async (repository) => {
+      writeFile(repository, "a", "");
+
+      const status = await withVariable(variable, "1", async () => {
+        const printed = await git(repository, "status", ["--porcelain"], [path]);
+
+        return printed;
+      });
+
+      expect(status.toString()).toBe(selected);
+    });
+  },
+);
+
+// Each variable, as a git hook's environment could set it, and how it would point git at another
+// repository, or at its parts: its index, its worktree, whose file differs, or where it keeps its
+// objects, which already hold the file's.
+test.each<[string, (other: string) => string]>([
+  ["GIT_DIR", (other) => join(other, ".git")],
+  ["GIT_WORK_TREE", (other) => other],
+  ["GIT_COMMON_DIR", (other) => join(other, ".git")],
+  ["GIT_OBJECT_DIRECTORY", (other) => join(other, ".git", "objects")],
+  ["GIT_ALTERNATE_OBJECT_DIRECTORIES", (other) => join(other, ".git", "objects")],
+])(
+  "stages a file in the directory's repository, though the user's environment's %s names another's",
+  async (variable, valueIn) => {
+    await inRepository(async (other) => {
+      writeFile(other, "a", "a\n");
+      runGit(other, ["add", "a"]);
+      writeFile(other, "a", "b\n");
+
+      await inRepository(async (repository) => {
+        writeFile(repository, "a", "a\n");
+
+        await withVariable(variable, valueIn(other), async () => {
+          await git(repository, "add", [], ["a"]);
+        });
+
+        expect(runGit(repository, ["show", ":a"])).toBe("a\n");
+      });
+    });
+  },
+);

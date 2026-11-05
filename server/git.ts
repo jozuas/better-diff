@@ -102,10 +102,21 @@ export async function git(
       cwd: directory,
       // Stryker disable next-line StringLiteral: spawn pipes the streams anyway. "pipe" picks the overload whose type says so.
       stdio: "pipe",
-      // Node leaves out a variable that's undefined: without an index of its own, git uses the
-      // repository's, and it reads the pathspecs' `:(literal)` and `:(exclude)` whatever the user's
-      // environment says.
-      env: { ...process.env, GIT_INDEX_FILE: index, GIT_LITERAL_PATHSPECS: undefined },
+      // Node leaves out a variable that's undefined. Whatever the environment the daemon started in
+      // says, as a git hook's would, git finds the repository, its worktree and its objects from the
+      // directory, and without an index of its own uses the repository's. It reads the pathspecs'
+      // `:(literal)` and `:(exclude)`, and matches their case, as they are.
+      env: {
+        ...process.env,
+        GIT_DIR: undefined,
+        GIT_WORK_TREE: undefined,
+        GIT_COMMON_DIR: undefined,
+        GIT_OBJECT_DIRECTORY: undefined,
+        GIT_ALTERNATE_OBJECT_DIRECTORIES: undefined,
+        GIT_INDEX_FILE: index,
+        GIT_LITERAL_PATHSPECS: undefined,
+        GIT_ICASE_PATHSPECS: undefined,
+      },
       signal,
     },
   );
