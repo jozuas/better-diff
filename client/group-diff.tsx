@@ -2,7 +2,6 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
-import type { ReactElement } from "react";
 import {
   memo,
   startTransition,
@@ -13,18 +12,20 @@ import {
   useLayoutEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
+import type { ReactElement } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc, groupRpc } from "../shared/diff";
 import type { Controls } from "./actions";
-import { measured, tallest } from "./bar-heights";
+import { tallest } from "./bar-heights";
 import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
 import { DiffLayout } from "./diff-layout";
 import type { Layout } from "./diff-style";
-import { FileBar } from "./file-diff";
 import { FontSizesContext } from "./fonts";
+import { GroupFileBar } from "./group-file-bar";
 import { diffOf, listedFiles } from "./groups";
 import type { GroupName, OpenFile } from "./groups";
 import { Failed, Queried } from "./queried";
@@ -241,8 +242,10 @@ function GroupFiles({
     stopScrollAnchoring(view);
   }, [view]);
 
-  useKeptStarts(files, view, controls.busy);
-  useSettledFocus(controls.busy);
+  const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
+
+  useKeptStarts(files, view, busy);
+  useSettledFocus(busy);
 
   const barHeight = tallest(
     heights,
@@ -272,48 +275,42 @@ function GroupFiles({
       {files.length === 0 ? (
         <Text style={styles.hint}>No changes</Text>
       ) : (
-        files.flatMap((shown, index) => {
-          const file = { group, path: shown.path };
-
-          return [
-            <FileBar
-              key={`bar ${shown.path}`}
-              file={file}
-              diff={shownDiffs[index]}
-              minHeight={barHeight}
-              onHeight={(height) => {
-                setHeights((current) => measured(current, shown.path, height));
-              }}
-              onRun={() => {
-                onFileRun(index);
-              }}
-              whitespace={whitespace}
-              controls={controls}
-              theme={theme}
-            />,
-            <View key={`diff ${shown.path}`}>
-              <View nativeID={fileId(view, index)} />
-              {index < rendered ? (
-                <GroupFileDiff
-                  group={group}
-                  query={expanded}
-                  read={shown}
-                  expanded={expandedDiff(shown.path)}
-                  view={view}
-                  fileIndex={index}
-                  selection={rangeIn(selection, index)}
-                  sideBySide={sideBySide}
-                  barsBelow={barHeight}
-                  onHunkRun={onHunkRun}
-                  onFileRun={onFileRun}
-                  controls={controls}
-                  onExpand={onExpand}
-                  theme={theme}
-                />
-              ) : null}
-            </View>,
-          ];
-        })
+        files.flatMap((shown, index) => [
+          <GroupFileBar
+            key={`bar ${shown.path}`}
+            group={group}
+            path={shown.path}
+            index={index}
+            diff={shownDiffs[index]}
+            barHeight={barHeight}
+            onHeights={setHeights}
+            onRun={onFileRun}
+            whitespace={whitespace}
+            controls={controls}
+            theme={theme}
+          />,
+          <View key={`diff ${shown.path}`}>
+            <View nativeID={fileId(view, index)} />
+            {index < rendered ? (
+              <GroupFileDiff
+                group={group}
+                query={expanded}
+                read={shown}
+                expanded={expandedDiff(shown.path)}
+                view={view}
+                fileIndex={index}
+                selection={rangeIn(selection, index)}
+                sideBySide={sideBySide}
+                barsBelow={barHeight}
+                onHunkRun={onHunkRun}
+                onFileRun={onFileRun}
+                controls={controls}
+                onExpand={onExpand}
+                theme={theme}
+              />
+            ) : null}
+          </View>,
+        ])
       )}
     </ScrollView>
   );

@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement, Ref } from "react";
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { buttonLook, buttonOf, buttonText } from "./actions";
@@ -47,8 +47,9 @@ interface ActionButtonProps {
   action: Action;
   // How its shortcut is written, if it has one.
   shortcut: string | undefined;
-  armed: boolean;
-  busy: boolean;
+  // Tells it apart from the panel's other buttons.
+  button: string;
+  controls: Controls;
   hidden: boolean;
   onPress: () => void;
   buttonRef: Ref<View> | undefined;
@@ -59,14 +60,17 @@ interface ActionButtonProps {
 function ActionButton({
   action,
   shortcut,
-  armed,
-  busy,
+  button,
+  controls,
   hidden,
   onPress,
   buttonRef,
   styles,
   theme,
 }: ActionButtonProps): ReactElement {
+  // Only arming it or disarming it, or an action starting or ending, renders it again.
+  const armed = useSyncExternalStore(controls.subscribe, () => controls.state().armed === button);
+  const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
   const text = buttonText(action, armed);
 
   return (
@@ -145,8 +149,8 @@ export function ActionButtons({
           key={action.operation}
           action={action}
           shortcut={level === undefined ? undefined : shortcutText(shortcutOf(action, level), mac)}
-          armed={controls.armed === buttonOf(bar, action)}
-          busy={controls.busy}
+          button={buttonOf(bar, action)}
+          controls={controls}
           hidden={hidden}
           onPress={() => {
             controls.press(buttonOf(bar, action), action, target, onRun);

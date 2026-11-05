@@ -3,7 +3,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { keepPreviousData, queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useCallback, useContext, useEffect, useMemo } from "react";
+import { memo, useCallback, useContext, useEffect, useMemo } from "react";
 import { StyleSheet, Text } from "react-native";
 
 import { diffRpc, groupRpc } from "../shared/diff";
@@ -200,7 +200,7 @@ interface DiffViewProps extends Omit<ShownDiffProps, "open" | "fileQuery" | "gro
 
 // The open file's diff, or the diffs of the files the open group lists or of the files selected,
 // shown as the host's settings say, with whitespace changes hidden or not.
-export function DiffView({ directory, open, placeholder, ...shown }: DiffViewProps): ReactElement {
+function ViewOfDiff({ directory, open, placeholder, ...shown }: DiffViewProps): ReactElement {
   const fonts = useContext(FontSizesContext);
   const diffs = useDiffQueries({ directory, hideWhitespace: shown.whitespace.hidden });
 
@@ -218,3 +218,7 @@ export function DiffView({ directory, open, placeholder, ...shown }: DiffViewPro
 
   return <ShownDiff open={open} fileQuery={diffs.query} groupQuery={diffs.groupQuery} {...shown} />;
 }
+
+// Rendered again only once what it's rendered with changes, and not each time the panel is, as for
+// the sidebar's state or the panel's width.
+export const DiffView = memo(ViewOfDiff);

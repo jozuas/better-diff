@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useContext, useId, useMemo } from "react";
+import { useContext, useId, useMemo, useSyncExternalStore } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -99,14 +99,16 @@ function SidebarButton({
   styles,
 }: SidebarButtonProps): ReactElement {
   const button = `${row}:${action.operation}`;
-  const armed = controls.armed === button;
+  // Only arming it or disarming it, or an action starting or ending, renders it again.
+  const armed = useSyncExternalStore(controls.subscribe, () => controls.state().armed === button);
+  const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
 
   return (
     <Hoverable
       accessibilityRole="button"
       accessibilityLabel={sidebarButtonName(action, armed, path)}
-      accessibilityState={{ disabled: controls.busy }}
-      disabled={controls.busy}
+      accessibilityState={{ disabled: busy }}
+      disabled={busy}
       style={[armed ? styles.armed : styles.icon, hidden && styles.hidden]}
       onPress={() => {
         controls.press(button, action, target);

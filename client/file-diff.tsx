@@ -2,7 +2,15 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { memo, useContext, useId, useLayoutEffect, useMemo, useState } from "react";
+import {
+  memo,
+  useContext,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -205,14 +213,14 @@ export function FileBar({
 }
 
 interface SettledFocusProps {
-  busy: boolean;
+  controls: Controls;
 }
 
 // useSettledFocus each time the diff's layout renders, after the diff's hunks: the layout shows them
 // only once it's measured, which, for a diff read before the file opened, is after the file's view
-// first renders.
-function SettledFocus({ busy }: SettledFocusProps): null {
-  useSettledFocus(busy);
+// first renders. And each time an action starts or ends.
+function SettledFocus({ controls }: SettledFocusProps): null {
+  useSettledFocus(useSyncExternalStore(controls.subscribe, () => controls.state().busy));
 
   return null;
 }
@@ -283,7 +291,7 @@ function DiffOfFile({
                 />
               )}
             </Queried>
-            <SettledFocus busy={controls.busy} />
+            <SettledFocus controls={controls} />
           </>
         )}
       </DiffLayout>

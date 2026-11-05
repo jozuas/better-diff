@@ -1,8 +1,8 @@
-import type { PluginTheme, RpcInput, RpcOutput } from "@getpaseo/plugin";
+import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -12,9 +12,9 @@ import { applyFileRpc, applyGroupRpc, applyLinesRpc, applyModeRpc, diffRpc } fro
 import { viewSettings } from "../shared/settings";
 import type { ViewValues } from "../shared/settings";
 import type { Controls } from "./actions";
-import { apply, misalignedMessage, staleMessage } from "./apply";
-import type { Server, Target, Where } from "./apply";
+import type { Server, Where } from "./apply";
 import { confirmation } from "./confirmation";
+import { applyAndTell, controlsStore, runBusy } from "./controls";
 import type { Layout } from "./diff-style";
 import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
@@ -37,24 +37,28 @@ type Listed = RpcOutput<typeof changesRpc>;
 
 type Diff = RpcOutput<typeof diffRpc>;
 
-interface Request {
-  operation: RpcInput<typeof applyFileRpc>["operation"];
-  target: Target;
-}
-
 // Runs the actions the panel's buttons ask for, once confirmed where they ask for it, one at a time,
 // on the diff `shownDiff` gives where they act on the one shown, as read with whitespace changes
 // hidden or not. After each, the page's selection is cleared, since what it selected may be gone,
-// `onApplied` hears of it, and a refused one says why. The controls stay the same until another button is armed or an action starts or ends, so the
-// bars rendered with them aren't rendered again with each of the panel's renders.
+// `onApplied` hears of it, and a refused one says why. The controls stay the same, and which button
+// is armed, and whether an action is running, reach only the buttons and views they change, so the
+// bars rendered with them aren't rendered again as a button is armed, an action starts or ends, or
+// the panel renders.
 function useControls(
   where: Where,
   shownDiff: Server["shownDiff"],
   onApplied: () => Promise<void>,
 ): Controls {
   const toast = useToast();
-  const [armed, setArmed] = useState<string>();
-  const confirm = useMemo(() => confirmation(setArmed), []);
+  const store = useMemo(() => controlsStore(), []);
+
+  const confirm = useMemo(
+    () =>
+      confirmation((armed) => {
+        store.update({ armed });
+      }),
+    [store],
+  );
 
   const server: Server = {
     shownDiff,
@@ -64,44 +68,40 @@ function useControls(
     applyGroup: useRpc(applyGroupRpc),
   };
 
-  const { mutateAsync, isPending } = useMutation({
-    mutationFn: async ({ operation, target }: Request) => {
-      const status = await apply(server, where, operation, target);
-
-      return status;
-    },
-    onSuccess: (status, { operation, target }) => {
-      if (status === "stale") {
-        toast.show(staleMessage(target), { variant: "warning" });
-      }
-
-      if (status === "misaligned") {
-        toast.show(misalignedMessage(operation), { variant: "warning" });
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-    onSettled: async () => {
-      clearSelection();
-      await onApplied();
-    },
-  });
+  const latest = useLatest({ server, where, toast, onApplied });
 
   useEffect(() => confirm.dispose, [confirm]);
 
   return useMemo(
     () => ({
-      armed,
-      busy: isPending,
+      state: store.state,
+      subscribe: store.subscribe,
       press: (button, action, target, onRun) => {
         confirm.press(button, action.confirmation !== undefined, async () => {
           onRun?.();
-          await mutateAsync({ operation: action.operation, target });
+          await runBusy(
+            store,
+            async () => {
+              const now = latest.current;
+
+              await applyAndTell(now.server, now.where, action.operation, target, {
+                refused: (message) => {
+                  now.toast.show(message, { variant: "warning" });
+                },
+                failed: now.toast.error,
+              });
+              clearSelection();
+              await now.onApplied();
+            },
+            // After the queries read again tell the views, which they do a tick later.
+            (callback) => {
+              notifyManager.schedule(callback);
+            },
+          );
         });
       },
     }),
-    [armed, isPending, confirm, mutateAsync],
+    [store, confirm, latest],
   );
 }
 

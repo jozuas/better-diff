@@ -3,7 +3,15 @@ import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -178,9 +186,10 @@ function useKeptLines(
   hunks: Diff["hunks"],
   unchanged: Unchanged,
   container: string,
-  busy: boolean,
+  controls: Controls,
 ): void {
   const kept = useContext(KeptPlaceContext);
+  const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
 
   const lines = useMemo(
     () => shownFileOf(path, hunks, unchanged, container),
@@ -246,7 +255,7 @@ function Hunks({
     [shownDiff, showsEntire],
   );
 
-  useKeptLines(file.path, shownDiff.hunks, unchanged, container, controls.busy);
+  useKeptLines(file.path, shownDiff.hunks, unchanged, container, controls);
 
   useEffect(() => {
     if (scrolls) {

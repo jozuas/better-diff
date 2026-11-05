@@ -2,6 +2,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import type { applyFileRpc, applyLinesRpc, diffRpc } from "../shared/diff";
 import type { Target } from "./apply";
+import type { ControlsStore } from "./controls";
 import { isOpen, isShown } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
 
@@ -147,12 +148,10 @@ export function buttonOf(bar: string, { operation }: Pick<Action, "operation">):
   return `${bar}:${operation}`;
 }
 
-// What the panel's buttons share: the one armed, whether an action is running, and pressing one,
+// What the panel's buttons share, the one armed and whether an action is running, and pressing one,
 // which calls `onRun` just before the action runs, if it does. A press while one is running does
 // nothing: the buttons are disabled then, but shortcuts still press them.
-export interface Controls {
-  armed: string | undefined;
-  busy: boolean;
+export interface Controls extends Pick<ControlsStore, "state" | "subscribe"> {
   press: (button: string, action: Action, target: Target, onRun?: () => void) => void;
 }
 
