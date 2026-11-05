@@ -33,7 +33,10 @@ interface Line {
   presence: Trees<boolean>;
 }
 
-const lineBytes = fc.array(piece, { maxLength: 3 }).map((pieces) => Buffer.from(pieces.flat()));
+// A line's bytes, without its newline.
+export const lineBytes: fc.Arbitrary<Buffer> = fc
+  .array(piece, { maxLength: 3 })
+  .map((pieces) => Buffer.from(pieces.flat()));
 
 function trees<T>(arbitrary: fc.Arbitrary<T>): fc.Arbitrary<Trees<T>> {
   return fc.record({ head: arbitrary, index: arbitrary, worktree: arbitrary });
