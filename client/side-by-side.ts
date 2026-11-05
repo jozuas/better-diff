@@ -98,3 +98,20 @@ export function rowKey(row: Row): string {
   // Stryker disable next-line ConditionalExpression,StringLiteral: rowsOf makes no row without a line.
   return shown === undefined ? "" : lineKey(shown.line);
 }
+
+// How many lines tall a line shows: one, and one more for the note under a file's last line, if it
+// has no newline.
+export function linesTall(line: NumberedLine): number {
+  return line.newline ? 1 : 2;
+}
+
+// How many lines tall a row shows, as its taller side, where a side without a line is one line tall.
+export function rowTall(row: Row): number {
+  return Math.max(
+    ...sides.map((side) => {
+      const shown = row[side];
+
+      return shown === undefined ? 1 : linesTall(shown.line);
+    }),
+  );
+}

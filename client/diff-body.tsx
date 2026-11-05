@@ -2,8 +2,10 @@ import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { ScrollView } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
-import type { Dispatch, ReactElement, SetStateAction } from "react";
+import type { ReactElement } from "react";
 import {
+  startTransition,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -12,14 +14,13 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import { LabelRow } from "./diff-label";
 import { HunkLines, UnchangedLines } from "./diff-lines";
-import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
-import { Hoverable, TintLayer } from "./hoverable";
 import { HunkBar } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
@@ -27,6 +28,8 @@ import type { NumberedLine, Unchanged } from "./lines";
 import { ModeBar } from "./mode-bar";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
+import { covers, widened, windowAround } from "./rendering";
+import type { LineWindow } from "./rendering";
 import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import { useFocus } from "./text-selection";
@@ -34,20 +37,14 @@ import { KeptPlaceContext, scrollToOffset, stopScrollAnchoring, useLatest } from
 
 type Diff = RpcOutput<typeof diffRpc>;
 
-function useStyles(theme: PluginTheme) {
-  const fonts = useContext(FontSizesContext);
-
+function useStyles() {
   return useMemo(
     () =>
       StyleSheet.create({
-        labelRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
-        label: { fontSize: fonts.text, color: theme.colors.foregroundMuted },
-        expand: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
-        expandText: { fontSize: fonts.small, color: theme.colors.foreground },
         // Under each hunk, and the unchanged lines before the first.
         spaced: { marginBottom: 8 },
       }),
-    [theme, fonts],
+    [],
   );
 }
 
@@ -82,45 +79,6 @@ export interface DiffBodyProps {
   theme: PluginTheme;
 }
 
-interface LabelRowProps {
-  label: string;
-  diff: Diff;
-  onExpand: () => void;
-  styles: Styles;
-  theme: PluginTheme;
-}
-
-// What's shown instead of a diff without lines, with a button that shows a collapsed one's.
-function LabelRow({ label, diff, onExpand, styles, theme }: LabelRowProps): ReactElement {
-  return (
-    <View style={styles.labelRow}>
-      <Text style={styles.label}>{label}</Text>
-      {diff.collapsed === undefined ? null : (
-        <Hoverable
-          accessibilityRole="button"
-          accessibilityLabel="Show diff"
-          style={styles.expand}
-          onPress={onExpand}
-        >
-          {({ hovered, pressed }) => (
-            <>
-              <TintLayer
-                color={theme.colors.foreground}
-                hovered={hovered}
-                pressed={pressed}
-                filled
-              />
-              <Text selectable={false} style={styles.expandText}>
-                Show diff
-              </Text>
-            </>
-          )}
-        </Hoverable>
-      )}
-    </View>
-  );
-}
-
 // What a diff's hunks' bars do, with their hunk's index.
 interface BarActions {
   onToggleEntire: (hunk: number) => void;
@@ -135,6 +93,8 @@ interface BarState {
   onHunkRun: DiffBodyProps["onHunkRun"];
   view: string;
   barsBelow: number | undefined;
+  // Shows the entire file, from around the hunk at the index, or only the hunks again.
+  toggle: (hunk: number) => void;
 }
 
 // The bars' actions, the same each render, with what the latest render gives them, so that a change
@@ -142,11 +102,7 @@ interface BarState {
 // entire file keeps the hunk in place, and so does an action on a hunk while the entire file shows,
 // where the next hunk takes its place. Showing a hunk scrolls the view to its lines' start, under
 // its bar, and under the file's bar where that stays at the top too.
-function useBarActions(
-  container: string,
-  state: BarState,
-  setEntire: Dispatch<SetStateAction<boolean>>,
-): BarActions {
+function useBarActions(container: string, state: BarState): BarActions {
   const latest = useLatest(state);
   const barHeight = useRef(0);
   const kept = useContext(KeptPlaceContext);
@@ -155,7 +111,7 @@ function useBarActions(
     () => ({
       onToggleEntire: (hunk) => {
         kept.hold(container, hunkId(container, hunk));
-        setEntire((entire) => !entire);
+        latest.current.toggle(hunk);
       },
       onHeight: (height) => {
         barHeight.current = height;
@@ -175,8 +131,36 @@ function useBarActions(
         scrollToOffset(view, hunkId(container, hunk), barsBelow + barHeight.current);
       },
     }),
-    [container, setEntire, latest, kept],
+    [container, latest, kept],
   );
+}
+
+// How many of the new version's lines the entire file renders at first, around the line it's shown
+// from, as many as a tall view shows, and how many more each time after that.
+const firstLines = 200;
+const moreLines = 1000;
+
+// The lines of the file's new version, `total` of them, that the entire file renders: at first those
+// around the line the returned function is given, and then more each time, in a transition that
+// what the page hears comes before, so that the view shows the lines around the hunk the entire
+// file is shown from at once, and scrolls and hears the pointer while it renders the others. No
+// `total` while the entire file doesn't show.
+function useLineWindow(total: number | undefined): [LineWindow, (line: number) => void] {
+  const [window, setWindow] = useState(() => windowAround(1, firstLines));
+
+  useEffect(() => {
+    if (total !== undefined && !covers(window, total)) {
+      startTransition(() => {
+        setWindow(widened(window, total, moreLines));
+      });
+    }
+  }, [window, total]);
+
+  const around = useCallback((line: number) => {
+    setWindow(windowAround(line, firstLines));
+  }, []);
+
+  return [window, around];
 }
 
 // Has the view keep the places of the lines it shows of the file at the path, at the container, and
@@ -248,7 +232,18 @@ function Hunks({
   const shownDiff = useEntireDiff(diff, entireQuery, entire);
   const showsEntire = shownDiff !== diff;
   const container = fileId(view, fileIndex);
-  const bars = useBarActions(container, { entire, onHunkRun, view, barsBelow }, setEntire);
+  const [window, showAround] = useLineWindow(showsEntire ? shownDiff.contents.length : undefined);
+
+  const bars = useBarActions(container, {
+    entire,
+    onHunkRun,
+    view,
+    barsBelow,
+    toggle: (hunk) => {
+      setEntire((shown) => !shown);
+      showAround(shownDiff.hunks[hunk]?.newStart ?? 1);
+    },
+  });
 
   const unchanged = useMemo(
     () => (showsEntire ? unchangedLines(shownDiff) : { before: noLines, after: [] }),
@@ -305,6 +300,7 @@ function Hunks({
           lines={unchanged.after[index] ?? noLines}
           container={container}
           focus={focus}
+          window={window}
           theme={theme}
         />
       </View>,
@@ -317,6 +313,7 @@ function Hunks({
       lines={unchanged.before}
       container={container}
       focus={focus}
+      window={window}
       style={styles.spaced}
       theme={theme}
     />,
@@ -339,7 +336,7 @@ function Hunks({
 // lines, with a button that shows a collapsed one's.
 export function DiffBody(props: DiffBodyProps): ReactElement {
   const { diff, file, controls, onExpand, theme } = props;
-  const styles = useStyles(theme);
+  const styles = useStyles();
   const label = labelOf(diff);
 
   return (
@@ -356,7 +353,7 @@ export function DiffBody(props: DiffBodyProps): ReactElement {
       {label === undefined ? (
         <Hunks {...props} styles={styles} />
       ) : (
-        <LabelRow label={label} diff={diff} onExpand={onExpand} styles={styles} theme={theme} />
+        <LabelRow label={label} diff={diff} onExpand={onExpand} theme={theme} />
       )}
     </>
   );

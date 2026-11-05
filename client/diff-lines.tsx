@@ -1,34 +1,25 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { memo, useMemo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { TextRange } from "./changed-text";
 import { pairingOf } from "./changed-words";
-import { DiffLine } from "./diff-line";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
-import { lineKey, numberLines } from "./lines";
-import type { IndexedLine, NumberedLine } from "./lines";
+import { Block } from "./line-block";
+import type { ChangedText, IdOf, Selected } from "./line-block";
+import { numberLines } from "./lines";
+import type { NumberedLine } from "./lines";
 import type { PointedHunk } from "./pointed";
+import { blocksOfRows, rendersBlock } from "./rendering";
+import type { LineWindow } from "./rendering";
 import { isSelected, lineId, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
-import { rowKey, rowsOf, sides } from "./side-by-side";
-import type { Focus, Row, Side } from "./side-by-side";
-
-declare module "react-native" {
-  interface ViewStyle {
-    // CSS's, which React Native Web passes on.
-    contain?: "content";
-  }
-}
-
-// Has the browser lay out and paint the lines apart from the rest of the view, and look for what's
-// under the pointer among them only while it's over them: without it, each move of the pointer
-// over a diff of thousands of lines takes the browser as long as all of them.
-const contained: ViewStyle = { contain: "content" };
+import { rowsOf } from "./side-by-side";
+import type { Focus } from "./side-by-side";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -39,102 +30,6 @@ const unchanged: readonly TextRange[] = [];
 // The partners of lines outside hunks, which are unchanged.
 const unpaired: ReadonlyMap<number, number> = new Map();
 
-// Which lines are selected, by their indices among those shown and, side by side, their side.
-type Selected = (index: number, side?: Side) => boolean;
-
-// The changed text of each line, by its index among those shown.
-type ChangedText = (index: number) => readonly TextRange[];
-
-// The id of a line's text, by the line, with its index, and whether its side has focus. One without
-// focus has an id a selection doesn't find it by.
-type IdOf = (line: IndexedLine, focused: boolean) => string;
-
-interface HalfProps {
-  side: Side;
-  // The line the side shows in the row, if any.
-  shown: Row[Side];
-  idOf: IdOf;
-  // Whether its side has focus, which only it can be selected on.
-  focused: boolean;
-  selected: Selected;
-  focus: Focus;
-  changes: ChangedText;
-  styles: Styles;
-}
-
-// A side of a side-by-side row. Pressing the pointer on it gives its side focus.
-function Half({
-  side,
-  shown,
-  idOf,
-  focused,
-  selected,
-  focus,
-  changes,
-  styles,
-}: HalfProps): ReactElement {
-  return (
-    <View
-      style={[styles.half, styles[side]]}
-      onPointerDown={() => {
-        focus.onFocus(side);
-      }}
-    >
-      {shown === undefined ? (
-        <View style={styles.filler} />
-      ) : (
-        <DiffLine
-          id={idOf(shown, focused)}
-          line={shown.line}
-          selected={selected(shown.index, side)}
-          side={side}
-          selectable={focused}
-          changes={changes(shown.index)}
-          styles={styles}
-        />
-      )}
-    </View>
-  );
-}
-
-interface SideBySideRowProps {
-  row: Row;
-  idOf: IdOf;
-  selected: Selected;
-  focus: Focus;
-  changes: ChangedText;
-  styles: Styles;
-}
-
-// Each side's line level with the other's. Only the text of the side with focus can be selected,
-// and has the ids a selection finds lines by, so a selection has only that side's.
-function SideBySideRow({
-  row,
-  idOf,
-  selected,
-  focus,
-  changes,
-  styles,
-}: SideBySideRowProps): ReactElement {
-  return (
-    <View style={styles.line}>
-      {sides.map((side) => (
-        <Half
-          key={side}
-          side={side}
-          shown={row[side]}
-          idOf={idOf}
-          focused={focus.side === side}
-          selected={selected}
-          focus={focus}
-          changes={changes}
-          styles={styles}
-        />
-      ))}
-    </View>
-  );
-}
-
 interface LinesProps {
   lines: NumberedLine[];
   idOf: IdOf;
@@ -144,10 +39,17 @@ interface LinesProps {
   changes: ChangedText;
   // The index of the added line each paired removed line is paired with, by the removed line's.
   partners: ReadonlyMap<number, number>;
+  // The lines of the file's new version to render, of those the view renders a step at a time, or
+  // undefined to render them all.
+  window?: LineWindow | undefined;
   styles: Styles;
 }
 
-// The lines one under the other, or side by side.
+// How many rows of lines the browser renders as one block: it lays out, paints and finds what's under
+// the pointer in only the blocks on screen, rather than in all of a file's lines.
+const rowsPerBlock = 100;
+
+// The lines in blocks, one under the other, or side by side.
 function Lines({
   lines,
   idOf,
@@ -155,30 +57,24 @@ function Lines({
   focus,
   changes,
   partners,
+  window,
   styles,
 }: LinesProps): ReactElement[] {
-  if (focus === undefined) {
-    return lines.map((line, index) => (
-      <DiffLine
-        key={lineKey(line)}
-        id={idOf({ index, line }, true)}
-        line={line}
-        selected={selected(index)}
-        side={undefined}
-        selectable
-        changes={changes(index)}
-        styles={styles}
-      />
-    ));
-  }
+  const sideBySide = useMemo(
+    () => (focus === undefined ? undefined : { rows: rowsOf(lines, partners), focus }),
+    [lines, partners, focus],
+  );
 
-  return rowsOf(lines, partners).map((row) => (
-    <SideBySideRow
-      key={rowKey(row)}
-      row={row}
+  return blocksOfRows(sideBySide?.rows.length ?? lines.length, rowsPerBlock).map((block) => (
+    <Block
+      key={block.start}
+      lines={lines}
+      sideBySide={sideBySide}
+      start={block.start}
+      end={block.end}
+      rendered={rendersBlock(window, lines, block)}
       idOf={idOf}
       selected={selected}
-      focus={focus}
       changes={changes}
       styles={styles}
     />
@@ -213,7 +109,7 @@ function LinesOfHunk({
   const pairing = useMemo(() => pairingOf(lines), [lines]);
 
   return (
-    <View style={contained} {...pointed.pointer(index)}>
+    <View {...pointed.pointer(index)}>
       <Lines
         lines={lines}
         idOf={(line, focused) => lineId(container, index, line.index, focused)}
@@ -237,7 +133,8 @@ interface UnchangedLinesProps {
   container: string;
   // Undefined for an inline view.
   focus: Focus | undefined;
-  // The diff's.
+  // The lines of the file's new version to render, while the view renders them a step at a time.
+  window?: LineWindow | undefined;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
 }
@@ -248,20 +145,32 @@ function LinesOutsideHunks({
   lines,
   container,
   focus,
+  window,
   style,
   theme,
 }: UnchangedLinesProps): ReactElement | null {
   const styles = useStyles(theme);
 
+  // The same each time, so that their blocks aren't rendered again for them. None of the lines is
+  // selected, nor has changed text.
+  const idOf = useCallback<IdOf>(
+    ({ line }, focused) => unchangedLineId(container, line, focused),
+    [container],
+  );
+
+  const selected = useCallback(() => false, []);
+  const changes = useCallback(() => unchanged, []);
+
   return lines.length === 0 ? null : (
-    <View style={[style, contained]}>
+    <View style={style}>
       <Lines
         lines={lines}
-        idOf={({ line }, focused) => unchangedLineId(container, line, focused)}
-        selected={() => false}
+        idOf={idOf}
+        selected={selected}
         focus={focus}
-        changes={() => unchanged}
+        changes={changes}
         partners={unpaired}
+        window={window}
         styles={styles}
       />
     </View>

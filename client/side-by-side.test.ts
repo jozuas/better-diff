@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import { hunkLines } from "../test/hunk-lines";
 import { blocksOf, numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
-import { numbersOf, rowKey, rowsOf, shows } from "./side-by-side";
+import { linesTall, numbersOf, rowKey, rowsOf, rowTall, shows, sides } from "./side-by-side";
 import type { Row, Side } from "./side-by-side";
 
 type Kind = NumberedLine["kind"];
@@ -231,5 +231,37 @@ test("the keys of a hunk's rows with unchanged and removed lines stay as lines a
         expect(oldRowKeys(moved, partners)).toStrictEqual(oldRowKeys(lines, partners));
       },
     ),
+  );
+});
+
+test("a line is a line tall, and two with the note under a last line without a newline", () => {
+  const shown: Omit<NumberedLine, "newline"> = {
+    kind: "context",
+    text: "a",
+    runs: [],
+    oldNumber: 1,
+    newNumber: 1,
+  };
+
+  expect(linesTall({ ...shown, newline: true })).toBe(1);
+  expect(linesTall({ ...shown, newline: false })).toBe(2);
+});
+
+// How many lines tall each side of the row with a line shows.
+function sidesTall(row: Row): number[] {
+  return sides.flatMap((side) => {
+    const shown = row[side];
+
+    return shown === undefined ? [] : [linesTall(shown.line)];
+  });
+}
+
+test("a row side by side is as tall as its taller side", () => {
+  fc.assert(
+    fc.property(pairedHunkLines, ({ lines, partners }) => {
+      const rows = rowsOf(lines, partners);
+
+      expect(rows.map(rowTall)).toStrictEqual(rows.map((row) => Math.max(...sidesTall(row))));
+    }),
   );
 });
