@@ -11,6 +11,7 @@ const read: ViewValues = {
   diffStyle: "side by side",
   lineLength: 100,
   tabSize: 4,
+  hideWhitespace: true,
   diffFontSize: 16,
   panelFontSize: 18,
 };
@@ -19,6 +20,7 @@ const defaults: ViewValues = {
   diffStyle: "auto",
   lineLength: 80,
   tabSize: 8,
+  hideWhitespace: false,
   diffFontSize: 13,
   panelFontSize: 13,
 };

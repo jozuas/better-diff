@@ -37,6 +37,9 @@ export const viewSettings = defineSettings({
     lineLength: wholeNumber(lineLengthRange),
     // How many columns apart the tab stops of a diff's lines are, the next of which a tab reaches.
     tabSize: wholeNumber(tabSizeRange),
+    // Whether diffs leave out changes only to whitespace, which hunk and line actions then leave as
+    // they are.
+    hideWhitespace: z.boolean().default(false),
     // Paseo doesn't pass its own font sizes on to plugins, so Better Diff has these.
     diffFontSize: wholeNumber(fontSizeRanges.diff),
     panelFontSize: wholeNumber(fontSizeRanges.panel),

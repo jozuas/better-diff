@@ -238,6 +238,6 @@ test("answers that lines git lines up otherwise with whitespace changes shown we
     apply(server, repo, "stage", { file: modified, version: "1", lines: [] }),
   ).resolves.toBe("misaligned");
   expect(misalignedMessage("discard")).toBe(
-    "With whitespace changes shown, git lines these lines up differently, so nothing was done. Show whitespace changes to discard them.",
+    "With whitespace changes shown, git lines these lines up differently, so nothing was done. Turn off Hide whitespace in Better Diff's settings to discard them.",
   );
 });

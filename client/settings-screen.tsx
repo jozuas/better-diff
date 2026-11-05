@@ -5,6 +5,7 @@ import {
   SettingsInput,
   SettingsSection,
   SettingsSelect,
+  SettingsSwitch,
   useToast,
 } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
@@ -110,6 +111,18 @@ export function SettingsScreen(): ReactElement {
             options={tabSizes}
             onValueChange={(size) => {
               void settings.change({ tabSize: Number(size) });
+            }}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Whitespace changes">
+        <SettingsCard>
+          <SettingsSwitch
+            label="Hide whitespace"
+            hint="Hunk and line actions leave the changes it hides as they are, and file actions include them"
+            value={settings.values.hideWhitespace}
+            onValueChange={(hideWhitespace) => {
+              void settings.change({ hideWhitespace });
             }}
           />
         </SettingsCard>

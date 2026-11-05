@@ -25,6 +25,9 @@ interface App {
   // Saves the line length on the plugin's page in Paseo's settings, whichever an earlier test on the
   // daemon left saved.
   saveLineLength: (length: number) => Promise<void>;
+  // Switches Hide whitespace on the plugin's page in Paseo's settings, whichever way an earlier test
+  // on the daemon left it.
+  hideWhitespace: (hidden: boolean) => Promise<void>;
   // Has the page's window regain focus, as switching back to Paseo from another app does.
   focus: () => Promise<void>;
   // Keeps the plugin's waits for changes from reaching the daemon, so the panel finds a change only
@@ -180,6 +183,18 @@ export const test = base.extend<Fixtures>({
           await reopenSettings();
           expect(await lineLength.inputValue()).toBe(String(length));
         }).toPass();
+      },
+      hideWhitespace: async (hidden) => {
+        const hide = page.getByRole("switch", { name: "Hide whitespace", exact: true });
+
+        await openSettings();
+
+        if ((await hide.isChecked()) !== hidden) {
+          await hide.click();
+        }
+
+        // The switch shows it once it's saved.
+        await expect(hide).toBeChecked({ checked: hidden });
       },
       reopenSettings,
       focus: async () => {

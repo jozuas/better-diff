@@ -139,7 +139,7 @@ export async function apply(
 // Why an action on lines selected with whitespace changes hidden was refused, as git lines them up
 // otherwise without hiding them.
 export function misalignedMessage(operation: Operation): string {
-  return `With whitespace changes shown, git lines these lines up differently, so nothing was done. Show whitespace changes to ${operation} them.`;
+  return `With whitespace changes shown, git lines these lines up differently, so nothing was done. Turn off Hide whitespace in Better Diff's settings to ${operation} them.`;
 }
 
 // Why an action on the target was refused as stale.

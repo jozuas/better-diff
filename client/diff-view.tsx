@@ -15,7 +15,6 @@ import { FontSizesContext } from "./fonts";
 import { GroupDiff } from "./group-diff";
 import { groups } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
-import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -90,7 +89,6 @@ interface ShownDiffProps {
   next: OpenFile | undefined;
   // What the sidebar's files are filtered by.
   filter: string;
-  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -128,7 +126,6 @@ function ShownDiff({
   next,
   filter,
   layout,
-  whitespace,
   controls,
   theme,
 }: ShownDiffProps): ReactElement {
@@ -149,7 +146,6 @@ function ShownDiff({
         group={group}
         filter=""
         layout={layout}
-        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -165,7 +161,6 @@ function ShownDiff({
         group={group}
         filter={filter}
         layout={layout}
-        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -181,7 +176,6 @@ function ShownDiff({
         query={fileQuery}
         file={open}
         layout={layout}
-        whitespace={whitespace}
         controls={controls}
         theme={theme}
       />
@@ -196,13 +190,21 @@ interface DiffViewProps extends Omit<ShownDiffProps, "open" | "fileQuery" | "gro
   open: Open | undefined;
   // What shows while nothing is open.
   placeholder: string;
+  // Whether diffs are read with whitespace changes hidden.
+  hideWhitespace: boolean;
 }
 
 // The open file's diff, or the diffs of the files the open group lists or of the files selected,
 // shown as the host's settings say, with whitespace changes hidden or not.
-function ViewOfDiff({ directory, open, placeholder, ...shown }: DiffViewProps): ReactElement {
+function ViewOfDiff({
+  directory,
+  open,
+  placeholder,
+  hideWhitespace,
+  ...shown
+}: DiffViewProps): ReactElement {
   const fonts = useContext(FontSizesContext);
-  const diffs = useDiffQueries({ directory, hideWhitespace: shown.whitespace.hidden });
+  const diffs = useDiffQueries({ directory, hideWhitespace });
 
   const styles = useMemo(
     () =>

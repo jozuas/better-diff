@@ -7,7 +7,6 @@ import type { Controls } from "./actions";
 import { measured } from "./bar-heights";
 import { FileBar } from "./file-diff";
 import type { GroupName } from "./groups";
-import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -26,7 +25,6 @@ interface GroupFileBarProps {
   onHeights: Dispatch<SetStateAction<ReadonlyMap<string, number>>>;
   // Called with its index just before one of its actions runs.
   onRun: (index: number) => void;
-  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -39,7 +37,6 @@ function BarOfGroupFile({
   barHeight,
   onHeights,
   onRun,
-  whitespace,
   controls,
   theme,
 }: GroupFileBarProps): ReactElement {
@@ -56,7 +53,6 @@ function BarOfGroupFile({
       onRun={() => {
         onRun(index);
       }}
-      whitespace={whitespace}
       controls={controls}
       theme={theme}
     />

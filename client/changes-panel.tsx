@@ -199,11 +199,13 @@ function useViewValues(): ViewValues | undefined {
 interface ChangesProps {
   directory: string;
   layout: Layout;
+  // Whether diffs are read with whitespace changes hidden.
+  hideWhitespace: boolean;
   tab: PluginTab;
   theme: PluginTheme;
 }
 
-function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement {
+function Changes({ directory, layout, hideWhitespace, tab, theme }: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
 
@@ -220,7 +222,6 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const focus = useMemo(() => keyboardFocus(), []);
-  const [hideWhitespace, setHideWhitespace] = useState(false);
   const where = { directory, hideWhitespace };
   const next = useMemo(() => fileAfter(sidebar.open, changes.data), [sidebar.open, changes.data]);
   const readVersion = useRpc(versionRpc);
@@ -247,16 +248,6 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
   }
 
   const controls = useControls(where, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
-
-  const whitespace = useMemo(
-    () => ({
-      hidden: hideWhitespace,
-      onToggle: () => {
-        setHideWhitespace((hidden) => !hidden);
-      },
-    }),
-    [hideWhitespace],
-  );
 
   const styles = useMemo(
     () =>
@@ -300,7 +291,7 @@ function Changes({ directory, layout, tab, theme }: ChangesProps): ReactElement 
               directory={directory}
               next={next}
               filter={sidebar.filter}
-              whitespace={whitespace}
+              hideWhitespace={hideWhitespace}
               controls={controls}
               theme={theme}
             />
@@ -325,7 +316,13 @@ export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelPr
     <FontSizesProvider settings={settings}>
       <TabSizeContext value={settings.tabSize}>
         <SyntaxColorsProvider theme={theme}>
-          <Changes directory={directory} layout={settings} tab={tab} theme={theme} />
+          <Changes
+            directory={directory}
+            layout={settings}
+            hideWhitespace={settings.hideWhitespace}
+            tab={tab}
+            theme={theme}
+          />
         </SyntaxColorsProvider>
       </TabSizeContext>
     </FontSizesProvider>

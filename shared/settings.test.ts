@@ -10,11 +10,12 @@ function valid(values: Record<string, number>): boolean {
 // Halfway between two whole sizes.
 const fraction = fc.integer({ min: 0, max: 30 }).map((size) => size + 0.5);
 
-test("without a document, diffs show in the auto style with room for lines of 80 characters, tab stops 8 columns apart, and the font sizes are 13, for the diff and the rest of the panel", () => {
+test("without a document, diffs show in the auto style with room for lines of 80 characters, tab stops 8 columns apart, and whitespace changes, and the font sizes are 13, for the diff and the rest of the panel", () => {
   expect(viewSettings.schema.parse({})).toStrictEqual({
     diffStyle: "auto",
     lineLength: 80,
     tabSize: 8,
+    hideWhitespace: false,
     diffFontSize: 13,
     panelFontSize: 13,
   });
@@ -23,6 +24,12 @@ test("without a document, diffs show in the auto style with room for lines of 80
 test("each diff style is kept as picked", () => {
   for (const diffStyle of ["auto", "inline", "side by side"]) {
     expect(viewSettings.schema.parse({ diffStyle })).toMatchObject({ diffStyle });
+  }
+});
+
+test("whitespace changes are hidden or shown as switched", () => {
+  for (const hideWhitespace of [true, false]) {
+    expect(viewSettings.schema.parse({ hideWhitespace })).toMatchObject({ hideWhitespace });
   }
 });
 

@@ -28,8 +28,6 @@ import { Queried } from "./queried";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { useSelectedLines } from "./text-selection";
 import { scrollUpTo, useSettledFocus, useShortcuts } from "./web";
-import { WhitespaceSwitch } from "./whitespace-switch";
-import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -159,21 +157,18 @@ interface FileBarProps {
   onHeight?: (height: number) => void;
   // Called just before one of the file's actions runs.
   onRun?: () => void;
-  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
 
-// Which file a diff is of, as opened from its group, how many lines it adds and removes, the switch
-// that hides whitespace changes, and the actions on the file. The diff it's rendered with is the
-// one shown.
+// Which file a diff is of, as opened from its group, how many lines it adds and removes, and the
+// actions on the file. The diff it's rendered with is the one shown.
 export function FileBar({
   file,
   diff,
   minHeight,
   onHeight,
   onRun,
-  whitespace,
   controls,
   theme,
 }: FileBarProps): ReactElement {
@@ -197,7 +192,6 @@ export function FileBar({
         <Text style={styles.barPath}>{file.path}</Text>
         <LineCounts diff={diff} styles={styles} />
         <View style={styles.controls}>
-          <WhitespaceSwitch whitespace={whitespace} theme={theme} />
           <FileActions
             barId={id}
             diff={diff}
@@ -234,7 +228,6 @@ interface FileDiffProps {
   ) => UseQueryOptions<Diff, Error, Diff, (string | boolean)[]>;
   file: OpenFile;
   layout: Layout;
-  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -243,14 +236,7 @@ interface FileDiffProps {
 // asked to, until another file is opened. Just before an action on a hunk runs, the view scrolls up
 // to the hunk's start if it's above, so the next hunk, which then takes its place, shows from its
 // start, and focus moves on to it if it was in the hunk's bar.
-function DiffOfFile({
-  query,
-  file,
-  layout,
-  whitespace,
-  controls,
-  theme,
-}: FileDiffProps): ReactElement {
+function DiffOfFile({ query, file, layout, controls, theme }: FileDiffProps): ReactElement {
   const styles = useStyles(theme);
   const view = useId();
   const [expand, setExpand] = useState(false);
@@ -259,13 +245,7 @@ function DiffOfFile({
 
   return (
     <View style={styles.file}>
-      <FileBar
-        file={file}
-        diff={diff.data}
-        whitespace={whitespace}
-        controls={controls}
-        theme={theme}
-      />
+      <FileBar file={file} diff={diff.data} controls={controls} theme={theme} />
       <DiffLayout layout={layout} view={view}>
         {(sideBySide) => (
           <>

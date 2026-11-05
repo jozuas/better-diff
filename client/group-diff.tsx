@@ -33,7 +33,6 @@ import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
 import { KeptPlaceContext, scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
-import type { Whitespace } from "./whitespace-switch";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -189,7 +188,6 @@ interface GroupFilesProps {
   group: GroupName;
   // What the sidebar's files are filtered by.
   filter: string;
-  whitespace: Whitespace;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -201,7 +199,6 @@ function GroupFiles({
   expanded,
   group,
   filter,
-  whitespace,
   controls,
   theme,
 }: GroupFilesProps): ReactElement {
@@ -285,7 +282,6 @@ function GroupFiles({
             barHeight={barHeight}
             onHeights={setHeights}
             onRun={onFileRun}
-            whitespace={whitespace}
             controls={controls}
             theme={theme}
           />,
