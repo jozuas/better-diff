@@ -19,21 +19,31 @@ interface Highlights {
   added: string;
 }
 
+// The colour of the count in the file bar: of the lines its diff removes, Paseo's red, or adds,
+// Paseo's green.
+async function countColor(page: Page, heading: string, count: RegExp): Promise<string> {
+  const color = await page
+    .getByRole("heading", { name: heading })
+    .getByText(count)
+    .evaluate(
+      (element: Styled) => element.ownerDocument.defaultView.getComputedStyle(element).color,
+    );
+
+  return color;
+}
+
+const removedCount = /^−\d+$/u;
+
 // The highlights of removed and added lines' changed words: the colours of the file bar's counts of
-// the lines its diff removes and adds, Paseo's red and green, at 30% opacity, over the lines' tints.
+// the lines its diff removes and adds at 30% opacity, over the lines' tints.
 async function highlightsOf(page: Page, heading: string): Promise<Highlights> {
   async function colorOf(count: RegExp): Promise<string> {
-    const color = await page
-      .getByRole("heading", { name: heading })
-      .getByText(count)
-      .evaluate(
-        (element: Styled) => element.ownerDocument.defaultView.getComputedStyle(element).color,
-      );
+    const color = await countColor(page, heading, count);
 
     return color.replace(/^rgb\((?<channels>.*)\)$/u, "rgba($<channels>, 0.3)");
   }
 
-  return { removed: await colorOf(/^−\d+$/u), added: await colorOf(/^\+\d+$/u) };
+  return { removed: await colorOf(removedCount), added: await colorOf(/^\+\d+$/u) };
 }
 
 // The texts the page highlights in the colour, in the order it shows them.
@@ -136,4 +146,21 @@ test("a run stops pairing its lines once the tables aligning them would have mor
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
 
   await expectHighlighted(page, "MODIFIED a.txt +2 −3", ["1"], ["2"]);
+});
+
+test("the spaces and tabs an added line ends with are marked in the theme's red, as Magit marks trailing whitespace by default", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "keep  \nfoo\nbar  \n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "keep  \nfoo   \nnew line \t\n  \nend\r\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  const red = await countColor(page, "MODIFIED a.txt +4 −2", removedCount);
+
+  await expect.poll(highlightedIn(page, red)).toStrictEqual(["   ", " \t", "  "]);
 });

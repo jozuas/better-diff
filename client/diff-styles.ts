@@ -23,6 +23,8 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
     contextWords: {},
     removedWords: { backgroundColor: tintOf(processColor(theme.colors.statusDanger), 0.3) },
     addedWords: { backgroundColor: tintOf(processColor(theme.colors.statusSuccess), 0.3) },
+    // Over that, the spaces and tabs an added line ends with, in red, as Magit and git mark them.
+    trailingWhitespace: { backgroundColor: theme.colors.statusDanger },
     number: {
       width: fonts.number,
       paddingRight: 8,

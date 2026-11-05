@@ -10,7 +10,8 @@ import type { NumberedLine } from "./lines";
 import { numbersOf } from "./side-by-side";
 import type { Side } from "./side-by-side";
 import { runsOf, segmentsOf, SyntaxColorsContext } from "./syntax";
-import type { Highlights, Segment } from "./syntax";
+import type { Highlights, Mark, Segment } from "./syntax";
+import { trailingWhitespaceAt } from "./whitespace";
 
 declare module "react-native" {
   interface ViewProps {
@@ -25,15 +26,15 @@ const paseoMonospace = { pmono: "" };
 
 interface SegmentTextProps {
   segment: Segment;
-  changedStyle: TextStyle;
+  markStyles: Record<Mark, TextStyle>;
 }
 
-// A piece of a line's text in its colour, highlighted if it changed.
+// A piece of a line's text in its colour, highlighted as what it's marked as, if anything.
 function SegmentText({
-  segment: { text, color, changed },
-  changedStyle,
+  segment: { text, color, mark },
+  markStyles,
 }: SegmentTextProps): ReactElement {
-  return <Text style={[{ color }, changed && changedStyle]}>{text}</Text>;
+  return <Text style={[{ color }, mark !== undefined && markStyles[mark]]}>{text}</Text>;
 }
 
 interface DiffLineProps {
@@ -51,7 +52,7 @@ interface DiffLineProps {
 
 // Only the line's text can be selected, so copying a selection copies what the lines say. The
 // numbers of a selected line stand out. Its text is in its syntax's colours, and its changed words
-// are highlighted.
+// and trailing whitespace are highlighted.
 function Line({
   id,
   line,
@@ -67,6 +68,11 @@ function Line({
   const colors = useContext(SyntaxColorsContext);
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
 
+  const markStyles = {
+    changed: styles[`${line.kind}Words`],
+    "trailing whitespace": styles.trailingWhitespace,
+  };
+
   return (
     <View>
       <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]}>
@@ -76,15 +82,17 @@ function Line({
           </Text>
         ))}
         <Text nativeID={id} selectable={selectable} style={styles.text}>
-          {segmentsOf(line.text, runsOf(line, highlights), colors, changes).map((segment) =>
-            segment.color === undefined && !segment.changed ? (
+          {segmentsOf(
+            line.text,
+            runsOf(line, highlights),
+            colors,
+            changes,
+            trailingWhitespaceAt(line),
+          ).map((segment) =>
+            segment.color === undefined && segment.mark === undefined ? (
               segment.text
             ) : (
-              <SegmentText
-                key={segment.start}
-                segment={segment}
-                changedStyle={styles[`${line.kind}Words`]}
-              />
+              <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
             ),
           )}
         </Text>

@@ -28,13 +28,17 @@ export function runsOf(line: NumberedLine, highlights: Highlights): Runs {
   return runs ?? [];
 }
 
+// What a piece of a line's text is marked as: changed text, or the whitespace an added line ends
+// with.
+export type Mark = "changed" | "trailing whitespace";
+
 // A piece of a line's text, where it starts in the text, the colour of its style, or undefined for
-// the text's own colour, and whether it's changed text.
+// the text's own colour, and what it's marked as, if anything.
 export interface Segment {
   start: number;
   text: string;
   color: string | undefined;
-  changed: boolean;
+  mark: Mark | undefined;
 }
 
 // What's the same throughout a piece of a line's text, from where the piece before it ends up to
@@ -56,41 +60,47 @@ function colorSpans(runs: Runs, colors: SyntaxColors): Span<string | undefined>[
   });
 }
 
-// Whether the text is changed: not up to where each range of changed text starts, then up to where
-// it ends.
-function changeSpans(changes: readonly TextRange[]): Span<boolean>[] {
-  return changes.flatMap(({ start, end }) => [
-    { end: start, value: false },
-    { end, value: true },
-  ]);
+// What the text is marked as up to where its trailing whitespace starts: nothing up to where each
+// range of changed text starts, then changed up to where it ends. Past them, it's trailing
+// whitespace.
+function markSpans(changes: readonly TextRange[], trailing: number): Span<Mark | undefined>[] {
+  return [
+    ...changes.flatMap(({ start, end }) => [
+      { end: Math.min(start, trailing), value: undefined },
+      { end: Math.min(end, trailing), value: "changed" as const },
+    ]),
+    { end: trailing, value: undefined },
+  ];
 }
 
 // The text in pieces of different colours, each run's in its style's, and any text the runs don't
-// reach in its own, split where changed text starts and ends.
+// reach in its own, split where changed text and the trailing whitespace from `trailing` start and
+// end.
 export function segmentsOf(
   text: string,
   runs: Runs,
   colors: SyntaxColors,
   changes: readonly TextRange[],
+  trailing: number,
 ): Segment[] {
   const colored = colorSpans(runs, colors);
-  const changed = changeSpans(changes);
+  const marked = markSpans(changes, trailing);
   const segments: Segment[] = [];
   let start = 0;
   let colorIndex = 0;
-  let changeIndex = 0;
+  let markIndex = 0;
 
   while (start < text.length) {
     const color = colored[colorIndex] ?? { end: text.length, value: undefined };
-    const change = changed[changeIndex] ?? { end: text.length, value: false };
-    const end = Math.min(color.end, change.end);
+    const mark = marked[markIndex] ?? { end: text.length, value: "trailing whitespace" };
+    const end = Math.min(color.end, mark.end);
     const piece = text.slice(start, end);
     const last = segments.at(-1);
 
-    if (last !== undefined && last.color === color.value && last.changed === change.value) {
+    if (last !== undefined && last.color === color.value && last.mark === mark.value) {
       last.text += piece;
     } else if (piece.length > 0) {
-      segments.push({ start, text: piece, color: color.value, changed: change.value });
+      segments.push({ start, text: piece, color: color.value, mark: mark.value });
     }
 
     start = end;
@@ -99,8 +109,8 @@ export function segmentsOf(
       colorIndex += 1;
     }
 
-    if (change.end === end) {
-      changeIndex += 1;
+    if (mark.end === end) {
+      markIndex += 1;
     }
   }
 
