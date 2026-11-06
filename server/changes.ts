@@ -40,7 +40,7 @@ function untrackedEntry(path: string): Entry {
 }
 
 // The files git status's fields list.
-function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
+export function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
   for (const field of fields) {
     const type = field.charAt(0);
 

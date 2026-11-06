@@ -279,6 +279,7 @@ function Changes({ directory, layout, hideWhitespace, tab, theme }: ChangesProps
           directory={directory}
           changes={changes}
           controls={controls}
+          refresh={refreshNow}
           panelWidth={panelWidth}
           theme={theme}
         />

@@ -23,3 +23,13 @@ export function menuPosition(point: Point, menu: Size, window: Size): Position {
     top: Math.max(0, point.y + menu.height > window.height ? point.y - menu.height : point.y),
   };
 }
+
+// How a menu's item looks: dimmed while it's disabled, whatever the pointer does, and else
+// highlighted while the pointer is over it.
+export function itemLook(hovered: boolean, disabled: boolean): "plain" | "hovered" | "disabled" {
+  if (disabled) {
+    return "disabled";
+  }
+
+  return hovered ? "hovered" : "plain";
+}

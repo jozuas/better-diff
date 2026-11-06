@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { menuPosition } from "./menu";
+import { itemLook, menuPosition } from "./menu";
 
 const length = fc.integer({ min: 0, max: 2000 });
 
@@ -80,4 +80,11 @@ test("opens a menu that just fits below and to the right of the point there", ()
   expect(
     menuPosition({ x: 10, y: 20 }, { width: 100, height: 50 }, { width: 110, height: 70 }),
   ).toStrictEqual({ left: 10, top: 20 });
+});
+
+test("a menu's item is highlighted while the pointer is over it, unless it's disabled, which dims it", () => {
+  expect(itemLook(false, false)).toBe("plain");
+  expect(itemLook(true, false)).toBe("hovered");
+  expect(itemLook(false, true)).toBe("disabled");
+  expect(itemLook(true, true)).toBe("disabled");
 });

@@ -41,11 +41,15 @@ const commandOptions = {
   "check-attr": ["-z"],
   // Paths read from its input and printed NUL-terminated, and never quoted.
   "check-ignore": ["-z", "--stdin"],
+  config: [],
 };
 
 // Commands that read their paths from their input: as arguments, as many as a group of files can
 // have would be more than a process can start with.
 const readsPaths = new Set<keyof typeof commandOptions>(["add", "reset", "restore", "rm"]);
+
+// Commands that take no paths: `git config` reads a `--` after its options as a value to look for.
+const takesNoPaths = new Set<keyof typeof commandOptions>(["config"]);
 
 // The pathspecs that name exactly the file at the path: never a pattern, such as `*` or `:!x`, and
 // never the files in a directory of the same name, which git takes the path to name too, as where a
@@ -72,6 +76,11 @@ async function symlinksIn(
   const symlinks = await symlinksAmong(directory, paths);
 
   return symlinks;
+}
+
+// The pathspecs after the `--` that ends a command's options, for a command that takes paths.
+function pathsAfter(command: keyof typeof commandOptions, pathspecs: readonly string[]): string[] {
+  return takesNoPaths.has(command) ? [] : ["--", ...pathspecs];
 }
 
 interface Extras {
@@ -119,7 +128,7 @@ export async function git(
       ...options,
       ...(pathsOnInput
         ? ["--pathspec-from-file=-", "--pathspec-file-nul", "--"]
-        : ["--", ...pathspecs]),
+        : pathsAfter(command, pathspecs)),
     ],
     {
       cwd: directory,
@@ -164,8 +173,9 @@ export async function git(
 
   // `git diff --no-index` exits with 1 when the files differ, as --exit-code makes `git diff`, and
   // when a file is gone, which leaves the diff empty. `git check-ignore` exits with 1 when it
-  // ignores none of the paths.
-  const answered = (noIndex || command === "check-ignore") && child.exitCode === 1;
+  // ignores none of the paths, and `git config` when the config doesn't set what it looks for.
+  const answered =
+    (noIndex || command === "check-ignore" || command === "config") && child.exitCode === 1;
 
   if (child.exitCode !== 0 && !answered) {
     throw new Error(`git ${command} failed: ${Buffer.concat(stderr).toString()}`);

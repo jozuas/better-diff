@@ -106,6 +106,25 @@ Replicates Sublime Merge as much as possible:
   - Copy filename
   - Copy file contents: the file as it is in the worktree, whichever group lists it, and of a symlink, the path it points to, as git stores it. A binary file, one larger than 10 MB, or one gone from the worktree, copies nothing, and says so.
 
+  An untracked file's menu also has the places a rule ignoring it can go: see Ignoring files.
+
+### Ignoring files
+
+As in Magit's gitignore menu (`i`), an untracked file's menu has the places a rule ignoring it can go:
+
+- Ignore in .gitignore: the `.gitignore` at the repository's root, which other clones share.
+- Ignore in a subdirectory's .gitignore: that of one of the directories the file is in, which other clones share, picked next under "Limit rule to files in", the file's own directory first. A file at the root has none.
+- Ignore privately (.git/info/exclude): this clone's, which all of its worktrees read.
+- Ignore in all repositories: the file `core.excludesFile` names, which the item shows. While it isn't set, the item is disabled and says so.
+
+Picking one asks for the file or pattern to ignore, as Magit does. Enter or the Ignore button adds the rule, and Escape, Cancel or a click outside closes it without adding one:
+
+- Under the field are the candidates Magit offers, from the rule's directory, sorted: each untracked file under it as `/path`, each directory under it git status lists as untracked, which has no tracked files, as `/dir/`, and for each file with an extension, `*.ext`, and `/dir/*.ext` for one in a subdirectory. Typing shows only those with what's typed in them. Clicking one adds it.
+- With nothing typed, Enter adds the default: the file, as `/path`.
+- A candidate escapes what a pattern would read as more than the name, as `*`, `?`, `[`, `\`, and spaces at its end, so it ignores the name it shows, and only that. A newline or carriage return, which a rule can't have, is `?`. What's typed goes in as it is. (Magit adds paths as they are, and doubles the backslashes in a rule.)
+- The rule goes on a line of its own at the end of the file, which is made, with its directories, if it isn't there. A `.gitignore` is then staged, as Magit stages it, unless it's ignored itself, which git won't stage.
+- The view refreshes at once.
+
 ### Confirmation
 
 These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard selected, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
@@ -133,7 +152,6 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 - Sending line comments to an agent.
 - Keyboard shortcuts for the other actions: on lines, mode changes, and in the sidebar.
-- The actions of a file's and a group's buttons in right-click menus too.
 - Mobile.
 
 ### Out of scope

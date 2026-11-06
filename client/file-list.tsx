@@ -13,6 +13,9 @@ import { GroupSection } from "./group-section";
 import type { RowHandlers } from "./group-section";
 import { listedBy, reachedFile, selectedBy, selectedTo } from "./groups";
 import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
+import type { IgnorePlace } from "./ignore";
+import { IgnorePrompt } from "./ignore-prompt";
+import type { Ignoring } from "./ignore-prompt";
 import type { Point } from "./menu";
 import { useLatest } from "./web";
 
@@ -35,6 +38,7 @@ interface FileListProps {
   controls: Controls;
   // Copies what a file's menu item names of the file at the path.
   onCopy: (item: CopyItem, path: string) => void;
+  ignoring: Ignoring;
   theme: PluginTheme;
 }
 
@@ -43,7 +47,7 @@ interface FileListProps {
 // it shows does.
 function useRowHandlers(
   list: Pick<FileListProps, "groups" | "open" | "onOpen" | "collapsed"> & {
-    onMenu: (path: string, point: Point) => void;
+    onMenu: (file: OpenFile, point: Point) => void;
   },
 ): RowHandlers {
   const focus = useContext(KeyboardFocusContext);
@@ -88,8 +92,8 @@ function useRowHandlers(
           focus.toRow(next);
         }
       },
-      onMenu: ({ path }, point) => {
-        latest.current.onMenu(path, point);
+      onMenu: (file, point) => {
+        latest.current.onMenu(file, point);
       },
     };
   }, [focus, latest]);
@@ -101,7 +105,8 @@ function useRowHandlers(
 // shift-clicked selects the files from the open one to it, and opens its menu when right-clicked.
 // ↓ and ↑ with focus in a file's row open the next file listed or the one before, whichever group
 // it's in, and focus moves along with them. Shift+↑/↓ selects one more file or one fewer, and moves
-// focus to the file the selection reaches. → moves focus to the file's first hunk in the diff.
+// focus to the file the selection reaches. → moves focus to the file's first hunk in the diff. A
+// place picked in an untracked file's menu asks for the rule ignoring it, where the menu was.
 export function FileList({
   groups,
   open,
@@ -113,17 +118,19 @@ export function FileList({
   onToggle,
   controls,
   onCopy,
+  ignoring,
   theme,
 }: FileListProps): ReactElement {
-  const [menu, setMenu] = useState<{ path: string; point: Point }>();
+  const [menu, setMenu] = useState<{ file: OpenFile; point: Point }>();
+  const [prompt, setPrompt] = useState<{ path: string; place: IgnorePlace; point: Point }>();
 
   const rows = useRowHandlers({
     groups,
     open,
     onOpen,
     collapsed,
-    onMenu: (path, point) => {
-      setMenu({ path, point });
+    onMenu: (file, point) => {
+      setMenu({ file, point });
     },
   });
 
@@ -151,13 +158,29 @@ export function FileList({
       </ScrollView>
       {menu === undefined ? null : (
         <FileMenu
-          path={menu.path}
+          file={menu.file}
           point={menu.point}
           onCopy={(item) => {
-            onCopy(item, menu.path);
+            onCopy(item, menu.file.path);
+          }}
+          ignoring={ignoring}
+          onIgnore={(place) => {
+            setPrompt({ path: menu.file.path, place, point: menu.point });
           }}
           onClose={() => {
             setMenu(undefined);
+          }}
+          theme={theme}
+        />
+      )}
+      {prompt === undefined ? null : (
+        <IgnorePrompt
+          path={prompt.path}
+          place={prompt.place}
+          point={prompt.point}
+          ignoring={ignoring}
+          onClose={() => {
+            setPrompt(undefined);
           }}
           theme={theme}
         />

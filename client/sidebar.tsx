@@ -9,12 +9,15 @@ import { View } from "react-native";
 
 import type { changesRpc } from "../shared/changes";
 import { contentsRpc } from "../shared/contents";
+import { excludesFileRpc, ignoreRpc, patternsRpc } from "../shared/ignore";
 import type { Controls } from "./actions";
 import { copy } from "./copy";
 import type { CopyItem } from "./copy";
 import { FileList } from "./file-list";
 import { sidebarGroups } from "./groups";
 import type { GroupName, Open } from "./groups";
+import type { Place } from "./ignore";
+import type { Ignoring } from "./ignore-prompt";
 import { Queried } from "./queried";
 import { fileListWidth } from "./resize";
 import { Separator } from "./separator";
@@ -64,6 +67,47 @@ function useCopy(directory: string): (item: CopyItem, path: string) => void {
   };
 }
 
+// Ignores untracked files with the rules their menus add, and then shows the changes as they are,
+// and says why where it can't.
+function useIgnoring(directory: string, refresh: () => Promise<void>): Ignoring {
+  const toast = useToast();
+  const readExcludesFile = useRpc(excludesFileRpc);
+  const readPatterns = useRpc(patternsRpc);
+  const ignore = useRpc(ignoreRpc);
+
+  const run = useMutation({
+    mutationFn: async ({ place, rule }: { place: Place; rule: string }) => {
+      await ignore({ directory, place, rule });
+      await refresh();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
+  return {
+    excludesFile: {
+      queryKey: [directory, "excludes file"],
+      queryFn: async () => {
+        const { path } = await readExcludesFile({ directory });
+
+        return path;
+      },
+    },
+    patterns: (path) => (inDirectory) => ({
+      queryKey: [directory, "ignore patterns", path, inDirectory],
+      queryFn: async () => {
+        const patterns = await readPatterns({ directory, path, inDirectory });
+
+        return patterns;
+      },
+    }),
+    onIgnore: (place, rule) => {
+      run.mutate({ place, rule });
+    },
+  };
+}
+
 // The file list's width, from the one kept, as its separator is dragged, or fit to what the list
 // with the id shows, kept once it's let go, and no wider than the panel's width leaves room for.
 function useFileListWidth(
@@ -93,6 +137,8 @@ interface SidebarProps extends SidebarState {
   directory: string;
   changes: UseQueryResult<Listed>;
   controls: Controls;
+  // Shows the changes as they are now, as once a file's ignored.
+  refresh: () => Promise<void>;
   // How wide the panel it's in is.
   panelWidth: number;
   theme: PluginTheme;
@@ -111,11 +157,13 @@ export function Sidebar({
   width: kept,
   onWidth,
   controls,
+  refresh,
   panelWidth,
   theme,
 }: SidebarProps): ReactElement {
   const fileList = useId();
   const onCopy = useCopy(directory);
+  const ignoring = useIgnoring(directory, refresh);
 
   const { width, onResize, onResized, onFit } = useFileListWidth(
     kept,
@@ -142,6 +190,7 @@ export function Sidebar({
               onToggle={onToggle}
               controls={controls}
               onCopy={onCopy}
+              ignoring={ignoring}
               theme={theme}
             />
           )}
