@@ -8,7 +8,7 @@ export default function contribute(client: PluginClientContext): PluginCleanup {
   client.addWorkspacePanel({
     id: "changes",
     title: "Better Diff",
-    icon: "GitCompare",
+    icon: "GitCompareArrows",
     Component: ChangesPanel,
   });
 
