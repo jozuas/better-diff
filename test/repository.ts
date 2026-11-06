@@ -150,6 +150,12 @@ export function deleteFile(repository: string, path: string): void {
   rmSync(join(repository, path), { force: true });
 }
 
+// Puts a symlink to the target in place of the directory at the path, and the files in it.
+export function linkDirectory(repository: string, path: string, target: string): void {
+  rmSync(join(repository, path), { recursive: true });
+  symlinkSync(target, join(repository, path));
+}
+
 export function makeExecutable(repository: string, path: string, executable = true): void {
   chmodSync(join(repository, path), executable ? 0o755 : 0o644);
 }

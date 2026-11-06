@@ -12,7 +12,15 @@ import {
 } from "../test/groups";
 import type { GroupAction, RepositoryState } from "../test/groups";
 import { commitTenLines, move } from "../test/renames";
-import { inCopyOf, inRepository, runGit, timeout, writeFile } from "../test/repository";
+import {
+  commitAll,
+  inCopyOf,
+  inRepository,
+  linkDirectory,
+  runGit,
+  timeout,
+  writeFile,
+} from "../test/repository";
 import { setUp } from "../test/staging";
 import { listChanges } from "./changes";
 import { applyGroup } from "./groups";
@@ -145,6 +153,26 @@ test("stage all untracked files: leaves one whose diff can't be read as it is", 
 
     expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all", "-z"])).toBe(
       "A  b\0?? a\0",
+    );
+  });
+});
+
+test("stage all modified files: one whose directory became a symlink, beside another", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "a/b", "b\n");
+    writeFile(repository, "c", "c\n");
+    commitAll(repository);
+    writeFile(repository, "c", "changed\n");
+    linkDirectory(repository, "a", "nowhere");
+
+    const { modified } = await listChanges({ directory: repository });
+
+    await expect(
+      applyGroup({ directory: repository, group: "modified", operation: "stage", paths: modified }),
+    ).resolves.toStrictEqual({ status: "applied" });
+
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all", "-z"])).toBe(
+      "D  a/b\0M  c\0?? a\0",
     );
   });
 });

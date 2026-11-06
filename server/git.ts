@@ -1,8 +1,8 @@
 import { once } from "node:events";
-import { lstat } from "node:fs/promises";
-import { join } from "node:path";
 
 import { spawnProcess } from "@getpaseo/plugin/server";
+
+import { symlinksAmong } from "./symlinks";
 
 // Options without which the user's config could change output the plugin parses, or what a
 // command does.
@@ -69,15 +69,9 @@ async function symlinksIn(
     return new Set();
   }
 
-  const symlinks = await Promise.all(
-    paths.map(async (path) => {
-      const stats = await lstat(join(directory, path)).catch(() => {});
+  const symlinks = await symlinksAmong(directory, paths);
 
-      return stats?.isSymbolicLink() === true;
-    }),
-  );
-
-  return new Set(paths.filter((_, index) => symlinks[index] === true));
+  return symlinks;
 }
 
 interface Extras {

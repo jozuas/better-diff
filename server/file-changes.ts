@@ -1,6 +1,3 @@
-import { lstat } from "node:fs/promises";
-import { join } from "node:path";
-
 import type { RpcInput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
@@ -8,6 +5,7 @@ import { aloneIntentToAdd, readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { git } from "./git";
 import { isRename } from "./patch";
+import { symlinksAmong } from "./symlinks";
 import { versionOf } from "./version";
 
 export type Side = RpcInput<typeof diffRpc>["side"];
@@ -30,20 +28,16 @@ export interface Changes {
   intentToAdd: boolean;
 }
 
-async function isSymlink(directory: string, path: string): Promise<boolean> {
-  const stats = await lstat(join(directory, path)).catch(() => {});
-
-  return stats?.isSymbolicLink() === true;
-}
-
 // An untracked file's diff as a new file, as git diffs one added with --intent-to-add. `git diff
 // --no-index` reads a file named `-` from its input, and `git apply` refuses one spelled `./-`, so
 // that one is diffed intent-to-add, in an index of its own. So is a symlink: where it points to a
 // directory, `git diff --no-index` goes into the directory for a file `null` to diff /dev/null with,
 // and fails as it does where the files differ.
 async function newFileDiff(directory: string, path: string): Promise<Buffer> {
+  const symlinks = await symlinksAmong(directory, [path]);
+
   const diff =
-    path === "-" || (await isSymlink(directory, path))
+    path === "-" || symlinks.has(path)
       ? await aloneIntentToAdd(directory, [path], async (index) => {
           // Stryker disable next-line ArrayDeclaration: the index has only the file, so git diffs it alone either way.
           const added = await git(directory, "diff", [], [path], { index });

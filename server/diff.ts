@@ -19,6 +19,7 @@ import {
 } from "./patch";
 import type { FileDiff } from "./patch";
 import { sameChanges } from "./same-changes";
+import { beyondSymlinks } from "./symlinks";
 
 type Action = RpcInput<typeof applyFileRpc>;
 
@@ -275,6 +276,23 @@ async function cleanEach(directory: string, paths: readonly string[]): Promise<v
   }
 }
 
+// The paths staging takes out of the index with `git rm --cached`: those beyond a symlink, whose
+// files git takes for deleted, though `git add` refuses their paths. Forced, as `git rm` would
+// otherwise keep changes the index has of its own where it finds a file through the symlink.
+async function removedIn(
+  directory: string,
+  operation: Action["operation"],
+  paths: readonly string[],
+): Promise<Set<string>> {
+  if (operation !== "stage") {
+    return new Set();
+  }
+
+  const removed = await beyondSymlinks(directory, paths);
+
+  return removed;
+}
+
 // Stages, unstages or discards all of the files' changes, including those a patch can't make, such
 // as a binary file's or a mode change, and a rename, both of whose paths it acts on. A file whose
 // diff has no changes is left alone. A file discarding deletes goes with `git clean`, which never
@@ -290,7 +308,8 @@ export async function applyChanges(
   );
 
   const deleted = changed.filter((file) => deletes(operation, file));
-  const kept = changed.filter((file) => !deletes(operation, file));
+  const kept = changed.filter((file) => !deletes(operation, file)).flatMap(({ paths }) => paths);
+  const removed = await removedIn(directory, operation, kept);
 
   await gitOn(
     directory,
@@ -305,8 +324,14 @@ export async function applyChanges(
   );
   await gitOn(
     directory,
+    "rm",
+    kept.filter((path) => removed.has(path)),
+    ["--cached", "--force"],
+  );
+  await gitOn(
+    directory,
     fileCommands[operation],
-    kept.flatMap(({ paths }) => paths),
+    kept.filter((path) => !removed.has(path)),
   );
   await cleanEach(
     directory,
