@@ -18,38 +18,57 @@ export interface LineContent extends TextContent {
   selectable: boolean;
 }
 
-type Value = string | number | boolean | null | undefined;
+type Run = NumberedLine["runs"][number];
 
-// What the line's text's pieces render from, as a list of values, the same for two lines whose
-// pieces render the same: its kind, which its trailing whitespace is marked by, its text, its runs
-// and its changed text. A run's pair of values ends in a style or null, and a range of changed
-// text's in a number, so they don't run together.
-function textValues({ line, changes }: TextContent): Value[] {
-  return [
-    line.kind,
-    line.text,
-    ...line.runs.flat(),
-    ...changes.flatMap(({ start, end }) => [start, end]),
-  ];
+// Whether the lists have alike items in the same order: each of the first's alike the second's at
+// its place, and the second no longer. Item by item, without making lists, since a view of
+// thousands of lines compares each line each time it renders them.
+function alikeItems<Item>(
+  before: readonly Item[],
+  after: readonly Item[],
+  alike: (item: Item, other: Item) => boolean,
+): boolean {
+  return (
+    after.length <= before.length &&
+    before.every((item, index) => {
+      const other = after[index];
+
+      return other !== undefined && alike(item, other);
+    })
+  );
 }
 
-function sameValues(before: readonly Value[], after: readonly Value[]): boolean {
-  return before.length === after.length && before.every((value, index) => value === after[index]);
+function sameRun([length, style]: Run, [otherLength, otherStyle]: Run): boolean {
+  return length === otherLength && style === otherStyle;
+}
+
+function sameRange({ start, end }: TextRange, other: TextRange): boolean {
+  return start === other.start && end === other.end;
 }
 
 // Whether the line's text's pieces render as they did, whatever its numbers and id, though what
-// they render with is made anew, as each time its diff is read again.
+// they render with is made anew, as each time its diff is read again: by its kind, which its
+// trailing whitespace is marked by, its text, its runs and its changed text.
 export function textAsBefore(before: TextContent, after: TextContent): boolean {
-  return sameValues(textValues(before), textValues(after));
+  return (
+    before.line.kind === after.line.kind &&
+    before.line.text === after.line.text &&
+    alikeItems(before.line.runs, after.line.runs, sameRun) &&
+    alikeItems(before.changes, after.changes, sameRange)
+  );
 }
 
-// What the rest of the line renders from: its id, its numbers, whether it's selected and its
-// newline.
-function restValues({ id, selectable, line, selected, side }: LineContent): Value[] {
-  return [id, selectable, line.oldNumber, line.newNumber, line.newline, selected, side];
-}
-
-// Whether the line renders as it did, though what it renders with is made anew.
+// Whether the line renders as it did, though what it renders with is made anew: its text's pieces,
+// and its id, its numbers, whether it's selected and its newline.
 export function lineAsBefore(before: LineContent, after: LineContent): boolean {
-  return textAsBefore(before, after) && sameValues(restValues(before), restValues(after));
+  return (
+    textAsBefore(before, after) &&
+    before.id === after.id &&
+    before.selectable === after.selectable &&
+    before.line.oldNumber === after.line.oldNumber &&
+    before.line.newNumber === after.line.newNumber &&
+    before.line.newline === after.line.newline &&
+    before.selected === after.selected &&
+    before.side === after.side
+  );
 }

@@ -72,6 +72,65 @@ const contents = content.chain((first) =>
   ),
 );
 
+const aLine: LineContent = {
+  id: "a:0:1",
+  line: {
+    kind: "added",
+    text: "x\ty ",
+    newline: true,
+    runs: [
+      [1, "keyword"],
+      [3, null],
+    ],
+    oldNumber: undefined,
+    newNumber: 1,
+  },
+  selected: false,
+  side: "new",
+  selectable: true,
+  changes: [{ start: 0, end: 2 }],
+};
+
+// Lines like aLine but for one part each, a run's or a range of changed text's included, which
+// `contents` seldom makes.
+const othersButForOnePart: LineContent[] = [
+  { ...aLine, id: "a:0:2" },
+  { ...aLine, selectable: false },
+  { ...aLine, selected: true },
+  { ...aLine, side: "old" },
+  { ...aLine, line: { ...aLine.line, kind: "removed" } },
+  { ...aLine, line: { ...aLine.line, text: "x\tz " } },
+  { ...aLine, line: { ...aLine.line, newline: false } },
+  { ...aLine, line: { ...aLine.line, oldNumber: 1 } },
+  { ...aLine, line: { ...aLine.line, newNumber: 2 } },
+  {
+    ...aLine,
+    line: {
+      ...aLine.line,
+      runs: [
+        [2, "keyword"],
+        [2, null],
+      ],
+    },
+  },
+  {
+    ...aLine,
+    line: {
+      ...aLine.line,
+      runs: [
+        [1, null],
+        [3, null],
+      ],
+    },
+  },
+  { ...aLine, changes: [{ start: 1, end: 2 }] },
+  { ...aLine, changes: [{ start: 0, end: 1 }] },
+];
+
+const butForOnePart = othersButForOnePart.map((other): [[LineContent, LineContent]] => [
+  [aLine, other],
+]);
+
 // The parts of a line its text's pieces render from, in a form that's equal for lines whose pieces
 // render the same.
 function textOf({ line, changes }: LineContent): string {
@@ -100,6 +159,7 @@ test("a line's text renders its pieces as before while its kind, text, highlight
     fc.property(contents, ([before, after]) => {
       expect(textAsBefore(before, after)).toBe(textOf(before) === textOf(after));
     }),
+    { examples: butForOnePart },
   );
 });
 
@@ -108,5 +168,6 @@ test("a line renders as before while its text's pieces do and its id, numbers, n
     fc.property(contents, ([before, after]) => {
       expect(lineAsBefore(before, after)).toBe(renderedOf(before) === renderedOf(after));
     }),
+    { examples: butForOnePart },
   );
 });
