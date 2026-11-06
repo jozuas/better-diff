@@ -1,4 +1,6 @@
 import { once } from "node:events";
+import { lstat } from "node:fs/promises";
+import { join } from "node:path";
 
 import { spawnProcess } from "@getpaseo/plugin/server";
 
@@ -48,11 +50,34 @@ const readsPaths = new Set<keyof typeof commandOptions>(["add", "reset", "restor
 // The pathspecs that name exactly the file at the path: never a pattern, such as `*` or `:!x`, and
 // never the files in a directory of the same name, which git takes the path to name too, as where a
 // directory has replaced the file. A path ending in `/`, as git status names a repository inside
-// the repository, names the directory.
-function pathspecsOf(path: string): string[] {
-  return path.endsWith("/")
+// the repository, names the directory, and a symlink has no files in it to leave out.
+function pathspecsOf(path: string, symlink: boolean): string[] {
+  return path.endsWith("/") || symlink
     ? [`:(literal)${path}`]
     : [`:(literal)${path}`, `:(exclude,literal)${path}/`];
+}
+
+// The paths that are symlinks in the worktree, for `git add`, which refuses a pathspec beyond a
+// symlink, even one that only leaves files out. The other commands still leave out the files under
+// one, which HEAD or the index can have, as where a symlink has replaced a directory.
+async function symlinksIn(
+  directory: string,
+  command: keyof typeof commandOptions,
+  paths: readonly string[],
+): Promise<Set<string>> {
+  if (command !== "add") {
+    return new Set();
+  }
+
+  const symlinks = await Promise.all(
+    paths.map(async (path) => {
+      const stats = await lstat(join(directory, path)).catch(() => {});
+
+      return stats?.isSymbolicLink() === true;
+    }),
+  );
+
+  return new Set(paths.filter((_, index) => symlinks[index] === true));
 }
 
 interface Extras {
@@ -76,7 +101,11 @@ export async function git(
   const pathsOnInput = readsPaths.has(command);
   // `git diff --no-index` diffs files, which its paths name as they are.
   const noIndex = options.includes("--no-index");
-  const pathspecs = noIndex ? paths : paths.flatMap(pathspecsOf);
+  const symlinks = await symlinksIn(directory, command, paths);
+
+  const pathspecs = noIndex
+    ? paths
+    : paths.flatMap((path) => pathspecsOf(path, symlinks.has(path)));
 
   const child = spawnProcess(
     "git",

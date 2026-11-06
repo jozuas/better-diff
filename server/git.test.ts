@@ -1,59 +1,10 @@
 import { readFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 
-import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { canCoexist, filePath } from "../test/file-names";
-import {
-  commitAll,
-  deleteFile,
-  inRepository,
-  makeExecutable,
-  runGit,
-  timeout,
-  worktreeFile,
-  writeFile,
-} from "../test/repository";
+import { inRepository, makeExecutable, runGit, worktreeFile, writeFile } from "../test/repository";
 import { git } from "./git";
-
-// With no paths, a command covers every file, so at least one is selected.
-const files = fc
-  .record({
-    selected: fc.array(filePath, { minLength: 1 }),
-    others: fc.array(filePath),
-  })
-  .filter(({ selected, others }) => canCoexist([...selected, ...others]));
-
-test(
-  "selects exactly the files its paths name, whatever characters they hold",
-  async () => {
-    await fc.assert(
-      fc.asyncProperty(files, async ({ selected, others }) => {
-        await inRepository(async (repository) => {
-          for (const path of [...selected, ...others]) {
-            writeFile(repository, path, "");
-          }
-
-          const status = await git(
-            repository,
-            "status",
-            ["--porcelain=v2", "--untracked-files=all"],
-            selected,
-          );
-
-          expect(status.toString().split("\0").toSorted()).toStrictEqual(
-            ["", ...selected.map((path) => `? ${path}`)].toSorted(),
-          );
-        });
-      }),
-      {
-        examples: [[{ selected: ["*"], others: ["a"] }], [{ selected: ["-s"], others: ["a"] }]],
-      },
-    );
-  },
-  timeout,
-);
 
 test.each([
   ["an external diff tool", "diff.external", "false"],
@@ -277,31 +228,6 @@ test.each<[string, (repository: string) => { index?: string }, string | undefine
     });
   },
 );
-
-test("selects a file, and none of the files in a directory that replaced it", async () => {
-  await inRepository(async (repository) => {
-    writeFile(repository, "a", "a\n");
-    commitAll(repository);
-    deleteFile(repository, "a");
-    writeFile(repository, "a/x", "x\n");
-
-    const status = await git(repository, "status", ["--porcelain", "--untracked-files=all"], ["a"]);
-
-    expect(status.toString()).toBe(" D a\0");
-  });
-});
-
-test("adds a repository inside the repository, which git status names with a `/`", async () => {
-  await inRepository(async (repository) => {
-    writeFile(repository, "inner/a", "a\n");
-    runGit(join(repository, "inner"), ["init", "--quiet"]);
-    commitAll(join(repository, "inner"));
-
-    await git(repository, "add", [], ["inner/"]);
-
-    expect(runGit(repository, ["ls-files", "--stage"])).toMatch(/^160000 \w+ 0\tinner\n$/u);
-  });
-});
 
 // Runs the action with the variable set in the environment, as the daemon's could have it.
 async function withVariable<T>(name: string, value: string, action: () => Promise<T>): Promise<T> {

@@ -13,6 +13,7 @@ import {
   runGit,
   worktreeFile,
   writeFile,
+  writeSymlink,
 } from "../test/repository";
 import { listChanges, withIntentToAdd } from "./changes";
 
@@ -165,6 +166,20 @@ test("lists a moved file as deleted and untracked where git won't add an untrack
     await expect(listChanges({ directory: repository })).resolves.toMatchObject({
       modified: ["a"],
       untracked: ["b", "git~1/b"],
+      staged: [],
+    });
+  });
+});
+
+test("pairs a moved file beside an untracked symlink", async () => {
+  await inRepository(async (repository) => {
+    commitTenLines(repository);
+    move(repository);
+    writeSymlink(repository, "link", "target");
+
+    await expect(listChanges({ directory: repository })).resolves.toMatchObject({
+      modified: ["b"],
+      untracked: ["link"],
       staged: [],
     });
   });

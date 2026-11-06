@@ -279,6 +279,42 @@ test.each(operations)("%s file: a file that became a symlink", async (operation)
   });
 });
 
+// Each way a symlink can be changed in the worktree, and what git status says once it's staged.
+test.each<[string, (repository: string) => void, string]>([
+  ["a new symlink", () => {}, "A  a\n"],
+  [
+    "a symlink that points elsewhere",
+    (repository) => {
+      writeSymlink(repository, "a", "c");
+      commitAll(repository);
+      deleteFile(repository, "a");
+    },
+    "M  a\n",
+  ],
+  [
+    "a file that became a symlink",
+    (repository) => {
+      writeFile(repository, "a", "a\n");
+      commitAll(repository);
+      deleteFile(repository, "a");
+    },
+    "T  a\n",
+  ],
+])("stage file: %s", async (_, commitBefore, status) => {
+  await inRepository(async (repository) => {
+    commitBefore(repository);
+    writeSymlink(repository, "a", "b");
+
+    const { version } = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await expect(
+      applyFile({ directory: repository, path: "a", operation: "stage", version }),
+    ).resolves.toStrictEqual({ status: "applied" });
+
+    expect(runGit(repository, ["status", "--porcelain"])).toBe(status);
+  });
+});
+
 test("stage file: stages a deleted file, without the files of a directory that replaced it", async () => {
   await inRepository(async (repository) => {
     writeFile(repository, "a", "a\n");
