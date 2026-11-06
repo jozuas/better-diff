@@ -103,6 +103,14 @@ const symlinks: [string, (repository: string) => void][] = [
     },
   ],
   [
+    "an untracked one to a directory",
+    (repository) => {
+      writeFile(repository, "b/x", "x\n");
+      commitAll(repository);
+      writeSymlink(repository, "a", "b");
+    },
+  ],
+  [
     "one whose target changed",
     (repository) => {
       writeSymlink(repository, "a", "b");

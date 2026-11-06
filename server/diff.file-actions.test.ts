@@ -283,6 +283,14 @@ test.each(operations)("%s file: a file that became a symlink", async (operation)
 test.each<[string, (repository: string) => void, string]>([
   ["a new symlink", () => {}, "A  a\n"],
   [
+    "a new symlink to a directory",
+    (repository) => {
+      writeFile(repository, "b/x", "x\n");
+      commitAll(repository);
+    },
+    "A  a\n",
+  ],
+  [
     "a symlink that points elsewhere",
     (repository) => {
       writeSymlink(repository, "a", "c");
@@ -312,6 +320,23 @@ test.each<[string, (repository: string) => void, string]>([
     ).resolves.toStrictEqual({ status: "applied" });
 
     expect(runGit(repository, ["status", "--porcelain"])).toBe(status);
+  });
+});
+
+test("discard file: deletes a new symlink to a directory, and none of the files in the directory", async () => {
+  await inRepository(async (repository) => {
+    writeFile(repository, "b/x", "x\n");
+    commitAll(repository);
+    writeFile(repository, "b/y", "y\n");
+    writeSymlink(repository, "a", "b");
+
+    const { version } = await readDiff({ directory: repository, path: "a", side: "unstaged" });
+
+    await expect(
+      applyFile({ directory: repository, path: "a", operation: "discard", version }),
+    ).resolves.toStrictEqual({ status: "applied" });
+
+    expect(runGit(repository, ["status", "--porcelain", "--untracked-files=all"])).toBe("?? b/y\n");
   });
 });
 
