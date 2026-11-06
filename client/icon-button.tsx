@@ -2,12 +2,15 @@ import type { PluginSerializableIcon, PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 
 import { Hoverable, TintLayer } from "./hoverable";
+import { ShortcutTip } from "./shortcut-tip";
 
 const styles = StyleSheet.create({
-  button: { alignSelf: "center", padding: 2, borderRadius: 4, overflow: "hidden" },
+  // Rounded as its face is, for its focus ring.
+  button: { alignSelf: "center", borderRadius: 4 },
+  face: { padding: 2, borderRadius: 4, overflow: "hidden" },
   hidden: { opacity: 0 },
 });
 
@@ -17,17 +20,19 @@ interface IconButtonProps {
   // A Lucide icon's name, or an SVG.
   icon: PluginSerializableIcon;
   onPress: () => void;
+  // How its key is written, if it has one, which shows under it once the pointer rests on it.
+  shortcut?: string | undefined;
   hidden?: boolean;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
 }
 
-// An icon that brightens while the pointer is over it. Hidden, it can still be reached with the
-// keyboard.
+// An icon that brightens while the pointer is over it.
 export function IconButton({
   label,
   icon,
   onPress,
+  shortcut,
   hidden = false,
   style,
   theme,
@@ -44,8 +49,11 @@ export function IconButton({
 
         return (
           <>
-            <TintLayer color={color} hovered={hovered} pressed={pressed} />
-            <Icon icon={icon} size={15} color={color} />
+            <View style={styles.face}>
+              <TintLayer color={color} hovered={hovered} pressed={pressed} />
+              <Icon icon={icon} size={15} color={color} />
+            </View>
+            <ShortcutTip shortcut={shortcut} resting={hovered && !pressed} theme={theme} />
           </>
         );
       }}

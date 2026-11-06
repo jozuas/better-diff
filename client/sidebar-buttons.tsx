@@ -10,8 +10,11 @@ import type { ButtonLook, Controls, SidebarAction } from "./actions";
 import type { Target } from "./apply";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
+import type { Place } from "./keymap";
 import type { Look } from "./reveal";
-import { overlayId } from "./web";
+import { ShortcutTip } from "./shortcut-tip";
+import { shortcutOf, shortcutText } from "./shortcuts";
+import { onMac, overlayId } from "./web";
 
 // What hears the pointer and focus coming into a row and leaving it.
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
@@ -80,23 +83,31 @@ function Face({ action, look, styles }: FaceProps): ReactElement {
 interface SidebarButtonProps {
   action: SidebarAction;
   row: string;
+  // Where focus is while its key presses it: in a file's row, or a group's heading.
+  place: Place;
   target: Target;
   path: string | undefined;
   hidden: boolean;
+  onRun: (() => void) | undefined;
   controls: Controls;
   reveal: RevealHandlers;
   styles: Styles;
+  theme: PluginTheme;
 }
 
+// Its key, which acts on all of a file, or files, shows under it once the pointer rests on it.
 function SidebarButton({
   action,
   row,
+  place,
   target,
   path,
   hidden,
+  onRun,
   controls,
   reveal,
   styles,
+  theme,
 }: SidebarButtonProps): ReactElement {
   const button = `${row}:${action.operation}`;
   // Only arming it or disarming it, or an action starting or ending, renders it again.
@@ -111,7 +122,7 @@ function SidebarButton({
       disabled={busy}
       style={[armed ? styles.armed : styles.icon, hidden && styles.hidden]}
       onPress={() => {
-        controls.press(button, action, target);
+        controls.press(button, action, target, onRun);
       }}
       {...reveal}
     >
@@ -122,6 +133,11 @@ function SidebarButton({
           <>
             <TintLayer color={styles.faces[look]} hovered={hovered} pressed={pressed} />
             <Face action={action} look={look} styles={styles} />
+            <ShortcutTip
+              shortcut={shortcutText(shortcutOf(action, "file", place), onMac())}
+              resting={hovered && !pressed}
+              theme={theme}
+            />
           </>
         );
       }}
@@ -133,9 +149,13 @@ interface SidebarButtonsProps {
   actions: SidebarAction[];
   // Tells the row's buttons apart from other rows'.
   row: string;
+  // Where focus is while their keys press them: in a file's row, or a group's heading.
+  place: Place;
   target: Target;
   // The file they act on, which their names say, if they act on one.
   path?: string;
+  // Called just before one of the actions runs.
+  onRun: (() => void) | undefined;
   // Plain hides them.
   look: Look;
   // The row's background, which they cover the end of the row with.
@@ -150,8 +170,10 @@ interface SidebarButtonsProps {
 export function SidebarButtons({
   actions,
   row,
+  place,
   target,
   path,
+  onRun,
   look,
   background,
   controls,
@@ -173,12 +195,15 @@ export function SidebarButtons({
           key={action.operation}
           action={action}
           row={row}
+          place={place}
           target={target}
           path={path}
           hidden={hidden}
+          onRun={onRun}
           controls={controls}
           reveal={reveal}
           styles={styles}
+          theme={theme}
         />
       ))}
     </View>

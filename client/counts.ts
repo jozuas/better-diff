@@ -19,3 +19,18 @@ export function countsOf({
 
   return { added: `+${numbers.format(added)}`, removed: `−${numbers.format(removed)}` };
 }
+
+// How a file's bar reads: the file's status, its path after the one it was renamed from, if it was,
+// and, once its diff is read, how many lines a text diff adds and removes.
+export function barLabel(
+  status: string,
+  path: string,
+  diff: Pick<Diff, "kind" | "added" | "removed" | "renamedFrom"> | undefined,
+): string {
+  const counts = diff === undefined ? undefined : countsOf(diff);
+  const renamed = diff?.renamedFrom === undefined ? undefined : `${diff.renamedFrom} →`;
+
+  return [status, renamed, path, counts?.added, counts?.removed]
+    .filter((part) => part !== undefined)
+    .join(" ");
+}

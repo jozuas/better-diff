@@ -12,6 +12,8 @@ import type { Daemon } from "./paseo";
 type DiffStyle = "Auto" | "Inline" | "Side by side";
 
 interface App {
+  // Shows the repository's workspace.
+  showWorkspace: () => Promise<void>;
   // Shows the repository's workspace, and opens the plugin's panel in it.
   openPanel: () => Promise<void>;
   // Opens the plugin's page in Paseo's settings, from its menu in the list of the host's plugins.
@@ -39,6 +41,10 @@ interface App {
   // Keeps the plugin's first action from reaching the daemon until the function it gives is called,
   // as if it ran until then, and lets those after it through. Before openPanel.
   holdAction: () => Promise<() => void>;
+  // Keeps the plugin's first listing of the changes from reaching the daemon until the function it
+  // gives is called, so the panel lists none until then, whether it asks before or after. Before
+  // openPanel.
+  holdList: () => Promise<() => void>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
@@ -68,6 +74,14 @@ const diffReadRequest = z.object({
     pluginId: z.literal(pluginId),
     method: z.literal("diff.read"),
     input: z.object({ path: z.string() }),
+  }),
+});
+
+const listRequest = z.object({
+  message: z.object({
+    type: z.literal("plugin.rpc.invoke.request"),
+    pluginId: z.literal(pluginId),
+    method: z.literal("changes.list"),
   }),
 });
 
@@ -158,9 +172,43 @@ export const test = base.extend<Fixtures>({
       await openFromPlugins();
     }
 
+    async function showWorkspace(): Promise<void> {
+      await show(page, `/h/${addressOf(daemon).server}/workspace/${workspace}`);
+    }
+
+    // What holds the first message to the daemon that the schema reads until the function it gives
+    // is called, and lets the others through, and once it's called, that one too, if it's yet to
+    // be sent.
+    function holdingFirst<Message>(schema: z.ZodType<Message>): () => Promise<() => void> {
+      return async () => {
+        let held: (() => void) | undefined;
+        let released = false;
+
+        await page.routeWebSocket(/./u, (socket) => {
+          const server = socket.connectToServer();
+
+          socket.onMessage((message) => {
+            if (!released && held === undefined && read(schema, message) !== undefined) {
+              held = () => {
+                server.send(message);
+              };
+            } else {
+              server.send(message);
+            }
+          });
+        });
+
+        return () => {
+          released = true;
+          held?.();
+        };
+      };
+    }
+
     await provide({
+      showWorkspace,
       openPanel: async () => {
-        await show(page, `/h/${addressOf(daemon).server}/workspace/${workspace}`);
+        await showWorkspace();
         await page.getByRole("button", { name: "Better Diff", exact: true }).click();
       },
       openSettings,
@@ -240,27 +288,8 @@ export const test = base.extend<Fixtures>({
 
         return () => answered;
       },
-      holdAction: async () => {
-        let release: (() => void) | undefined;
-
-        await page.routeWebSocket(/./u, (socket) => {
-          const server = socket.connectToServer();
-
-          socket.onMessage((message) => {
-            if (release === undefined && read(actionRequest, message) !== undefined) {
-              release = () => {
-                server.send(message);
-              };
-            } else {
-              server.send(message);
-            }
-          });
-        });
-
-        return () => {
-          release?.();
-        };
-      },
+      holdAction: holdingFirst(actionRequest),
+      holdList: holdingFirst(listRequest),
     });
   },
 

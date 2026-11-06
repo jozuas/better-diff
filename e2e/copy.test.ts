@@ -176,3 +176,48 @@ test("the Copy of a diff's lines is disabled while no text is selected", async (
   await line(page, "kept").click({ button: "right" });
   await expect(copy).toBeEnabled();
 });
+
+test("the menu key, or Shift+F10, opens the menu of the file whose row has focus, where ↓ and ↑ move between its items, Enter chooses one, and Escape closes it, and either way focus goes back to the row", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "before\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "contents\n");
+
+  await app.openPanel();
+
+  const menu = page.getByRole("menu", { name: "a.txt" });
+  const file = page.getByRole("button", { name: "a.txt", exact: true });
+
+  await file.focus();
+  await page.keyboard.press("Shift+F10");
+
+  await expect(page.getByRole("menuitem", { name: "Copy full path" })).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+
+  await expect(page.getByRole("menuitem", { name: "Copy relative path" })).toBeFocused();
+
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+
+  await expect(page.getByRole("menuitem", { name: "Copy file contents" })).toBeFocused();
+
+  await page.keyboard.press("Enter");
+
+  await expect(menu).toBeHidden();
+  await expect.poll(clipboardOf(page)).toBe("contents\n");
+  await expect(file).toBeFocused();
+
+  await page.keyboard.press("ContextMenu");
+
+  await expect(menu).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Copy full path" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+
+  await expect(menu).toBeHidden();
+  await expect(file).toBeFocused();
+});

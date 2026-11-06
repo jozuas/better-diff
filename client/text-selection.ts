@@ -2,7 +2,7 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 
-import { selectedLines, selectedRange, stillSelected } from "./selection";
+import { lineId, selectedLines, selectedRange, stillSelected } from "./selection";
 import type { LineRange, SelectedLines, ShownFiles } from "./selection";
 import type { Focus, Side } from "./side-by-side";
 import { useLatest } from "./web";
@@ -16,6 +16,7 @@ interface PageNode {
 interface PageElement extends PageNode {
   readonly id: string;
   contains: (node: PageNode | null) => boolean;
+  getBoundingClientRect: () => { readonly top: number };
 }
 
 interface PageRange {
@@ -26,6 +27,8 @@ interface PageRange {
   selectNodeContents: (node: PageNode) => void;
   setStart: (node: PageNode, offset: number) => void;
   setEnd: (node: PageNode, offset: number) => void;
+  setStartBefore: (node: PageNode) => void;
+  setEndAfter: (node: PageNode) => void;
   // Whether the point is before the range, -1, in it, 0, or after it, 1.
   comparePoint: (node: PageNode, offset: number) => number;
   toString: () => string;
@@ -41,10 +44,17 @@ interface PageSelection {
   readonly isCollapsed: boolean;
   readonly rangeCount: number;
   readonly anchorNode: PageNode | null;
+  readonly anchorOffset: number;
   getRangeAt: (index: number) => PageRange;
   containsNode: (node: PageNode, partly: boolean) => boolean;
   removeAllRanges: () => void;
   toString: () => string;
+  setBaseAndExtent: (
+    anchorNode: PageNode,
+    anchorOffset: number,
+    focusNode: PageNode,
+    focusOffset: number,
+  ) => void;
 }
 
 declare const document: {
@@ -135,43 +145,56 @@ function inRange(root: PageElement, range: PageRange): PageElement[] {
   return [...aroundNode(root, start), ...after];
 }
 
-// Calls the listener whenever the page's text selection changes, until the returned function is
-// called, with the ids of the elements inside the element with the id `container` that have one and
-// whose text the selection touches, in the page's order, and of the outermost one it starts in, or
-// "" if it starts in none.
-function onSelection(
-  container: string,
-  listener: (touched: string[], anchor: string) => void,
-): () => void {
+// What the page's text selection touches inside the element with the id `container`: the ids of the
+// elements inside it that have one and whose text it touches, in the page's order, and of the
+// outermost one it starts in, or "" if it starts in none, and whether it was made from its end
+// back to its start, as by dragging upwards.
+interface Touched {
+  touched: string[];
+  anchor: string;
+  backward: boolean;
+}
+
+const untouched: Touched = { touched: [], anchor: "", backward: false };
+
+function touchedIn(container: string): Touched {
+  const selection = Platform.OS === "web" ? document.getSelection() : null;
+  const root = selection === null ? null : document.querySelector(`#${CSS.escape(container)}`);
+
+  if (selection === null || root === null || selection.isCollapsed || selection.rangeCount === 0) {
+    return untouched;
+  }
+
+  const range = selection.getRangeAt(0);
+  const elements = selection.containsNode(root, true) ? inRange(root, range) : [];
+  const anchor = selection.anchorNode === null ? [] : aroundNode(root, selection.anchorNode);
+
+  return {
+    touched: elements.flatMap((element) => (touches(selection, element) ? [element.id] : [])),
+    anchor: anchor[0]?.id ?? "",
+    backward:
+      selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset,
+  };
+}
+
+// The lines of the diffs in the element with the id `view` that the page's text selection touches
+// now, and whether it was made from its end back to its start.
+export function selectedNow(view: string): { range: LineRange; backward: boolean } | undefined {
+  const { touched, anchor, backward } = touchedIn(view);
+  const range = selectedRange(view, touched, anchor);
+
+  return range === undefined ? undefined : { range, backward };
+}
+
+// Calls the listener with what the page's text selection touches inside the element with the id
+// `container` whenever it changes, until the returned function is called.
+function onSelection(container: string, listener: (touched: Touched) => void): () => void {
   if (Platform.OS !== "web") {
     return () => {};
   }
 
   function read(): void {
-    const selection = document.getSelection();
-    const root = document.querySelector(`#${CSS.escape(container)}`);
-
-    if (
-      selection === null ||
-      root === null ||
-      selection.isCollapsed ||
-      selection.rangeCount === 0
-    ) {
-      listener([], "");
-
-      return;
-    }
-
-    const elements = selection.containsNode(root, true)
-      ? inRange(root, selection.getRangeAt(0))
-      : [];
-
-    const anchor = selection.anchorNode === null ? [] : aroundNode(root, selection.anchorNode);
-
-    listener(
-      elements.flatMap((element) => (touches(selection, element) ? [element.id] : [])),
-      anchor[0]?.id ?? "",
-    );
+    listener(touchedIn(container));
   }
 
   document.addEventListener("selectionchange", read);
@@ -184,6 +207,73 @@ function onSelection(
 // The text the page's selection has, as copying it with the keyboard copies it.
 export function selectedText(): string {
   return Platform.OS === "web" ? (document.getSelection()?.toString() ?? "") : "";
+}
+
+function lineElement(container: string, hunk: number, line: number): PageElement | null {
+  return document.querySelector(`#${CSS.escape(lineId(container, hunk, line))}`);
+}
+
+// Selects the lines of the hunk of the file with the id `container`, from the line at the index
+// `anchor` to the one at `head`, on the side with focus in a side-by-side view, as dragging across
+// them from the first to the other does, up the view if it's above.
+export function selectLines(container: string, hunk: number, anchor: number, head: number): void {
+  if (Platform.OS !== "web") {
+    return;
+  }
+
+  const start = lineElement(container, hunk, Math.min(anchor, head));
+  const end = lineElement(container, hunk, Math.max(anchor, head));
+  const selection = document.getSelection();
+
+  if (start === null || end === null || selection === null) {
+    return;
+  }
+
+  const range = document.createRange();
+
+  range.setStartBefore(start);
+  range.setEndAfter(end);
+
+  const { startContainer, startOffset, endContainer, endOffset } = range;
+
+  if (anchor > head) {
+    selection.setBaseAndExtent(endContainer, endOffset, startContainer, startOffset);
+  } else {
+    selection.setBaseAndExtent(startContainer, startOffset, endContainer, endOffset);
+  }
+}
+
+// Of the lines of the hunk of the file with the id `container` at the indices, which shows nearest
+// level with the line at the index `level`, in a side-by-side view: the first of them, if it can't
+// be told.
+export function nearestLevel(
+  container: string,
+  hunk: number,
+  level: number,
+  lines: readonly number[],
+): number | undefined {
+  function top(line: number, focused: boolean): number {
+    return (
+      document
+        .querySelector(`#${CSS.escape(lineId(container, hunk, line, focused))}`)
+        ?.getBoundingClientRect().top ?? 0
+    );
+  }
+
+  if (Platform.OS !== "web") {
+    return lines[0];
+  }
+
+  const from = top(level, true);
+  let [nearest] = lines;
+
+  for (const line of lines) {
+    if (Math.abs(top(line, false) - from) < Math.abs(top(nearest ?? line, false) - from)) {
+      nearest = line;
+    }
+  }
+
+  return nearest;
 }
 
 export function clearSelection(): void {
@@ -227,7 +317,7 @@ export function useSelectedLines(view: string, shown: ShownFiles): LineRange | u
 
   useEffect(
     () =>
-      onSelection(view, (touched, anchor) => {
+      onSelection(view, ({ touched, anchor }) => {
         const range = selectedRange(view, touched, anchor);
 
         setSelected((before) => selectedLines(before, range, latest.current));

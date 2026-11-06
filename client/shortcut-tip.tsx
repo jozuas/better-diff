@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { FontSizesContext } from "./fonts";
 
-// How long the pointer rests on a button before its shortcut shows.
+// How long the pointer rests on a button, or focus on its bar, before its shortcut shows.
 const delay = 1000;
 
 function useStyles(theme: PluginTheme) {
@@ -61,16 +61,17 @@ function useAfterDelay(on: boolean): boolean {
 interface ShortcutTipProps {
   // How the shortcut is written, if the button has one.
   shortcut: string | undefined;
-  // Whether the pointer is over the button, and not pressing it.
-  hovered: boolean;
+  // Whether the pointer is over the button, and not pressing it, or focus is on its bar, where the
+  // shortcut presses it.
+  resting: boolean;
   theme: PluginTheme;
 }
 
-// The button's shortcut, which shows under it once the pointer rests on it, to teach it. The pointer
-// passes through it to what's under it.
-export function ShortcutTip({ shortcut, hovered, theme }: ShortcutTipProps): ReactElement | null {
+// The button's shortcut, which shows under it once the pointer rests on it, or focus on its bar, to
+// teach it. The pointer passes through it to what's under it.
+export function ShortcutTip({ shortcut, resting, theme }: ShortcutTipProps): ReactElement | null {
   const styles = useStyles(theme);
-  const shown = useAfterDelay(hovered);
+  const shown = useAfterDelay(resting);
 
   return shown && shortcut !== undefined ? (
     <View role="tooltip" pointerEvents="none" style={styles.tip}>

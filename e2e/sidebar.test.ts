@@ -50,19 +50,15 @@ test("a file's actions show at the end of its row while the pointer is over it, 
   await expect(button(page, "Discard b.txt")).toHaveCSS("opacity", "1");
 });
 
-test("a file's actions show while focus is in its row, so the keyboard reaches them", async ({
-  app,
-  page,
-  repository,
-}) => {
+test("a file's actions show while focus is in its row", async ({ app, page, repository }) => {
   changeTwo(repository);
 
   await app.openPanel();
-  await page.getByRole("button", { name: "a.txt", exact: true }).focus();
-  await page.keyboard.press("Tab");
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await page.getByRole("button", { name: "b.txt", exact: true }).focus();
+  await page.mouse.move(0, 0);
 
-  await expect(button(page, "Discard a.txt")).toBeFocused();
-  await expect(button(page, "Discard a.txt")).toHaveCSS("opacity", "1");
+  await expect(button(page, "Discard b.txt")).toHaveCSS("opacity", "1");
 });
 
 test("staging a file from its row stages all its changes, and leaves the open file open", async ({

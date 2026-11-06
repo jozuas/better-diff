@@ -61,7 +61,7 @@ test("a file's icon keeps its size however narrow the file list is", async ({
   await app.openPanel();
 
   const icon = row(page, "UNTRACKED FILES (1)", path).locator("svg[xml]");
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
 
   await dragBy(page, separator, 200);
   await expect(separator).toHaveAttribute("aria-valuenow", "480");

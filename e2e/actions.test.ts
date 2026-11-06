@@ -186,7 +186,7 @@ test("a hunk's actions show only while the pointer is over the hunk, its bar or 
   await expect(stageHunk.last()).toHaveCSS("opacity", "0");
 });
 
-test("a hunk's actions show while focus is in its bar, so the keyboard reaches them, and while lines in it are selected", async ({
+test("a hunk's actions show while focus is in its bar, and while lines in it are selected", async ({
   app,
   page,
   repository,
@@ -196,16 +196,12 @@ test("a hunk's actions show while focus is in its bar, so the keyboard reaches t
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
   await expect(line(page, "first")).toBeVisible();
-  await button(page, "Stage").focus();
-  await page.keyboard.press("Tab");
+  await page.getByRole("group", { name: "Hunk 1 of a.txt" }).focus();
+  await page.mouse.move(0, 0);
 
-  await expect(button(page, "Show entire file").first()).toBeFocused();
   await expect(button(page, "Show entire file").first()).toHaveCSS("opacity", "1");
-
-  await page.keyboard.press("Tab");
-
-  await expect(button(page, "Discard Hunk").first()).toBeFocused();
   await expect(button(page, "Discard Hunk").first()).toHaveCSS("opacity", "1");
+  await expect(button(page, "Discard Hunk").last()).toHaveCSS("opacity", "0");
 
   await selectLines(page, "last");
   await page.mouse.move(0, 0);

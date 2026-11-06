@@ -139,7 +139,7 @@ test("the separator shows its line in the accent colour while the pointer is ove
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["a.txt"]);
   // The first file opens with Better Diff, and its diff shows beside the separator once it's read.
   await expect(line(page, "a")).toBeVisible();
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
   const looks = looksOf(separator);
   const plain = await looks();
 
@@ -150,39 +150,22 @@ test("the separator shows its line in the accent colour while the pointer is ove
   await expect.poll(looks).toBe(plain);
 });
 
-test("the separator shows its line in the accent colour while it has focus", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "a.txt", "a\n");
-
-  await app.openPanel();
-  await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["a.txt"]);
-  // The first file opens with Better Diff, and its diff shows beside the separator once it's read.
-  await expect(line(page, "a")).toBeVisible();
-  const separator = page.getByRole("slider", { name: "File list width" });
-  const looks = looksOf(separator);
-  const plain = await looks();
-
-  await separator.focus();
-  await expect.poll(looks).not.toBe(plain);
-
-  await separator.blur();
-  await expect.poll(looks).toBe(plain);
-});
-
-// Rests the pointer on the button with the name, and expects its shortcut to show under it.
-async function expectShortcut(page: Page, name: string, shortcut: RegExp): Promise<void> {
+// Rests the pointer on the control, and expects its key to show under it.
+async function expectTip(page: Page, control: Locator, shortcut: RegExp): Promise<void> {
   const tip = page.getByRole("tooltip");
 
-  await button(page, name).hover();
+  await control.hover();
   await expect(tip).toHaveText(shortcut);
 
-  const under = await box(button(page, name));
+  const under = await box(control);
   const shown = await box(tip);
 
   expect(shown.y).toBeGreaterThanOrEqual(under.y + under.height);
+}
+
+// Rests the pointer on the button with the name, and expects its shortcut to show under it.
+async function expectShortcut(page: Page, name: string, shortcut: RegExp): Promise<void> {
+  await expectTip(page, button(page, name), shortcut);
 }
 
 test("once the pointer rests on a button with a keyboard shortcut, the shortcut shows under it", async ({
@@ -201,4 +184,19 @@ test("once the pointer rests on a button with a keyboard shortcut, the shortcut 
   await line(page, "changed a").hover();
 
   await expect(page.getByRole("tooltip")).toBeHidden();
+});
+
+test("the toggle's key, and those of the actions of a file's row and a group's heading, show under them once the pointer rests on them", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwo(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await expectTip(page, button(page, "Show entire file").first(), /^E$/u);
+  await expectShortcut(page, "Stage a.txt", /^(?:⇧↩|Shift\+Enter)$/u);
+  await button(page, "MODIFIED FILES (2)").hover();
+  await expectShortcut(page, "Discard All", /^(?:⇧⌫|Shift\+Backspace)$/u);
 });

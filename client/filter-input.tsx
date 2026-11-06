@@ -1,25 +1,44 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon, TextInput } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useContext, useMemo, useRef, useState } from "react";
+import { useContext, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { TextInput as NativeTextInput } from "react-native";
 import { StyleSheet, View } from "react-native";
 
+import { KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
+import { useCommands } from "./keyboard";
+import type { CommandIn } from "./keymap";
 
 interface FilterInputProps {
   filter: string;
   onFilter: (filter: string) => void;
+  // Hears each command a key gives with focus in it, and says whether it did anything with it.
+  onKey: (command: CommandIn<"filter">) => boolean;
   theme: PluginTheme;
 }
 
 // What the file list's files are filtered by, with a button on its right that clears it, while it
-// has something to clear.
-export function FilterInput({ filter, onFilter, theme }: FilterInputProps): ReactElement {
+// has something to clear. Keys move focus to it.
+export function FilterInput({ filter, onFilter, onKey, theme }: FilterInputProps): ReactElement {
   const input = useRef<NativeTextInput>(null);
   const [focused, setFocused] = useState(false);
   const fonts = useContext(FontSizesContext);
+  const focus = useContext(KeyboardFocusContext);
+  const id = useId();
+
+  useLayoutEffect(
+    () =>
+      focus.addFilter({
+        focus: () => {
+          input.current?.focus();
+        },
+      }),
+    [focus],
+  );
+
+  useCommands(id, "filter", onKey);
 
   const styles = useMemo(
     () =>
@@ -53,9 +72,10 @@ export function FilterInput({ filter, onFilter, theme }: FilterInputProps): Reac
   );
 
   return (
-    <View style={[styles.box, focused && styles.focused]}>
+    <View nativeID={id} style={[styles.box, focused && styles.focused]}>
       <TextInput
         ref={input}
+        tabIndex={-1}
         accessibilityLabel="Filter files"
         placeholder="Filter files..."
         placeholderTextColor={theme.colors.foregroundMuted}

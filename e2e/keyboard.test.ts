@@ -1,81 +1,110 @@
-import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
+import { commitAll, makeExecutable, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, button, group, line, openFile } from "./panel";
+import {
+  changeTwoHunks,
+  changeTwoTallHunks,
+  fileBar,
+  hunkBar,
+  modeBar,
+  status,
+  writeLong,
+} from "./keyboard";
+import { box, button, line, openFile } from "./panel";
 
-function status(repository: string): string {
-  return runGit(repository, ["status", "--porcelain", "--untracked-files=all"]);
-}
-
-function staged(repository: string): string {
-  return runGit(repository, ["diff", "--cached"]);
-}
-
-function numbered(name: string, count: number): string[] {
-  return Array.from({ length: count }, (_, index) => `${name} ${index + 1}`);
-}
-
-// Commits `a.txt` as lines 1 to 9, then changes its first and last line, which makes two hunks.
-function changeTwoHunks(repository: string): void {
-  writeFile(repository, "a.txt", "1\n2\n3\n4\n5\n6\n7\n8\n9\n");
-  commitAll(repository);
-  writeFile(repository, "a.txt", "first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
-}
-
-// Commits `a.txt` as 100 lines, then adds 40 after line 10 and 40 after line 60, which makes two
-// hunks taller than the view. The second's lines start at line 58.
-function changeTwoTallHunks(repository: string): void {
-  const lines = numbered("line", 100);
-
-  writeFile(repository, "a.txt", `${lines.join("\n")}\n`);
-  commitAll(repository);
-  writeFile(
-    repository,
-    "a.txt",
-    `${[
-      ...lines.slice(0, 10),
-      ...numbered("first", 40),
-      ...lines.slice(10, 60),
-      ...numbered("second", 40),
-      ...lines.slice(60),
-    ].join("\n")}\n`,
-  );
-}
-
-// Writes the file as lines from "<name> 1" to "<name> 60", which makes a diff taller than the view.
-function writeLong(repository: string, path: string, name: string): void {
-  writeFile(repository, path, `${numbered(name, 60).join("\n")}\n`);
-}
-
-test("↓ and ↑, with focus in a file's row, open the next file the sidebar lists or the one before, from the last file of one group to the first of the next, and focus moves along with them", async ({
+test("↓ and ↑ move focus from a file's bar to its mode change's bar and on through its hunks' bars, and the view shows each hunk from its start", async ({
   app,
   page,
   repository,
 }) => {
-  writeFile(repository, "a.txt", "a\n");
-  writeFile(repository, "b.txt", "b\n");
-  commitAll(repository);
-  writeFile(repository, "a.txt", "changed a\n");
-  writeFile(repository, "b.txt", "changed b\n");
-  writeFile(repository, "c.txt", "c\n");
+  changeTwoTallHunks(repository);
+  makeExecutable(repository, "a.txt");
 
   await app.openPanel();
-  await openFile(page, "MODIFIED FILES (2)", "b.txt");
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await expect(modeBar(page, "a.txt")).toBeVisible();
+  await fileBar(page, "MODIFIED a.txt").focus();
   await page.keyboard.press("ArrowDown");
 
-  await expect(page.getByRole("heading", { name: "UNTRACKED c.txt" })).toBeVisible();
-  await expect(button(page, "c.txt")).toBeFocused();
+  await expect(modeBar(page, "a.txt")).toBeFocused();
 
   await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+
+  await expect(hunkBar(page, "a.txt", 2)).toBeFocused();
+  await expect(line(page, "line 58")).toBeInViewport();
+
+  const bar = await box(hunkBar(page, "a.txt", 2));
+  const start = await box(line(page, "line 58"));
+
+  expect(start.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+  expect(start.y).toBeLessThan(bar.y + bar.height + 10);
+
   await page.keyboard.press("ArrowUp");
+
+  await expect(hunkBar(page, "a.txt")).toBeFocused();
+  await expect(line(page, "line 8")).toBeInViewport();
+
   await page.keyboard.press("ArrowUp");
   await page.keyboard.press("ArrowUp");
 
-  await expect(page.getByRole("heading", { name: "MODIFIED a.txt" })).toBeVisible();
-  await expect(button(page, "a.txt")).toBeFocused();
-  expect(status(repository)).toBe(" M a.txt\n M b.txt\n?? c.txt\n");
+  await expect(fileBar(page, "MODIFIED a.txt")).toBeFocused();
+  expect(status(repository)).toBe(" M a.txt\n");
 });
 
-test("→ moves focus from a file's row into its diff, to its first hunk, and ← from a hunk's bar back to its file's row", async ({
+test("in one file's view, ↓ on its last bar opens the next file, with focus on its file bar, and ↑ on the file bar opens the file before, with focus on its last bar", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "b.txt", "b\n");
+  changeTwoHunks(repository);
+  writeFile(repository, "b.txt", "changed b\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await hunkBar(page, "a.txt", 2).focus();
+  await page.keyboard.press("ArrowDown");
+
+  await expect(fileBar(page, "MODIFIED b.txt")).toBeFocused();
+
+  await page.keyboard.press("ArrowUp");
+
+  await expect(hunkBar(page, "a.txt", 2)).toBeFocused();
+  await expect(fileBar(page, "MODIFIED a.txt")).toBeVisible();
+  expect(status(repository)).toBe(" M a.txt\n M b.txt\n");
+});
+
+test("Alt+↓ and Alt+↑ move focus to the next file's bar or the one before, in a group's view, and from one file's view to the next file's", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeLong(repository, "a.txt", "a");
+  writeLong(repository, "b.txt", "b");
+
+  await app.openPanel();
+  await button(page, "UNTRACKED FILES (2)").click();
+  await hunkBar(page, "a.txt").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+
+  await expect(fileBar(page, "UNTRACKED b.txt")).toBeFocused();
+  await expect(line(page, "b 1")).toBeInViewport();
+  await expect(line(page, "a 60")).not.toBeInViewport();
+
+  await page.keyboard.press("Alt+ArrowUp");
+
+  await expect(fileBar(page, "UNTRACKED a.txt")).toBeFocused();
+  await expect(line(page, "a 1")).toBeInViewport();
+
+  await openFile(page, "UNTRACKED FILES (2)", "a.txt");
+  await hunkBar(page, "a.txt").focus();
+  await page.keyboard.press("Alt+ArrowDown");
+
+  await expect(fileBar(page, "UNTRACKED b.txt")).toBeFocused();
+  expect(status(repository)).toBe("?? a.txt\n?? b.txt\n");
+});
+
+test("→ moves focus from a file's row into its diff, to its first hunk, and ← from any of the diff's bars back to the row", async ({
   app,
   page,
   repository,
@@ -87,211 +116,40 @@ test("→ moves focus from a file's row into its diff, to its first hunk, and �
   await expect(line(page, "first")).toBeVisible();
   await page.keyboard.press("ArrowRight");
 
-  await expect(button(page, "Stage Hunk").first()).toBeFocused();
+  await expect(hunkBar(page, "a.txt")).toBeFocused();
   await expect(button(page, "Stage Hunk").first()).toHaveCSS("opacity", "1");
 
+  await page.keyboard.press("ArrowLeft");
+
+  await expect(button(page, "a.txt")).toBeFocused();
+
+  await fileBar(page, "MODIFIED a.txt").focus();
   await page.keyboard.press("ArrowLeft");
 
   await expect(button(page, "a.txt")).toBeFocused();
   expect(status(repository)).toBe(" M a.txt\n");
 });
 
-test("with focus in a hunk's bar, ↓ and ↑ move focus to the next hunk or the one before, and the view shows that hunk from its start, where Enter stages it", async ({
+test("a file shown without hunks has its file bar to move focus to, where Enter stages it", async ({
   app,
   page,
   repository,
 }) => {
-  changeTwoTallHunks(repository);
+  writeFile(repository, "a.bin", new Uint8Array([0, 1, 2]));
 
   await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await openFile(page, "UNTRACKED FILES (1)", "a.bin");
+  await expect(page.getByText("Binary file", { exact: true })).toBeVisible();
+  await page.keyboard.press("ArrowRight");
 
-  const stageHunk = button(page, "Stage Hunk");
-
-  await stageHunk.first().focus();
-  await page.keyboard.press("ArrowDown");
-
-  await expect(stageHunk.nth(1)).toBeFocused();
-  await expect(line(page, "line 58")).toBeInViewport();
-
-  const bar = await box(stageHunk.nth(1));
-  const start = await box(line(page, "line 58"));
-
-  expect(start.y).toBeGreaterThan(bar.y + bar.height);
-  expect(start.y).toBeLessThan(bar.y + bar.height + 10);
-
-  await page.keyboard.press("ArrowUp");
-
-  await expect(stageHunk.first()).toBeFocused();
-  await expect(line(page, "line 8")).toBeInViewport();
+  await expect(fileBar(page, "UNTRACKED a.bin")).toBeFocused();
 
   await page.keyboard.press("Enter");
 
-  await expect(line(page, "first 1")).toBeHidden();
-  expect(staged(repository)).toContain("+first 40\n");
-  expect(staged(repository)).not.toContain("+second");
+  await expect.poll(() => status(repository)).toBe("A  a.bin\n");
 });
 
-test("once an action on a hunk runs with focus in its bar, focus moves on to the hunk the view moves to, or else the last, or the next file's first once the file has none left, so Enter stages one hunk after another", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "b.txt", "b\n");
-  changeTwoHunks(repository);
-  writeFile(repository, "b.txt", "next\n");
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (2)", "a.txt");
-  await button(page, "Stage Hunk").last().focus();
-  await page.keyboard.press("Enter");
-  await expect(line(page, "last")).toBeHidden();
-
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-
-  await page.keyboard.press("Enter");
-
-  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-
-  await page.keyboard.press("Enter");
-
-  await expect(button(page, "Stage Hunk")).toBeHidden();
-  expect(status(repository)).toBe("M  a.txt\nM  b.txt\n");
-});
-
-test("in a group's view, ↓ moves focus from one file's hunk to the next file's, and ← to the row of the file whose hunk has focus once Enter has staged that one", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeLong(repository, "a.txt", "a");
-  writeLong(repository, "b.txt", "b");
-
-  await app.openPanel();
-  await button(page, "UNTRACKED FILES (2)").click();
-  await button(page, "Stage Hunk").first().focus();
-  await page.keyboard.press("ArrowDown");
-
-  await expect(button(page, "Stage Hunk").nth(1)).toBeFocused();
-  await expect(line(page, "b 1")).toBeInViewport();
-  await expect(line(page, "a 60")).not.toBeInViewport();
-
-  await page.keyboard.press("Enter");
-
-  await expect(line(page, "b 1")).toBeHidden();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-
-  await page.keyboard.press("ArrowLeft");
-
-  await expect(button(page, "a.txt")).toBeFocused();
-  expect(status(repository)).toBe("A  b.txt\n?? a.txt\n");
-});
-
-test("with focus in a hunk's bar, Backspace discards the hunk once pressed again to confirm, and held down asks only once", async ({
-  app,
-  page,
-  repository,
-}) => {
-  changeTwoHunks(repository);
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await button(page, "Stage Hunk").first().focus();
-  await page.keyboard.down("Backspace");
-  await page.keyboard.down("Backspace");
-  await page.keyboard.up("Backspace");
-
-  await expect(button(page, "Confirm discard?")).toBeEnabled();
-  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
-
-  await page.keyboard.press("Backspace");
-
-  await expect(line(page, "first")).toBeHidden();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("1\n2\n3\n4\n5\n6\n7\n8\nlast\n");
-});
-
-test("with focus in a staged file's hunk's bar, Backspace unstages the hunk, Shift+Backspace the file, and Shift+Enter nothing", async ({
-  app,
-  page,
-  repository,
-}) => {
-  changeTwoHunks(repository);
-  writeFile(repository, "b.txt", "b\n");
-  runGit(repository, ["add", "a.txt", "b.txt"]);
-
-  await app.openPanel();
-  await openFile(page, "STAGED FILES (2)", "a.txt");
-  await button(page, "Unstage Hunk").first().focus();
-  await page.keyboard.press("Shift+Enter");
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("Backspace");
-
-  await expect(line(page, "last")).toBeHidden();
-  await expect(button(page, "Unstage Hunk")).toBeFocused();
-  expect(staged(repository)).toContain("+first");
-  expect(staged(repository)).not.toContain("+last");
-
-  await page.keyboard.press("Shift+Backspace");
-
-  await expect(page.getByRole("heading", { name: "STAGED b.txt" })).toBeVisible();
-  await expect(button(page, "Unstage Hunk")).toBeFocused();
-  expect(status(repository)).toBe(" M a.txt\nA  b.txt\n");
-});
-
-test("with focus in a hunk's bar, Shift+Enter stages its file and Shift+Backspace discards it once pressed again to confirm, and focus moves on to the next file's first hunk", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "b.txt", "b\n");
-  writeFile(repository, "c.txt", "c\n");
-  changeTwoHunks(repository);
-  writeFile(repository, "b.txt", "changed b\n");
-  writeFile(repository, "c.txt", "changed c\n");
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (3)", "a.txt");
-  await button(page, "Stage Hunk").last().focus();
-  await page.keyboard.press("Shift+Enter");
-
-  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-  expect(status(repository)).toBe("M  a.txt\n M b.txt\n M c.txt\n");
-
-  await page.keyboard.press("Shift+Backspace");
-
-  await expect(button(page, "Confirm discard?")).toBeVisible();
-  expect(status(repository)).toBe("M  a.txt\n M b.txt\n M c.txt\n");
-
-  await page.keyboard.press("Shift+Backspace");
-
-  await expect(page.getByRole("heading", { name: "MODIFIED c.txt" })).toBeVisible();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-  expect(status(repository)).toBe("M  a.txt\n M c.txt\n");
-});
-
-test("in a group's view, Shift+Enter in a hunk's bar stages its file, and focus moves on to the next file's first hunk", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeLong(repository, "a.txt", "a");
-  writeLong(repository, "b.txt", "b");
-
-  await app.openPanel();
-  await button(page, "UNTRACKED FILES (2)").click();
-  await button(page, "Stage Hunk").first().focus();
-  await page.keyboard.press("Shift+Enter");
-
-  await expect(line(page, "a 1")).toBeHidden();
-  await expect(button(page, "Stage Hunk")).toBeFocused();
-  await expect(line(page, "b 1")).toBeInViewport();
-  expect(status(repository)).toBe("A  a.txt\n?? b.txt\n");
-});
-
-test("with focus in a file's bar, Shift+Backspace discards the file once pressed again to confirm, and Shift+Enter stages it", async ({
+test("in a group's view, ↓ moves focus from one file's last hunk to the next file's bar, and ← to the row of the file whose bar has focus", async ({
   app,
   page,
   repository,
@@ -303,49 +161,19 @@ test("with focus in a file's bar, Shift+Backspace discards the file once pressed
   writeFile(repository, "b.txt", "changed b\n");
 
   await app.openPanel();
-  await openFile(page, "MODIFIED FILES (2)", "a.txt");
-  await button(page, "Stage").focus();
-  await page.keyboard.press("Shift+Backspace");
+  await button(page, "MODIFIED FILES (2)").click();
+  await hunkBar(page, "a.txt").focus();
+  await page.keyboard.press("ArrowDown");
 
-  await expect(button(page, "Confirm discard?")).toBeVisible();
+  await expect(fileBar(page, "MODIFIED b.txt")).toBeFocused();
 
-  await page.keyboard.press("Shift+Backspace");
+  await page.keyboard.press("ArrowDown");
 
-  await expect(page.getByRole("heading", { name: "MODIFIED b.txt" })).toBeVisible();
-  expect(status(repository)).toBe(" M b.txt\n");
+  await expect(hunkBar(page, "b.txt")).toBeFocused();
 
-  await button(page, "Stage").focus();
-  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowLeft");
 
-  await expect(group(page, "STAGED FILES (1)")).toHaveText(["b.txt"]);
-  expect(status(repository)).toBe("M  b.txt\n");
-});
-
-test("one action runs at a time: while one runs, the buttons that run actions are disabled, and a key that runs one does nothing", async ({
-  app,
-  page,
-  repository,
-}) => {
-  changeTwoHunks(repository);
-
-  const release = await app.holdAction();
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await button(page, "Stage Hunk").first().click();
-
-  await expect(button(page, "Stage")).toBeDisabled();
-  await expect(button(page, "Stage Hunk").nth(1)).toBeDisabled();
-
-  // The toggle isn't an action's, so it keeps focus in the second hunk's bar.
-  await button(page, "Show entire file").nth(1).focus();
-  await page.keyboard.press("Backspace");
-  await page.keyboard.press("Backspace");
-  await page.keyboard.press("Shift+Enter");
-  release();
-
-  await expect(line(page, "first")).toBeHidden();
-  expect(staged(repository)).toContain("+first\n");
-  expect(staged(repository)).not.toContain("+last");
-  expect(worktreeFile(repository, "a.txt")?.toString()).toBe("first\n2\n3\n4\n5\n6\n7\n8\nlast\n");
+  await expect(button(page, "b.txt")).toBeFocused();
+  expect(status(repository)).toBe(" M a.txt\n M b.txt\n");
 });

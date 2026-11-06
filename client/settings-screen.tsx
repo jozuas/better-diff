@@ -1,8 +1,11 @@
+import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useSettings } from "@getpaseo/plugin/client";
 import {
   Loading,
   SettingsCard,
   SettingsInput,
+  SettingsRow,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
@@ -10,12 +13,14 @@ import {
 } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
+import { StyleSheet, Text } from "react-native";
 
 import { fontSizeRanges, lineLengthRange, tabSizeRange, viewSettings } from "../shared/settings";
 import { debounced } from "./debounce";
 import { sizeOptions } from "./fonts";
+import { keyList, keysText } from "./key-list";
 import { lineLengthOf, viewSettingsOf } from "./settings";
-import { useLatest } from "./web";
+import { onMac, useLatest } from "./web";
 
 // The styles a diff can show in.
 const diffStyles = [
@@ -81,8 +86,38 @@ function LineLength({ settings }: LineLengthProps): ReactElement {
   );
 }
 
-// Better Diff's page in Paseo's settings.
-export function SettingsScreen(): ReactElement {
+interface KeysProps {
+  theme: PluginTheme;
+}
+
+// Every key of the panel, by where focus is, and what it does.
+function Keys({ theme }: KeysProps): ReactElement {
+  const mac = onMac();
+
+  const styles = useMemo(
+    () => StyleSheet.create({ keys: { color: theme.colors.foreground } }),
+    [theme],
+  );
+
+  return (
+    <>
+      {keyList.map(({ title, info, lines }) => (
+        <SettingsSection key={title} title={title} info={info}>
+          <SettingsCard>
+            {lines.map((line) => (
+              <SettingsRow key={line.commands.join(" ")} label={line.does}>
+                <Text style={styles.keys}>{keysText(line, mac)}</Text>
+              </SettingsRow>
+            ))}
+          </SettingsCard>
+        </SettingsSection>
+      ))}
+    </>
+  );
+}
+
+// Better Diff's page in Paseo's settings, which lists the panel's keys after the settings.
+export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
   const toast = useToast();
   const settings = viewSettingsOf(useSettings(viewSettings), toast.error);
 
@@ -149,6 +184,7 @@ export function SettingsScreen(): ReactElement {
           />
         </SettingsCard>
       </SettingsSection>
+      <Keys theme={theme} />
     </>
   );
 }

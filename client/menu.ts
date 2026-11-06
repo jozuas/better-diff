@@ -1,3 +1,5 @@
+import type { CommandIn } from "./keymap";
+
 // A point on the page, from its top left corner.
 export interface Point {
   x: number;
@@ -32,4 +34,13 @@ export function itemLook(hovered: boolean, disabled: boolean): "plain" | "hovere
   }
 
   return hovered ? "hovered" : "plain";
+}
+
+// How far each command moves focus through a menu's items.
+const steps: Record<CommandIn<"menu">, number> = { down: 1, up: -1 };
+
+// The index of the item of a menu of `count` items that the command moves focus to from the item at
+// the index: the next for ↓, and the one before for ↑, round from the last to the first and back.
+export function menuStep(command: CommandIn<"menu">, index: number, count: number): number {
+  return (index + steps[command] + count) % count;
 }

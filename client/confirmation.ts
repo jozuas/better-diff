@@ -7,6 +7,8 @@ export interface Confirmation {
   // press arms the button. A press while an action it ran is running does nothing, as a disabled
   // button does: the action is running until `run`'s promise settles.
   press: (button: string, confirms: boolean, run: () => Promise<void>) => void;
+  // Takes back the question an armed button asks, if one does, and says whether one did.
+  cancel: () => boolean;
   // Ends the wait, for good.
   dispose: () => void;
 }
@@ -60,6 +62,16 @@ export function confirmation(onArmed: (button: string | undefined) => void): Con
         disarm();
         void runAlone(run);
       }
+    },
+    cancel: () => {
+      if (armed === undefined) {
+        return false;
+      }
+
+      latest = {};
+      disarm();
+
+      return true;
     },
     dispose: () => {
       latest = {};

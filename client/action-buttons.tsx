@@ -1,5 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import type { ReactElement, Ref } from "react";
+import type { ReactElement } from "react";
 import { useContext, useMemo, useSyncExternalStore } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -8,9 +8,10 @@ import type { Action, ButtonLook, Controls } from "./actions";
 import type { Target } from "./apply";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
+import type { Place } from "./keymap";
 import { ShortcutTip } from "./shortcut-tip";
-import { shortcutOf, shortcutText } from "./shortcuts";
-import type { Level } from "./shortcuts";
+import { buttonKeys, tipOf } from "./shortcuts";
+import type { ButtonKeys, Level } from "./shortcuts";
 import { onMac } from "./web";
 
 function useStyles(theme: PluginTheme, color: string) {
@@ -45,26 +46,24 @@ type Styles = ReturnType<typeof useStyles>;
 
 interface ActionButtonProps {
   action: Action;
-  // How its shortcut is written, if it has one.
-  shortcut: string | undefined;
+  // How its keys are written.
+  keys: ButtonKeys;
   // Tells it apart from the panel's other buttons.
   button: string;
   controls: Controls;
   hidden: boolean;
   onPress: () => void;
-  buttonRef: Ref<View> | undefined;
   styles: Styles;
   theme: PluginTheme;
 }
 
 function ActionButton({
   action,
-  shortcut,
+  keys,
   button,
   controls,
   hidden,
   onPress,
-  buttonRef,
   styles,
   theme,
 }: ActionButtonProps): ReactElement {
@@ -75,7 +74,6 @@ function ActionButton({
 
   return (
     <Hoverable
-      ref={buttonRef}
       accessibilityRole="button"
       accessibilityLabel={text}
       accessibilityState={{ disabled: busy }}
@@ -99,7 +97,7 @@ function ActionButton({
                 {text}
               </Text>
             </View>
-            <ShortcutTip shortcut={shortcut} hovered={hovered && !pressed} theme={theme} />
+            <ShortcutTip {...tipOf(keys, hovered && !pressed)} theme={theme} />
           </>
         );
       }}
@@ -115,12 +113,15 @@ interface ActionButtonsProps {
   target: Target;
   // What their shortcuts act on, if they have any, which shows under a button the pointer rests on.
   level?: Level;
+  // Where focus is while their keys press them.
+  place: Place;
+  // Whether focus is on their bar itself, where Enter and Backspace press them, which shows those
+  // under them once it rests there.
+  keyed: boolean;
   controls: Controls;
   // Called just before one of the actions runs.
   onRun?: (() => void) | undefined;
   hidden?: boolean;
-  // The button of the action that loses no work, which keys move focus to.
-  buttonRef?: Ref<View>;
   // The buttons' colour, against the bar's.
   color: string;
   theme: PluginTheme;
@@ -132,10 +133,11 @@ export function ActionButtons({
   bar,
   target,
   level,
+  place,
+  keyed,
   controls,
   onRun,
   hidden = false,
-  buttonRef,
   color,
   theme,
 }: ActionButtonsProps): ReactElement {
@@ -148,14 +150,13 @@ export function ActionButtons({
         <ActionButton
           key={action.operation}
           action={action}
-          shortcut={level === undefined ? undefined : shortcutText(shortcutOf(action, level), mac)}
+          keys={buttonKeys(action, { level, place, keyed }, mac)}
           button={buttonOf(bar, action)}
           controls={controls}
           hidden={hidden}
           onPress={() => {
             controls.press(buttonOf(bar, action), action, target, onRun);
           }}
-          buttonRef={action.confirmation === undefined ? buttonRef : undefined}
           styles={styles}
           theme={theme}
         />

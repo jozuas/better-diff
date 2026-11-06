@@ -1,18 +1,16 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { fileActions, hunkActions } from "./actions";
+import { places } from "../test/keys";
+import { fileActions, hunkActions, lineActions, modeActions } from "./actions";
+import type { Action } from "./actions";
+import type { Target } from "./apply";
 import type { GroupName } from "./groups";
-import { shortcutOf, shortcutPress, shortcutText } from "./shortcuts";
-import type { Bar, KeyPress, Level } from "./shortcuts";
+import type { Place } from "./keymap";
+import { buttonKeys, runShortcut, shortcutOf, shortcutText, tipOf } from "./shortcuts";
+import type { ActionCommand, Bar, ButtonKeys, Level } from "./shortcuts";
 
-const plain = { shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, repeat: false };
-
-function pressed(key: string, shiftKey = false): KeyPress {
-  return { ...plain, key, shiftKey };
-}
-
-function onHunkRun(): void {}
+function onPartRun(): void {}
 
 function onFileRun(): void {}
 
@@ -21,11 +19,11 @@ function barsOf(group: GroupName) {
   const file = { group, path: "a" };
 
   return {
-    hunk: {
+    part: {
       actions: hunkActions[group],
       bar: "1:hunk 0",
       target: { file, version: "1", lines: [{ hunk: 0, line: 0 }] },
-      onRun: onHunkRun,
+      onRun: onPartRun,
     },
     file: {
       actions: fileActions[group],
@@ -38,140 +36,236 @@ function barsOf(group: GroupName) {
 
 const groupNames: GroupName[] = ["modified", "untracked", "staged"];
 
-test("stages with Enter on a hunk, and with Shift+Enter on a file", () => {
-  expect(shortcutOf({ operation: "stage" }, "hunk")).toStrictEqual({ key: "Enter", shift: false });
-  expect(shortcutOf({ operation: "stage" }, "file")).toStrictEqual({ key: "Enter", shift: true });
+// What the command does among the bars: whether it's a shortcut there, and the button it presses,
+// with what the press runs, if any.
+function pressedBy(command: ActionCommand, bars: Partial<Record<Level, Bar | undefined>>) {
+  const presses: unknown[] = [];
+
+  const heard = runShortcut(command, bars, {
+    press: (button, action, target, onRun) => {
+      presses.push({ button, action, target, onRun });
+    },
+  });
+
+  return { heard, presses };
+}
+
+// A press of the button, which runs the action on the target, calling `onRun` just before.
+function pressOf(
+  button: string,
+  action: Action | undefined,
+  target: Target,
+  onRun: (() => void) | undefined,
+) {
+  return { heard: true, presses: [{ button, action, target, onRun }] };
+}
+
+test.each<Place>(["bar", "lines"])(
+  "in a %s, stages a part of a file with Enter, and Shift+Enter all of it, and Backspace and Shift+Backspace discard them",
+  (place) => {
+    expect(shortcutOf({ operation: "stage" }, "part", place)).toStrictEqual({ key: "Enter" });
+    expect(shortcutOf({ operation: "stage" }, "file", place)).toStrictEqual({
+      key: "Enter",
+      shift: true,
+    });
+    expect(shortcutOf({ operation: "discard" }, "part", place)).toStrictEqual({ key: "Backspace" });
+    expect(shortcutOf({ operation: "discard" }, "file", place)).toStrictEqual({
+      key: "Backspace",
+      shift: true,
+    });
+  },
+);
+
+test("unstages with Enter too, as it moves the change to the other side, which is the key a button that unstages teaches", () => {
+  expect(shortcutOf({ operation: "unstage" }, "part", "bar")).toStrictEqual({ key: "Enter" });
+  expect(shortcutOf({ operation: "unstage" }, "file", "bar")).toStrictEqual({
+    key: "Enter",
+    shift: true,
+  });
 });
 
-test("discards or unstages with Backspace on a hunk, and with Shift+Backspace on a file", () => {
-  for (const operation of ["discard", "unstage"] as const) {
-    expect(shortcutOf({ operation }, "hunk")).toStrictEqual({ key: "Backspace", shift: false });
-    expect(shortcutOf({ operation }, "file")).toStrictEqual({ key: "Backspace", shift: true });
-  }
+test("in a row or a group's heading, all of a file has keys, but a part of one has none", () => {
+  expect(shortcutOf({ operation: "stage" }, "file", "row")).toStrictEqual({
+    key: "Enter",
+    shift: true,
+  });
+  expect(shortcutOf({ operation: "discard" }, "file", "heading")).toStrictEqual({
+    key: "Backspace",
+    shift: true,
+  });
+  expect(shortcutOf({ operation: "stage" }, "part", "row")).toBeUndefined();
+  expect(shortcutOf({ operation: "discard" }, "part", "heading")).toBeUndefined();
 });
 
-test("in a modified or untracked file's hunk's bar, Backspace discards the hunk, Shift+Enter stages the file and Shift+Backspace discards it", () => {
+test("in a modified or untracked file's hunk's bar, Enter stages the hunk and Backspace discards it, and Shift+Enter and Shift+Backspace stage and discard the file", () => {
   for (const group of ["modified", "untracked"] as const) {
     const bars = barsOf(group);
-    const [discardHunk] = hunkActions[group];
+    const [discardHunk, stageHunk] = hunkActions[group];
     const [discardFile, stageFile] = fileActions[group];
 
-    expect(shortcutPress(pressed("Backspace"), bars)).toStrictEqual({
-      button: "1:hunk 0:discard",
-      action: discardHunk,
-      target: bars.hunk.target,
-      onRun: onHunkRun,
-    });
-    expect(shortcutPress(pressed("Enter", true), bars)).toStrictEqual({
-      button: "1:file:stage",
-      action: stageFile,
-      target: bars.file.target,
-      onRun: onFileRun,
-    });
-    expect(shortcutPress(pressed("Backspace", true), bars)).toStrictEqual({
-      button: "1:file:discard",
-      action: discardFile,
-      target: bars.file.target,
-      onRun: onFileRun,
-    });
+    expect(pressedBy("stage", bars)).toStrictEqual(
+      pressOf("1:hunk 0:stage", stageHunk, bars.part.target, onPartRun),
+    );
+    expect(pressedBy("discard", bars)).toStrictEqual(
+      pressOf("1:hunk 0:discard", discardHunk, bars.part.target, onPartRun),
+    );
+    expect(pressedBy("stageFile", bars)).toStrictEqual(
+      pressOf("1:file:stage", stageFile, bars.file.target, onFileRun),
+    );
+    expect(pressedBy("discardFile", bars)).toStrictEqual(
+      pressOf("1:file:discard", discardFile, bars.file.target, onFileRun),
+    );
   }
 });
 
-test("in a staged file's hunk's bar, Backspace unstages the hunk and Shift+Backspace the file, and Shift+Enter presses nothing", () => {
+test("in a staged file's hunk's bar, Enter and Backspace unstage the hunk, and Shift+Enter and Shift+Backspace the file", () => {
   const bars = barsOf("staged");
   const [unstageHunk] = hunkActions.staged;
   const [unstageFile] = fileActions.staged;
 
-  expect(shortcutPress(pressed("Backspace"), bars)).toStrictEqual({
-    button: "1:hunk 0:unstage",
-    action: unstageHunk,
-    target: bars.hunk.target,
-    onRun: onHunkRun,
-  });
-  expect(shortcutPress(pressed("Backspace", true), bars)).toStrictEqual({
-    button: "1:file:unstage",
-    action: unstageFile,
-    target: bars.file.target,
-    onRun: onFileRun,
-  });
-  expect(shortcutPress(pressed("Enter", true), bars)).toBe("none");
+  for (const command of ["stage", "discard"] as const) {
+    expect(pressedBy(command, bars)).toStrictEqual(
+      pressOf("1:hunk 0:unstage", unstageHunk, bars.part.target, onPartRun),
+    );
+  }
+
+  for (const command of ["stageFile", "discardFile"] as const) {
+    expect(pressedBy(command, bars)).toStrictEqual(
+      pressOf("1:file:unstage", unstageFile, bars.file.target, onFileRun),
+    );
+  }
 });
 
-test("leaves Enter on its own to the button with focus, held down or not", () => {
-  fc.assert(
-    fc.property(fc.constantFrom(...groupNames), fc.boolean(), (group, repeat) => {
-      expect(shortcutPress({ ...pressed("Enter"), repeat }, barsOf(group))).toBeUndefined();
-    }),
-  );
-});
-
-test("in a file's bar, Shift+Enter and Shift+Backspace press its buttons, and Backspace on its own nothing", () => {
-  const { file } = barsOf("modified");
-
-  expect(shortcutPress(pressed("Enter", true), { file })).toMatchObject({
-    button: "1:file:stage",
-  });
-  expect(shortcutPress(pressed("Backspace", true), { file })).toMatchObject({
-    button: "1:file:discard",
-  });
-  expect(shortcutPress(pressed("Backspace"), { file })).toBeUndefined();
-});
-
-test("a shortcut held down presses nothing again, though it's still the bar's", () => {
+test("every bar's actions have a key at each level, with focus in the bar or on lines selected, in every group", () => {
   fc.assert(
     fc.property(
       fc.constantFrom(...groupNames),
-      fc.constantFrom(pressed("Backspace"), pressed("Backspace", true), pressed("Enter", true)),
-      (group, press) => {
-        expect(shortcutPress({ ...press, repeat: true }, barsOf(group))).toBe("none");
+      fc.constantFrom(fileActions, hunkActions, lineActions, modeActions),
+      fc.constantFrom<Level>("part", "file"),
+      fc.constantFrom<Place>("bar", "lines"),
+      (group, actions, level, place) => {
+        for (const action of actions[group]) {
+          expect(shortcutOf(action, level, place)).toBeDefined();
+        }
       },
     ),
   );
 });
 
-test("another key is no shortcut", () => {
-  fc.assert(
-    fc.property(
-      fc.constantFrom(...groupNames),
-      fc.oneof(
-        fc.string({ unit: "binary" }).filter((key) => !["Enter", "Backspace"].includes(key)),
-        fc.constantFrom("Delete", "enter", "backspace", " ", "ArrowDown"),
-      ),
-      fc.boolean(),
-      fc.boolean(),
-      (group, key, shiftKey, repeat) => {
-        expect(shortcutPress({ ...pressed(key, shiftKey), repeat }, barsOf(group))).toBeUndefined();
-      },
-    ),
-  );
+test.each<[ActionCommand, string, Partial<Record<Level, Bar>>]>([
+  ["stage", "no bar", {}],
+  ["discard", "no bar", {}],
+  ["stageFile", "no bar", {}],
+  ["discardFile", "no bar", {}],
+  ["stage", "only a file's bar", { file: barsOf("modified").file }],
+  ["discard", "only a file's bar", { file: barsOf("staged").file }],
+  ["stageFile", "only a hunk's bar", { part: barsOf("modified").part }],
+  ["discardFile", "only a hunk's bar", { part: barsOf("untracked").part }],
+])("%s is no shortcut in a place with %s, none at its level", (command, _, bars) => {
+  expect(pressedBy(command, bars)).toStrictEqual({ heard: false, presses: [] });
 });
 
-test("a shortcut's key pressed with Alt, Ctrl or Cmd is no shortcut", () => {
+test("a command runs nothing on a bar without an action it runs, though it's the bar's", () => {
+  const only: Action[] = [{ operation: "discard", label: "Discard" }];
+  const bar = { actions: only, bar: "b", target: { group: "modified", paths: [] } } as const;
+
+  expect(pressedBy("stage", { part: bar })).toStrictEqual({ heard: true, presses: [] });
+});
+
+test("writes a shortcut in a Mac's symbols on a Mac, in words elsewhere, and nothing for none", () => {
+  expect(shortcutText({ key: "Enter", shift: true }, true)).toBe("⇧↩");
+  expect(shortcutText({ key: "Backspace" }, false)).toBe("Backspace");
+  expect(shortcutText(undefined, true)).toBeUndefined();
+});
+
+const operations = fc.constantFrom<Action["operation"]>("stage", "unstage", "discard");
+
+// The levels of the keys that run actions in each place: a part of a file and all of it in a bar
+// and on lines selected, all of a file in the file list, and none elsewhere.
+const levelsIn: Partial<Record<Place, readonly Level[]>> = {
+  bar: ["part", "file"],
+  lines: ["part", "file"],
+  row: ["file"],
+  heading: ["file"],
+};
+
+// How the key that runs each operation at each level is written, on a Mac and elsewhere: Enter
+// stages and unstages, and Backspace discards, on their own on a part of a file, and with Shift on
+// all of it.
+const written: Record<Action["operation"], Record<Level, readonly [string, string]>> = {
+  stage: { part: ["↩", "Enter"], file: ["⇧↩", "Shift+Enter"] },
+  unstage: { part: ["↩", "Enter"], file: ["⇧↩", "Shift+Enter"] },
+  discard: { part: ["⌫", "Backspace"], file: ["⇧⌫", "Shift+Backspace"] },
+};
+
+// How the key that runs the operation at the level with focus in the place is written, if it has
+// one there.
+function writtenIn(
+  operation: Action["operation"],
+  level: Level,
+  place: Place,
+  mac: boolean,
+): string | undefined {
+  if (levelsIn[place]?.includes(level) !== true) {
+    return undefined;
+  }
+
+  const [onMac, elsewhere] = written[operation][level];
+
+  return mac ? onMac : elsewhere;
+}
+
+test("once the pointer rests on a button, it teaches the key that runs its action at its level where focus is, and nothing without a level", () => {
   fc.assert(
     fc.property(
-      fc.constantFrom(...groupNames),
-      fc.constantFrom("Enter", "Backspace"),
+      operations,
+      fc.constantFrom<Level>("part", "file"),
+      fc.constantFrom(...places),
       fc.boolean(),
-      fc.constantFrom({ altKey: true }, { ctrlKey: true }, { metaKey: true }),
-      (group, key, shiftKey, modifier) => {
+      fc.boolean(),
+      (operation, level, place, keyed, mac) => {
+        expect(buttonKeys({ operation }, { level, place, keyed }, mac).pointed).toBe(
+          writtenIn(operation, level, place, mac),
+        );
         expect(
-          shortcutPress({ ...pressed(key, shiftKey), ...modifier }, barsOf(group)),
+          buttonKeys({ operation }, { level: undefined, place, keyed }, mac).pointed,
         ).toBeUndefined();
       },
     ),
   );
 });
 
-test("writes a shortcut in a Mac's symbols on a Mac", () => {
-  expect(shortcutText({ key: "Enter", shift: false }, true)).toBe("↩");
-  expect(shortcutText({ key: "Backspace", shift: false }, true)).toBe("⌫");
-  expect(shortcutText({ key: "Enter", shift: true }, true)).toBe("⇧↩");
-  expect(shortcutText({ key: "Backspace", shift: true }, true)).toBe("⇧⌫");
+test("while focus is on a button's bar itself, it teaches Enter or Backspace, which press it from there, whatever its level, and nothing while focus is elsewhere", () => {
+  fc.assert(
+    fc.property(
+      operations,
+      fc.option(fc.constantFrom<Level>("part", "file"), { nil: undefined }),
+      fc.constantFrom(...places),
+      fc.boolean(),
+      (operation, level, place, mac) => {
+        expect(buttonKeys({ operation }, { level, place, keyed: true }, mac).keyed).toBe(
+          writtenIn(operation, "part", place, mac),
+        );
+        expect(
+          buttonKeys({ operation }, { level, place, keyed: false }, mac).keyed,
+        ).toBeUndefined();
+      },
+    ),
+  );
 });
 
-test("writes a shortcut in words elsewhere", () => {
-  expect(shortcutText({ key: "Enter", shift: false }, false)).toBe("Enter");
-  expect(shortcutText({ key: "Backspace", shift: false }, false)).toBe("Backspace");
-  expect(shortcutText({ key: "Enter", shift: true }, false)).toBe("Shift+Enter");
-  expect(shortcutText({ key: "Backspace", shift: true }, false)).toBe("Shift+Backspace");
-});
+test.each<[ButtonKeys, boolean, ReturnType<typeof tipOf>]>([
+  [{ pointed: "⇧↩", keyed: "↩" }, true, { shortcut: "⇧↩", resting: true }],
+  [{ pointed: "⇧↩", keyed: undefined }, true, { shortcut: "⇧↩", resting: true }],
+  [{ pointed: undefined, keyed: "↩" }, true, { shortcut: "↩", resting: true }],
+  [{ pointed: undefined, keyed: undefined }, true, { shortcut: undefined, resting: true }],
+  [{ pointed: "⇧↩", keyed: "↩" }, false, { shortcut: "↩", resting: true }],
+  [{ pointed: undefined, keyed: "↩" }, false, { shortcut: "↩", resting: true }],
+  [{ pointed: "⇧↩", keyed: undefined }, false, { shortcut: undefined, resting: false }],
+  [{ pointed: undefined, keyed: undefined }, false, { shortcut: undefined, resting: false }],
+])(
+  "a button with the keys %o, with the pointer resting on it: %s, shows %o",
+  (keys, pointer, tip) => {
+    expect(tipOf(keys, pointer)).toStrictEqual(tip);
+  },
+);

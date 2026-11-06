@@ -24,15 +24,23 @@ import { DiffBody } from "./diff-body";
 import type { DiffBodyProps } from "./diff-body";
 import { DiffLayout } from "./diff-layout";
 import type { Layout } from "./diff-style";
+import { KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
 import { GroupFileBar } from "./group-file-bar";
 import { diffOf, listedFiles } from "./groups";
-import type { GroupName, OpenFile } from "./groups";
+import type { GroupName, Open, OpenFile } from "./groups";
+import { useFocusOnPress } from "./keyboard";
 import { Failed, Queried } from "./queried";
 import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
 import { useSelectedLines } from "./text-selection";
-import { KeptPlaceContext, scrollUpTo, stopScrollAnchoring, useSettledFocus } from "./web";
+import {
+  KeptPlaceContext,
+  scrollToOffset,
+  scrollUpTo,
+  stopScrollAnchoring,
+  useSettledFocus,
+} from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -186,6 +194,8 @@ interface GroupFilesProps {
   // the file where `entire` says.
   expanded: (file: OpenFile, entire?: boolean) => DiffQuery;
   group: GroupName;
+  // The group, or the files selected in it.
+  open: Open;
   // What the sidebar's files are filtered by.
   filter: string;
   controls: Controls;
@@ -198,6 +208,7 @@ function GroupFiles({
   sideBySide,
   expanded,
   group,
+  open,
   filter,
   controls,
   theme,
@@ -241,8 +252,15 @@ function GroupFiles({
 
   const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
 
+  const focus = useContext(KeyboardFocusContext);
+
   useKeptStarts(files, view, busy);
   useSettledFocus(busy);
+  useFocusOnPress(view, view, focus);
+
+  useLayoutEffect(() => {
+    focus.shown(open);
+  });
 
   const barHeight = tallest(
     heights,
@@ -259,6 +277,13 @@ function GroupFiles({
   const onFileRun = useCallback(
     (index: number) => {
       scrollUpTo(view, fileId(view, index), barHeight);
+    },
+    [view, barHeight],
+  );
+
+  const onShowFile = useCallback(
+    (index: number) => {
+      scrollToOffset(view, fileId(view, index), barHeight);
     },
     [view, barHeight],
   );
@@ -282,6 +307,8 @@ function GroupFiles({
             barHeight={barHeight}
             onHeights={setHeights}
             onRun={onFileRun}
+            onShow={onShowFile}
+            onExpand={onExpand}
             controls={controls}
             theme={theme}
           />,
@@ -300,6 +327,7 @@ function GroupFiles({
                 barsBelow={barHeight}
                 onHunkRun={onHunkRun}
                 onFileRun={onFileRun}
+                onShowFile={onShowFile}
                 controls={controls}
                 onExpand={onExpand}
                 theme={theme}
@@ -325,7 +353,8 @@ interface GroupDiffProps extends Omit<GroupFilesProps, "read" | "view" | "sideBy
 // its lines once asked to, until another file or group is opened. Just before an action on a file
 // or a hunk runs, the view scrolls up to its start if it's above, so what then takes its place
 // shows from its start, and focus moves on to the hunk that takes the place of one an action ran
-// on with focus in its bar.
+// on with focus in its bar. Once it shows, focus moves into it if keys opened the group. A press of
+// the pointer on a hunk's lines moves focus to the hunk's bar.
 export function GroupDiff({ query, layout, theme, ...files }: GroupDiffProps): ReactElement {
   const read = useQuery(query);
   const view = useId();

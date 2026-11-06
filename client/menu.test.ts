@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { itemLook, menuPosition } from "./menu";
+import { itemLook, menuPosition, menuStep } from "./menu";
 
 const length = fc.integer({ min: 0, max: 2000 });
 
@@ -87,4 +87,18 @@ test("a menu's item is highlighted while the pointer is over it, unless it's dis
   expect(itemLook(true, false)).toBe("hovered");
   expect(itemLook(false, true)).toBe("disabled");
   expect(itemLook(true, true)).toBe("disabled");
+});
+
+test("↓ and ↑ move focus to a menu's next item or the one before, round from the last to the first and back", () => {
+  fc.assert(
+    fc.property(
+      fc
+        .integer({ min: 1, max: 10 })
+        .chain((count) => fc.tuple(fc.constant(count), fc.nat(count - 1))),
+      ([count, index]) => {
+        expect(menuStep("down", index, count)).toBe((index + 1) % count);
+        expect(menuStep("up", index, count)).toBe((index + count - 1) % count);
+      },
+    ),
+  );
 });

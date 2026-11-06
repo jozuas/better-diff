@@ -1,14 +1,14 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
-import type { ReactElement, ReactNode } from "react";
-import { Fragment, useContext, useId, useMemo, useState } from "react";
+import type { ReactElement, ReactNode, Ref } from "react";
+import { Fragment, useContext, useId, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
-import { itemLook, menuPosition } from "./menu";
+import { useCommands, useContextMenu } from "./keyboard";
+import { itemLook, menuPosition, menuStep } from "./menu";
 import type { Point, Size } from "./menu";
-import { useContextMenu } from "./web";
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -61,6 +61,8 @@ function useStyles(theme: PluginTheme) {
 type Styles = ReturnType<typeof useStyles>;
 
 interface PopupProps {
+  // Its id on the page.
+  id?: string;
   role: "menu" | "dialog";
   // Its accessible name.
   label: string;
@@ -73,7 +75,15 @@ interface PopupProps {
 
 // At the point, over the whole page, until it's closed: with Escape, or a click or a right click
 // outside it.
-export function Popup({ role, label, point, onClose, theme, children }: PopupProps): ReactElement {
+export function Popup({
+  id,
+  role,
+  label,
+  point,
+  onClose,
+  theme,
+  children,
+}: PopupProps): ReactElement {
   const styles = useStyles(theme);
   const window = useWindowDimensions();
   const [size, setSize] = useState<Size>();
@@ -84,6 +94,7 @@ export function Popup({ role, label, point, onClose, theme, children }: PopupPro
   return (
     <Modal transparent visible onRequestClose={onClose}>
       <View
+        nativeID={id}
         role={role}
         accessibilityLabel={label}
         style={[
@@ -119,17 +130,29 @@ interface MenuItem {
 }
 
 interface MenuItemProps extends MenuItem {
+  onFocus: () => void;
+  itemRef: Ref<View>;
   styles: Styles;
 }
 
-function Item({ label, icon, onPress, disabled, styles }: MenuItemProps): ReactElement {
+function Item({
+  label,
+  icon,
+  onPress,
+  disabled,
+  onFocus,
+  itemRef,
+  styles,
+}: MenuItemProps): ReactElement {
   return (
     <Hoverable
+      ref={itemRef}
       accessibilityRole="menuitem"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
+      onFocus={onFocus}
     >
       {({ hovered }) => {
         const look = itemLook(hovered, disabled);
@@ -157,27 +180,54 @@ interface MenuProps {
   theme: PluginTheme;
 }
 
-// A right-click menu, at the point, which closes once an item is chosen, before the item runs.
+// A right-click menu, at the point, which closes once an item is chosen, before the item runs. ↓
+// and ↑ move focus from one item to the next or the one before, round from the last to the first
+// and back.
 export function Menu({ label, point, sections, onClose, theme }: MenuProps): ReactElement {
   const styles = useStyles(theme);
+  const id = useId();
   const shown = sections.filter((section) => section.length > 0);
+  const count = shown.flat().length;
+  const items = useRef<(View | null)[]>([]);
+  const focused = useRef(0);
+
+  useCommands(id, "menu", (command) => {
+    const next = menuStep(command, focused.current, count);
+
+    items.current[next]?.focus();
+
+    return next !== focused.current;
+  });
+
+  // Each item's index among all the menu's.
+  const starts = shown.map((_, index) => shown.slice(0, index).flat().length);
 
   return (
-    <Popup role="menu" label={label} point={point} onClose={onClose} theme={theme}>
+    <Popup id={id} role="menu" label={label} point={point} onClose={onClose} theme={theme}>
       {shown.map((section, index) => (
         <Fragment key={section.map((item) => item.label).join("\n")}>
           {index === 0 ? null : <View style={styles.separator} />}
-          {section.map((item) => (
-            <Item
-              key={item.label}
-              {...item}
-              onPress={() => {
-                onClose();
-                item.onPress();
-              }}
-              styles={styles}
-            />
-          ))}
+          {section.map((item, position) => {
+            const at = (starts[index] ?? 0) + position;
+
+            return (
+              <Item
+                key={item.label}
+                {...item}
+                onPress={() => {
+                  onClose();
+                  item.onPress();
+                }}
+                onFocus={() => {
+                  focused.current = at;
+                }}
+                itemRef={(element) => {
+                  items.current[at] = element;
+                }}
+                styles={styles}
+              />
+            );
+          })}
         </Fragment>
       ))}
     </Popup>

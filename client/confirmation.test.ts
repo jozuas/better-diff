@@ -48,6 +48,7 @@ function confirmations() {
 
       await vi.advanceTimersByTimeAsync(0);
     },
+    cancel: confirm.cancel,
     dispose: confirm.dispose,
   };
 }
@@ -113,6 +114,35 @@ test("disarms the armed button when another one runs its action", () => {
 
   expect(heard).toStrictEqual(["discard", undefined]);
   expect(ran).toStrictEqual(["stage"]);
+});
+
+test("cancelling takes back the question an armed button asks, so its next press arms it again, and says it did", () => {
+  const { heard, ran, press, cancel } = confirmations();
+
+  press("discard", true);
+
+  expect(cancel()).toBe(true);
+
+  press("discard", true);
+
+  expect(ran).toStrictEqual([]);
+  expect(heard).toStrictEqual(["discard", undefined, "discard"]);
+});
+
+test("cancelling with no button armed takes nothing back, nor says any is disarmed, and its lapsed wait disarms nothing later", () => {
+  const { heard, press, cancel } = confirmations();
+
+  expect(cancel()).toBe(false);
+
+  press("discard", true);
+  cancel();
+  press("discard", true);
+  vi.advanceTimersByTime(2000);
+  cancel();
+  press("other", true);
+  vi.advanceTimersByTime(2000);
+
+  expect(heard).toStrictEqual(["discard", undefined, "discard", undefined, "other"]);
 });
 
 test("leaves a button armed once disposed of, since nothing hears of it any more", () => {

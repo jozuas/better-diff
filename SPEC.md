@@ -31,9 +31,6 @@ Replicates Sublime Merge as much as possible:
 - A partly staged file appears in both MODIFIED and STAGED. Opened from MODIFIED it shows the unstaged part, from STAGED the staged part.
 - After a hunk action the view moves to the next hunk; after a file action, to the next file.
 - While a file is open, the diff of the file a file action would move the view to is read too, so it shows at once after one.
-- With focus in a hunk's bar, ↓ and ↑ move focus to the next hunk or the one before, in a group's view from one file's diff to the next's, and the view shows that hunk from its start. Focus lands on its Stage Hunk button, or Unstage Hunk, so Enter stages or unstages it. ← moves focus back to its file's row in the sidebar.
-- With focus in a hunk's bar, Backspace discards the hunk, or unstages it in STAGED, and Shift+Enter and Shift+Backspace stage and discard, or unstage, its whole file, as the file bar's buttons do. They do that with focus in the file bar too. Enter on its own presses the button with focus, as it does anywhere.
-- Once an action on a hunk or its lines runs with focus in the hunk's bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left. So Enter stages one hunk after another. Once an action on its file runs from there, focus moves to the next file's first hunk.
 - One action runs at a time: while one runs, the buttons that run actions are disabled, and a key that runs one does nothing.
 
 ### Selecting lines
@@ -42,6 +39,62 @@ Replicates Sublime Merge as much as possible:
 - A selection stays within one hunk.
 - In side-by-side, the selection is in whichever side has focus: removals or additions.
 - Right-clicking a diff's lines opens a menu in place of the page's own, which closes with Escape or a click outside it. Its Copy copies the selected text, as copying it with the keyboard does, and is disabled while no text is selected.
+- The keyboard selects lines too: see Keyboard.
+
+### Keyboard
+
+The panel works from the keyboard as it does with the pointer, in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl, and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
+
+Tab reaches nothing in the panel: every action has a key of its own, and Tab moves focus on out of the panel.
+
+#### Where focus goes
+
+- In the sidebar: the filter, each group's heading, and each file's row while its group is expanded.
+- In the diff: for each file it shows, its file bar, its mode change's bar if it has one, and each hunk's bar, so a file shown without hunks, such as a binary or collapsed one, still has its bar to go to. Focus is on the bar itself, rather than on one of its buttons.
+- In a hunk: its lines, as a selection of one line or more.
+
+#### Moving
+
+- ↓ and ↑ move focus to the next place or the one before in the pane it's in: in the sidebar from one group to the next, and in the diff from one file to the next. Alt+↓ and Alt+↑ take bigger steps: to the next group's heading or the one before, or to the next file's bar or the one before.
+- Focus reaching a file's row opens the file. Focus reaching a group's heading opens nothing: Enter opens the group.
+- Holding ↓ or ↑ in the sidebar moves focus on without opening each file it passes: the file of the row focus stops at opens once the key is let go.
+- Shift+↓ and Shift+↑ in a file's row select one more file or one fewer, and focus moves along with them. Escape in a selected file's row opens just that file.
+- Focus reaching a bar shows it from its start: the view scrolls to the top of its hunk's lines, or of its file's diff.
+- In one file's view, ↓ on the file's last bar opens the next file the sidebar lists, with focus on its file bar, and ↑ on the file bar opens the file before, with focus on its last bar. Alt+↓ and Alt+↑ open the next file or the one before, with focus on its file bar.
+- → moves focus from a file's row into its diff, to its first hunk, or its file bar if it has none, opening the file first if the view doesn't show it, and ← from anywhere in a file's diff back to its row.
+- On a group's heading, ← collapses the group and → expands it again. → on an expanded heading opens the group, with focus on its first file's first hunk, or that file's bar if it has none, once the group's view shows.
+- ↑ on the first heading moves focus to the filter, and `/` does from anywhere in the panel. In the filter, ↓ and Enter move focus to the first file it lists, opening it, and Escape clears it, or once it's empty moves focus to the open file's row.
+
+#### Acting
+
+- Enter and Backspace act on the place with focus as its buttons do: Enter stages, or unstages in STAGED, and Backspace discards, or unstages in STAGED. In a hunk's bar they act on the hunk, or on its selected lines while it has any; in a mode change's bar, on the mode change; and in a file's bar, on the file.
+- Shift+Enter and Shift+Backspace act on whole files: in any of a file's bars or lines, on the file, as its file bar's buttons do; in a file's row, as the row's buttons do, on the file, or on the selected files in one of their rows; and in a group's heading, as its buttons do, on all its files.
+- Enter in a row or heading opens its file or group.
+- Once an action on a hunk, its lines or its mode change runs with focus in its bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left, or that file's bar if it has no hunks. So Enter stages one hunk after another. Once an action on a file runs from one of its bars, focus moves the same way to the next file's first hunk. Once one runs from a row or a heading, focus moves to the row of the file the view moves on to, or once the view moves on to none, as after the last file of a group leaves it, to the row or heading that takes its place in the sidebar.
+- A discard asks for confirmation as its button does (see Confirmation), and Escape takes the question back.
+
+#### Lines
+
+- → on a hunk's bar selects the hunk's first changed line, on the side it's on, side by side.
+- ↓ and ↑ then select the next line or the one before instead, and past either end of the hunk, the first line of the next hunk or the last of the one before. Shift+↓ and Shift+↑ select one more line or one fewer, within the hunk. The view scrolls to show the line moved to.
+- Side by side, → and ← move the selection to the line level with it on the other side, or the nearest one there.
+- ←, from the removals' side or inline, and Escape clear the selection and move focus back to the hunk's bar.
+- Pressing the pointer on a hunk's lines moves focus to the hunk's bar once it's let go, and so does selecting lines with it, to their hunk's bar, so the keys act on the hunk, or on the lines. Once the pointer clears the selection, the keys act on the hunk again.
+
+#### Showing more
+
+- E in a hunk's bar or lines shows the entire file, or only the modified hunks again, as the hunk's toggle does. In a collapsed file's bar it shows the diff, as Show diff does.
+
+#### Menus
+
+- The menu key, or Shift+F10, opens the menu of the file whose row has focus. ↓ and ↑ move between its items, Enter chooses one, and Escape closes it. Either way, focus goes back to the row.
+
+#### Getting there, and learning the keys
+
+- Better Diff in Paseo's command center opens the panel with focus in the open file's row, and so does opening the panel some other way, unless focus is in a text field then, as in a message being written, or already in the panel.
+- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter or Backspace under a hunk's, a mode change's or the selected lines' buttons, Shift+Enter or Shift+Backspace under a file's or a group's, and E under the hunk's toggle. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
+- Once focus rests on a bar for a second, Enter and Backspace show under the buttons they press from there: a hunk's, a mode change's or a file's own, or the selected lines' while the hunk has any.
+- Better Diff's settings page lists all the keys.
 
 ### Whitespace changes
 
@@ -90,8 +143,7 @@ Replicates Sublime Merge as much as possible:
 
   They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
-- Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. Shift+↓ and Shift+↑, with focus in a file's row, select one more file or one fewer, and focus moves along with them. A selection stays within one group: shift-clicking a file in another group opens just that file.
-- ↓ and ↑, with focus in a file's row, open the next file the sidebar lists or the one before, from the last file of one group to the first of the next, and focus moves along with them. → moves focus into the file's diff, to its first hunk.
+- Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. A selection stays within one group: shift-clicking a file in another group opens just that file.
 - The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows show their actions always, acting on all of them as a group's actions act on all its files:
   - MODIFIED: Stage Selected, Discard Selected
   - UNTRACKED: Stage Selected, Delete Selected
@@ -100,7 +152,7 @@ Replicates Sublime Merge as much as possible:
   An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
 
 - "Filter files..." input to quickly find a file.
-- Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its paths. With focus on it, → widens the list by 10 pixels and ← narrows it by 10, or by 50 with Shift.
+- Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its paths.
 - Right-clicking a file's row opens its menu, which closes with Escape or a click outside it:
   - Copy full path
   - Copy relative path: from the repository's root, as git status lists it.
@@ -137,8 +189,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 - A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A sidebar button's icon brightens too.
 - A button that asks for confirmation shows the danger colour while the pointer is over it.
 - A group's triangle brightens while the pointer is over it.
-- The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged or has focus.
-- Once the pointer rests on a button with a keyboard shortcut for a second, the shortcut shows under it, to teach it: Enter or Backspace under a hunk's bar's buttons, Shift+Enter or Shift+Backspace under a file's bar's. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
+- The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
 
 ### Font sizes
 
@@ -152,7 +203,6 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 ### Later
 
 - Sending line comments to an agent.
-- Keyboard shortcuts for the other actions: on lines, mode changes, and in the sidebar.
 - Mobile.
 
 ### Out of scope

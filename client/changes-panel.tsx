@@ -4,7 +4,7 @@ import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin
 import { Loading, useToast } from "@getpaseo/plugin/client/ui";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
 import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
@@ -22,7 +22,9 @@ import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
 import { fileAfter, openAfter, placeholder, toggled } from "./groups";
 import type { Open } from "./groups";
+import { useFocusOnOpen, usePanelKeys } from "./keyboard";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
+import { requests } from "./requests";
 import { viewSettingsOf } from "./settings";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
@@ -100,6 +102,7 @@ function useControls(
           );
         });
       },
+      cancel: confirm.cancel,
     }),
     [store, confirm, latest],
   );
@@ -197,6 +200,7 @@ function useViewValues(): ViewValues | undefined {
 }
 
 interface ChangesProps {
+  workspace: string;
   directory: string;
   layout: Layout;
   // Whether diffs are read with whitespace changes hidden.
@@ -205,7 +209,14 @@ interface ChangesProps {
   theme: PluginTheme;
 }
 
-function Changes({ directory, layout, hideWhitespace, tab, theme }: ChangesProps): ReactElement {
+function Changes({
+  workspace,
+  directory,
+  layout,
+  hideWhitespace,
+  tab,
+  theme,
+}: ChangesProps): ReactElement {
   const listChanges = useRpc(changesRpc);
   const queryClient = useQueryClient();
 
@@ -249,6 +260,17 @@ function Changes({ directory, layout, hideWhitespace, tab, theme }: ChangesProps
 
   const controls = useControls(where, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
 
+  const id = useId();
+
+  usePanelKeys(id, focus, controls);
+  useFocusOnOpen(
+    requests,
+    { workspace, panel: id },
+    focus,
+    sidebar.open,
+    changes.data !== undefined,
+  );
+
   const styles = useMemo(
     () =>
       StyleSheet.create({
@@ -268,6 +290,7 @@ function Changes({ directory, layout, hideWhitespace, tab, theme }: ChangesProps
 
   return (
     <View
+      nativeID={id}
       style={styles.panel}
       onLayout={(event) => {
         setPanelWidth(event.nativeEvent.layout.width);
@@ -318,6 +341,7 @@ export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelPr
       <TabSizeContext value={settings.tabSize}>
         <SyntaxColorsProvider theme={theme}>
           <Changes
+            workspace={workspaceId}
             directory={directory}
             layout={settings}
             hideWhitespace={settings.hideWhitespace}

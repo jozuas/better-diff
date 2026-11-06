@@ -3,13 +3,13 @@ import { copyText, useToast } from "@getpaseo/plugin/client/ui";
 import { useMutation } from "@tanstack/react-query";
 import type { ReactElement, ReactNode } from "react";
 import { useId, useState } from "react";
-import type { StyleProp, ViewStyle } from "react-native";
+import type { StyleProp, ViewProps, ViewStyle } from "react-native";
 import { View } from "react-native";
 
+import { useContextMenu } from "./keyboard";
 import type { Point } from "./menu";
 import { Menu } from "./popup";
 import { selectedText } from "./text-selection";
-import { useContextMenu } from "./web";
 
 // Where the menu was opened, and the text selected then, which pressing its item can unselect.
 interface Opened {
@@ -57,7 +57,7 @@ function LinesMenu({ path, opened, onCopy, onClose, theme }: LinesMenuProps): Re
   );
 }
 
-interface LinesAreaProps {
+interface LinesAreaProps extends Pick<ViewProps, "dataSet"> {
   // The path of the file whose lines they are.
   path: string;
   style?: StyleProp<ViewStyle>;
@@ -67,7 +67,7 @@ interface LinesAreaProps {
 
 // Lines of a diff, which open the menu of its lines where they're right-clicked, in place of the
 // page's own. Its backdrop takes a right click elsewhere, so only one is open at a time.
-export function LinesArea({ path, style, theme, children }: LinesAreaProps): ReactElement {
+export function LinesArea({ path, dataSet, style, theme, children }: LinesAreaProps): ReactElement {
   const id = useId();
   const toast = useToast();
   const [opened, setOpened] = useState<Opened>();
@@ -84,7 +84,7 @@ export function LinesArea({ path, style, theme, children }: LinesAreaProps): Rea
   });
 
   return (
-    <View nativeID={id} style={style}>
+    <View nativeID={id} dataSet={dataSet} style={style}>
       {children}
       <LinesMenu
         path={path}

@@ -2,44 +2,29 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef } from "react";
 import { Platform } from "react-native";
 
-import type { Controls } from "./actions";
 import { KeyboardFocusContext } from "./focus";
+import { takesText } from "./key-events";
 import type { Point } from "./menu";
 import type { KeptPlace, ViewPage } from "./place";
 import { focusedId, unfocusedId } from "./selection";
-import { shortcutPress } from "./shortcuts";
-import type { Bar, KeyPress, Level } from "./shortcuts";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
-interface PageMouseEvent {
-  readonly clientX: number;
-  readonly clientY: number;
-  preventDefault: () => void;
-}
-
-interface PageKeyboardEvent extends Readonly<KeyPress> {
-  preventDefault: () => void;
-}
-
-// What an element's listeners hear, by the event they listen for.
-interface PageEvents {
-  dblclick: PageMouseEvent;
-  contextmenu: PageMouseEvent;
-  keydown: PageKeyboardEvent;
-}
-
 interface PageScrollEvent {
   readonly target: { readonly id?: string } | null;
 }
 
 interface PageElement {
   readonly id: string;
+  readonly tagName: string;
+  readonly isContentEditable: boolean;
   readonly parentElement: PageElement | null;
+  contains: (element: PageElement | null) => boolean;
   scrollTop: number;
   readonly scrollHeight: number;
   readonly clientHeight: number;
   readonly style: {
     cursor: string;
+    outlineOffset: string;
     overflowAnchor: string;
     paddingRight: string;
     position: string;
@@ -47,15 +32,12 @@ interface PageElement {
     userSelect: string;
     width: string;
   };
-  getBoundingClientRect: () => { readonly top: number; readonly width: number };
-  addEventListener: <Type extends keyof PageEvents>(
-    type: Type,
-    listener: (event: PageEvents[Type]) => void,
-  ) => void;
-  removeEventListener: <Type extends keyof PageEvents>(
-    type: Type,
-    listener: (event: PageEvents[Type]) => void,
-  ) => void;
+  getBoundingClientRect: () => {
+    readonly top: number;
+    readonly bottom: number;
+    readonly left: number;
+    readonly width: number;
+  };
   querySelectorAll: (selectors: string) => Iterable<PageElement>;
 }
 
@@ -125,10 +107,22 @@ export function scrollToOffset(container: string, target: string, offset: number
 }
 
 // Whether nothing on the page has focus, as once the element with focus is gone.
-function nothingFocused(): boolean {
+export function nothingFocused(): boolean {
   return (
     Platform.OS === "web" &&
     (document.activeElement === null || document.activeElement === document.body)
+  );
+}
+
+// Whether focus is somewhere the panel with the id leaves it as it opens: in a text field, as in a
+// message being written, or already in the panel.
+export function keepsFocus(panel: string): boolean {
+  const element = Platform.OS === "web" ? document.activeElement : null;
+
+  return (
+    element !== null &&
+    (takesText(element) ||
+      document.querySelector(`#${CSS.escape(panel)}`)?.contains(element) === true)
   );
 }
 
@@ -150,6 +144,37 @@ export function scrollUpTo(container: string, target: string, margin: number): v
 
   if (offset !== undefined && offset < margin) {
     scrollToOffset(container, target, margin);
+  }
+}
+
+// Scrolls the element with the id `container`, if it has to, to show all of the element with the id
+// `target` below the `margin` at its top, which bars stuck there take.
+export function scrollToShow(container: string, target: string, margin: number): void {
+  const scroller =
+    Platform.OS === "web" ? document.querySelector(`#${CSS.escape(container)}`) : null;
+
+  const element = scroller === null ? null : document.querySelector(`#${CSS.escape(target)}`);
+
+  if (scroller === null || element === null) {
+    return;
+  }
+
+  const top = scroller.getBoundingClientRect().top;
+  const { top: start, bottom: end } = element.getBoundingClientRect();
+
+  if (start - top < margin) {
+    scrollBy(container, start - top - margin);
+  } else if (end - top > scroller.clientHeight) {
+    scrollBy(container, end - top - scroller.clientHeight);
+  }
+}
+
+// Scrolls the element with the id to its top.
+export function scrollToTop(id: string): void {
+  const scroller = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+  if (scroller !== null) {
+    scroller.scrollTop = 0;
   }
 }
 
@@ -184,6 +209,19 @@ export function useStuckAt(id: string, top: number | undefined): void {
       element.style.top = `${top}px`;
     }
   }, [id, top]);
+}
+
+// Has the focus ring of the element with the id inside it, where what's beside it, such as a bar
+// stuck over it, doesn't cover it. Paseo's own focus ring is outside, and its rule outranks React
+// Native's styles.
+export function useInsetFocusRing(id: string): void {
+  useLayoutEffect(() => {
+    const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
+
+    if (element !== null) {
+      element.style.outlineOffset = "-2px";
+    }
+  }, [id]);
 }
 
 // Has the element with the id show the cursor for resizing what's either side of it.
@@ -229,30 +267,6 @@ export function useLatest<Value>(value: Value): { readonly current: Value } {
   });
 
   return latest;
-}
-
-// Calls the latest listener on each event of the type in the element with the id, while the caller
-// is mounted: a listener that's new with each render isn't removed and added again.
-function useListener<Type extends keyof PageEvents>(
-  id: string,
-  type: Type,
-  listener: (event: PageEvents[Type]) => void,
-): void {
-  const latest = useLatest(listener);
-
-  useEffect(() => {
-    const element = Platform.OS === "web" ? document.querySelector(`#${CSS.escape(id)}`) : null;
-
-    function listen(event: PageEvents[Type]): void {
-      latest.current(event);
-    }
-
-    element?.addEventListener(type, listen);
-
-    return () => {
-      element?.removeEventListener(type, listen);
-    };
-  }, [id, type, latest]);
 }
 
 // The element with the id `view`, which scrolls, as what it shows keeps its place: each line on
@@ -317,54 +331,14 @@ export function useScrolled(id: string, listener: () => void): void {
   }, [id, latest]);
 }
 
-// Calls the latest listener on each double click on the element with the id.
-export function useDoubleClick(id: string, listener: () => void): void {
-  useListener(id, "dblclick", listener);
-}
+// Where a menu the keyboard opens for the element with the id shows: under its left end.
+export function pointUnder(id: string): Point {
+  const box =
+    Platform.OS === "web"
+      ? document.querySelector(`#${CSS.escape(id)}`)?.getBoundingClientRect()
+      : undefined;
 
-// Calls the latest listener with where the pointer is on each right click on the element with the
-// id, in place of the page's own menu.
-export function useContextMenu(id: string, listener: (point: Point) => void): void {
-  useListener(id, "contextmenu", (event) => {
-    event.preventDefault();
-    listener({ x: event.clientX, y: event.clientY });
-  });
-}
-
-// Calls the latest listener with what `read` makes of each key pressed in the element with the id,
-// where it makes something of it, in place of what the key does on the page, such as scroll it or
-// press the button with focus, as Enter does whatever modifiers are held.
-export function useKeys<Read>(
-  id: string,
-  read: (press: KeyPress) => Read | undefined,
-  listener: (read: Read) => void,
-): void {
-  useListener(id, "keydown", (event) => {
-    const made = read(event);
-
-    if (made !== undefined) {
-      event.preventDefault();
-      listener(made);
-    }
-  });
-}
-
-// Presses the button whose action's shortcut is each key pressed in the element with the id, among
-// the bars' at each level, as a click on it would.
-export function useShortcuts(
-  id: string,
-  bars: Partial<Record<Level, Bar | undefined>>,
-  controls: Controls,
-): void {
-  useKeys(
-    id,
-    (press) => shortcutPress(press, bars),
-    (pressed) => {
-      if (pressed !== "none") {
-        controls.press(pressed.button, pressed.action, pressed.target, pressed.onRun);
-      }
-    },
-  );
+  return box === undefined ? { x: 0, y: 0 } : { x: box.left, y: box.bottom };
 }
 
 // What ids of elements laid over the end of the row they're in start with.

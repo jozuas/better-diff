@@ -17,6 +17,7 @@ interface HoverableProps extends Omit<PressableProps, "children"> {
 }
 
 // A pressable whose content hears whether the pointer is over it, as well as whether it's pressed.
+// Tab doesn't reach it: keys of the panel's own do what it does.
 export function Hoverable({
   onHoverIn,
   onHoverOut,
@@ -27,6 +28,7 @@ export function Hoverable({
 
   return (
     <Pressable
+      tabIndex={-1}
       {...props}
       onHoverIn={(event) => {
         setHovered(true);

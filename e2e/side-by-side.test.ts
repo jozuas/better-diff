@@ -365,3 +365,46 @@ test("a change of width that switches between inline and side by side keeps what
 
   expect(sideBySide.y).toBe(inline.y);
 });
+
+test("side by side, → and ← move a selection of lines from the keyboard to the line level with it on the other side, and ← from the removals' side clears it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\nconst value = 1;\nb\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "a\nconst value = 2;\nb\n");
+
+  async function selection(): Promise<string> {
+    return String(await page.evaluate("String(getSelection())")).trim();
+  }
+
+  const bar = page.getByRole("group", { name: "Hunk 1 of a.txt", exact: true });
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await bar.focus();
+  await page.keyboard.press("ArrowRight");
+
+  await expect.poll(selection).toBe("const value = 1;");
+
+  await page.keyboard.press("ArrowRight");
+
+  await expect.poll(selection).toBe("const value = 2;");
+
+  await page.keyboard.press("ArrowLeft");
+
+  await expect.poll(selection).toBe("const value = 1;");
+
+  await page.keyboard.press("ArrowLeft");
+
+  await expect.poll(selection).toBe("");
+  await expect(bar).toBeFocused();
+
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+
+  await expect.poll(() => staged(repository)).toContain("+const value = 2;\n");
+  expect(staged(repository)).not.toContain("-const value = 1;");
+});

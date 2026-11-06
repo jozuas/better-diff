@@ -15,7 +15,7 @@ test("dragging the separator between the file list and the diff resizes the file
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
 
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
   const fileBar = page.getByRole("heading", { name: "UNTRACKED a.txt" });
   const before = await box(fileBar);
 
@@ -33,36 +33,6 @@ test("dragging the separator between the file list and the diff resizes the file
   await expect(separator).toHaveAttribute("aria-valuenow", "380");
 });
 
-test("with focus on the separator, → widens the file list by 10 pixels and ← narrows it by 10, or by 50 with Shift", async ({
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "a.txt", "a\n");
-
-  await app.openPanel();
-
-  const separator = page.getByRole("slider", { name: "File list width" });
-
-  await separator.focus();
-  await expect(separator).toBeFocused();
-
-  await page.keyboard.press("ArrowRight");
-  await expect(separator).toHaveAttribute("aria-valuenow", "290");
-  await page.keyboard.press("Shift+ArrowRight");
-  await expect(separator).toHaveAttribute("aria-valuenow", "340");
-  await page.keyboard.press("ArrowLeft");
-  await expect(separator).toHaveAttribute("aria-valuenow", "330");
-  await page.keyboard.press("Shift+ArrowLeft");
-  await expect(separator).toHaveAttribute("aria-valuenow", "280");
-  await page.keyboard.press("Shift+ArrowLeft");
-  await expect(separator).toHaveAttribute("aria-valuenow", "230");
-
-  await page.reload();
-
-  await expect(separator).toHaveAttribute("aria-valuenow", "230");
-});
-
 test("the file list is no narrower than 160, and leaves the diff no narrower than 240", async ({
   app,
   page,
@@ -73,7 +43,7 @@ test("the file list is no narrower than 160, and leaves the diff no narrower tha
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (1)", "a.txt");
 
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
 
   await dragBy(page, separator, -1000);
 
@@ -99,7 +69,7 @@ test("the separator can be grabbed a few pixels either side of its line", async 
 
   await app.openPanel();
 
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
   const { x, y, width, height } = await box(separator);
   const middle = x + width / 2;
 
@@ -134,7 +104,7 @@ test("double-clicking the separator fits the file list to its longest path", asy
 
   await app.openPanel();
 
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
 
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText([path]);
   expect(await cutShort(page, path)).toBe(true);
@@ -184,7 +154,7 @@ test("double-clicking the separator fits the file list to a path beside its row'
 
   expect(await textEnd(page, text)).toBeGreaterThan(before.x);
 
-  await page.getByRole("slider", { name: "File list width" }).dblclick();
+  await page.getByRole("separator", { name: "File list width" }).dblclick();
 
   await expect
     .poll(async () => {
@@ -209,7 +179,7 @@ test("double-clicking the separator narrows the file list to fit a group's headi
 
   const text = '[aria-label="UNTRACKED FILES (1)"] [role="heading"]';
   const deleteAll = button(page, "Delete All");
-  const separator = page.getByRole("slider", { name: "File list width" });
+  const separator = page.getByRole("separator", { name: "File list width" });
 
   await separator.dblclick();
 

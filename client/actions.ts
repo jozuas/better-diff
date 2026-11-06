@@ -153,6 +153,8 @@ export function buttonOf(bar: string, { operation }: Pick<Action, "operation">):
 // nothing: the buttons are disabled then, but shortcuts still press them.
 export interface Controls extends Pick<ControlsStore, "state" | "subscribe"> {
   press: (button: string, action: Action, target: Target, onRun?: () => void) => void;
+  // Takes back the question an armed button asks, if one does, and says whether one did.
+  cancel: () => boolean;
 }
 
 // Over the hunk whose lines are selected.

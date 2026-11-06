@@ -5,7 +5,7 @@ import { memo, useMemo } from "react";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { measured } from "./bar-heights";
-import { FileBar } from "./file-diff";
+import { FileBar } from "./file-bar";
 import type { GroupName } from "./groups";
 
 type Diff = RpcOutput<typeof diffRpc>;
@@ -25,6 +25,10 @@ interface GroupFileBarProps {
   onHeights: Dispatch<SetStateAction<ReadonlyMap<string, number>>>;
   // Called with its index just before one of its actions runs.
   onRun: (index: number) => void;
+  // Called with its index to scroll the view to show its file's diff from its start.
+  onShow: (index: number) => void;
+  // Asks for the lines of the collapsed diff of the file at the path.
+  onExpand: (path: string) => void;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -37,6 +41,8 @@ function BarOfGroupFile({
   barHeight,
   onHeights,
   onRun,
+  onShow,
+  onExpand,
   controls,
   theme,
 }: GroupFileBarProps): ReactElement {
@@ -45,6 +51,7 @@ function BarOfGroupFile({
   return (
     <FileBar
       file={file}
+      index={index}
       diff={diff}
       minHeight={barHeight}
       onHeight={(height) => {
@@ -52,6 +59,12 @@ function BarOfGroupFile({
       }}
       onRun={() => {
         onRun(index);
+      }}
+      onShow={() => {
+        onShow(index);
+      }}
+      onExpand={() => {
+        onExpand(path);
       }}
       controls={controls}
       theme={theme}

@@ -144,6 +144,7 @@ function ShownDiff({
         query={groupQuery(group, open.paths)}
         expanded={expanded}
         group={group}
+        open={open}
         filter=""
         layout={layout}
         controls={controls}
@@ -159,6 +160,7 @@ function ShownDiff({
         query={groupQuery(group)}
         expanded={expanded}
         group={group}
+        open={open}
         filter={filter}
         layout={layout}
         controls={controls}

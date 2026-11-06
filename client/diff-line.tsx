@@ -15,7 +15,7 @@ import { trailingWhitespaceAt } from "./whitespace";
 declare module "react-native" {
   interface ViewProps {
     // React Native Web's: each entry becomes a data- attribute of the element.
-    dataSet?: Readonly<Record<string, string>>;
+    dataSet?: Readonly<Record<string, string>> | undefined;
   }
 }
 
