@@ -74,9 +74,9 @@ interface PackedRuns {
   ends: Uint32Array;
 }
 
+// Packed in one pass over the runs, into arrays made as long as they take, since a long version has
+// hundreds of thousands of runs.
 function packed(lines: readonly Runs[]): PackedRuns {
-  const runs = lines.flat();
-  const styles = [...new Set(runs.map(([, style]) => style))];
   const ends = new Uint32Array(lines.length);
   let end = 0;
 
@@ -85,12 +85,28 @@ function packed(lines: readonly Runs[]): PackedRuns {
     ends[index] = end;
   }
 
-  return {
-    styles,
-    lengths: Uint32Array.from(runs, ([length]) => length),
-    styleIndices: Uint16Array.from(runs, ([, style]) => styles.indexOf(style)),
-    ends,
-  };
+  const lengths = new Uint32Array(end);
+  const styleIndices = new Uint16Array(end);
+  // The index of each style, in the order the runs first have them.
+  const indices = new Map<string | null, number>();
+  let run = 0;
+
+  for (const line of lines) {
+    for (const [length, style] of line) {
+      let index = indices.get(style);
+
+      if (index === undefined) {
+        index = indices.size;
+        indices.set(style, index);
+      }
+
+      lengths[run] = length;
+      styleIndices[run] = index;
+      run += 1;
+    }
+  }
+
+  return { styles: [...indices.keys()], lengths, styleIndices, ends };
 }
 
 // The runs of the line at the index.
