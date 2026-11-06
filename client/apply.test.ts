@@ -1,12 +1,12 @@
 import { expect, test, vi } from "vitest";
 
-import { apply, misalignedMessage, staleMessage } from "./apply";
+import { apply, misalignedMessage, staleMessage, unwritableMessage } from "./apply";
 import type { Server } from "./apply";
 
 interface Answers {
   // The diff shown, if it's been read.
   shown?: { version: string };
-  status?: "applied" | "stale" | "misaligned";
+  status?: "applied" | "stale" | "misaligned" | "unwritable";
 }
 
 // A server that answers with what's given.
@@ -239,5 +239,16 @@ test("answers that lines git lines up otherwise with whitespace changes shown we
   ).resolves.toBe("misaligned");
   expect(misalignedMessage("discard")).toBe(
     "With whitespace changes shown, git lines these lines up differently, so nothing was done. Turn off Hide whitespace in Better Diff's settings to discard them.",
+  );
+});
+
+test("answers that lines git won't write beyond a symlink were refused", async () => {
+  const server = serverWith({ status: "unwritable" });
+
+  await expect(
+    apply(server, repo, "discard", { file: modified, version: "1", lines: [] }),
+  ).resolves.toBe("unwritable");
+  expect(unwritableMessage()).toBe(
+    "A directory this file is in is now a symlink, and git won't write a file beyond one, so nothing was done. Discarding the whole file puts the directory back in place of the symlink.",
   );
 });

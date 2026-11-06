@@ -1,7 +1,7 @@
 import type { RpcInput } from "@getpaseo/plugin";
 
 import type { applyFileRpc } from "../shared/diff";
-import { apply, misalignedMessage, staleMessage } from "./apply";
+import { apply, misalignedMessage, staleMessage, unwritableMessage } from "./apply";
 import type { Server, Target, Where } from "./apply";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
@@ -95,6 +95,10 @@ export async function applyAndTell(
 
     if (status === "misaligned") {
       tell.refused(misalignedMessage(operation));
+    }
+
+    if (status === "unwritable") {
+      tell.refused(unwritableMessage());
     }
   } catch (error) {
     tell.failed(error instanceof Error ? error.message : String(error));

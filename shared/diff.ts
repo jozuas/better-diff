@@ -138,8 +138,9 @@ export const applyLinesRpc = defineRpc({
   }),
   // Misaligned, and nothing changed, where acting on the changes in the diff that shows them all
   // would leave other lines than the diff with whitespace changes hidden shows, as where hiding
-  // them lines the versions up differently.
-  output: z.object({ status: z.enum(["applied", "stale", "misaligned"]) }),
+  // them lines the versions up differently. Unwritable, and nothing changed, where discarding them
+  // would write a file beyond a symlink, as where a directory it's in became one, which git won't.
+  output: z.object({ status: z.enum(["applied", "stale", "misaligned", "unwritable"]) }),
 });
 
 // All of the file's changes, of any kind.

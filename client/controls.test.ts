@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test, vi } from "vitest";
 
-import { misalignedMessage, staleMessage } from "./apply";
+import { misalignedMessage, staleMessage, unwritableMessage } from "./apply";
 import type { Server } from "./apply";
 import { applyAndTell, controlsStore, runBusy } from "./controls";
 import type { ControlsStore } from "./controls";
@@ -198,6 +198,7 @@ test("an action applied tells nothing, and one refused tells why", async () => {
   const applied = told();
   const refused = told();
   const misaligned = told();
+  const unwritable = told();
   const target = { file: modified, version: "1" };
 
   await applyAndTell(
@@ -222,10 +223,18 @@ test("an action applied tells nothing, and one refused tells why", async () => {
     target,
     misaligned.tell,
   );
+  await applyAndTell(
+    serverAnswering(vi.fn<Server["applyFile"]>().mockResolvedValue({ status: "unwritable" })),
+    where,
+    "discard",
+    target,
+    unwritable.tell,
+  );
 
   expect(applied.heard).toStrictEqual([]);
   expect(refused.heard).toStrictEqual([`refused: ${staleMessage(target)}`]);
   expect(misaligned.heard).toStrictEqual([`refused: ${misalignedMessage("discard")}`]);
+  expect(unwritable.heard).toStrictEqual([`refused: ${unwritableMessage()}`]);
 });
 
 test("an action that fails tells what failed, and doesn't fail itself", async () => {

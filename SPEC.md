@@ -69,6 +69,7 @@ Replicates Sublime Merge as much as possible:
 - A file moved without git (a plain `mv`) is a renamed file in MODIFIED, as `git status` shows it once the new file is added with `--intent-to-add`, not a deleted file plus an untracked one. Discarding it deletes the new file and restores the old one.
 - A file added with `git add --intent-to-add` is in MODIFIED. Discarding it deletes it, as deleting an untracked file does, and restores the file it was renamed from, if any.
 - Deleted file: show the whole old file as removed lines.
+- A file in a directory that's become a symlink is a deleted file, as `git status` shows it: git never looks beyond a symlink. It can be staged and unstaged, whole or in part. Discarding it puts the directory back in place of the symlink, as `git restore` does. Discarding a hunk or lines changes nothing, and says why: git won't write a file beyond a symlink, so `git restore -p` and Magit refuse to as well.
 - Generated file, and a diff of more than 1,000 changed lines: collapsed, as GitHub collapses them, to "Generated file" or "Large diff" and a "Show diff" button. Its file actions work while it's collapsed. A file is generated if its `linguist-generated` attribute is set, as on GitHub, or, where the attribute isn't specified, if it's a lockfile such as `package-lock.json` or `mix.lock`.
 
 ### File sidebar (left)

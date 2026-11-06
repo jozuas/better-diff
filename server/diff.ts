@@ -186,15 +186,32 @@ async function applyPatch(
   });
 }
 
+// Whether discarding changes to the files at the paths would write one beyond a symlink, which
+// `git apply` refuses to, as `git restore -p` and Magit's discarding a hunk do.
+async function unwritable(
+  directory: string,
+  operation: Action["operation"],
+  paths: readonly string[],
+): Promise<boolean> {
+  if (operation !== "discard") {
+    return false;
+  }
+
+  const beyond = await beyondSymlinks(directory, paths);
+
+  return beyond.size > 0;
+}
+
 // Stages, unstages or discards the selected lines' changes, found in the diff that shows them all
-// where whitespace changes are hidden, unless they leave other lines there than in the diff shown.
+// where whitespace changes are hidden, unless they leave other lines there than in the diff shown,
+// or would write a file beyond a symlink.
 export async function applyLines({
   lines,
   ...action
 }: RpcInput<typeof applyLinesRpc>): Promise<LinesStatus> {
   const { directory, operation } = action;
 
-  const status = await applyToFile(action, async ({ diff, withoutWhitespace }) => {
+  const status = await applyToFile(action, async ({ diff, withoutWhitespace, paths }) => {
     const parsed = parseDiff(diff);
     const shown = withoutWhitespace === undefined ? parsed : parseDiff(withoutWhitespace);
 
@@ -208,6 +225,10 @@ export async function applyLines({
 
     if (isSelected === undefined) {
       return { status: "misaligned" } as const;
+    }
+
+    if (await unwritable(directory, operation, paths)) {
+      return { status: "unwritable" } as const;
     }
 
     const patch = buildPatch(patchedBy(operation, parsed), isSelected);

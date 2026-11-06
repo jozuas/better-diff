@@ -142,6 +142,11 @@ export function misalignedMessage(operation: Operation): string {
   return `With whitespace changes shown, git lines these lines up differently, so nothing was done. Turn off Hide whitespace in Better Diff's settings to ${operation} them.`;
 }
 
+// Why discarding lines of a file in a directory that's become a symlink was refused.
+export function unwritableMessage(): string {
+  return "A directory this file is in is now a symlink, and git won't write a file beyond one, so nothing was done. Discarding the whole file puts the directory back in place of the symlink.";
+}
+
 // Why an action on the target was refused as stale.
 export function staleMessage(target: Target): string {
   if (!("group" in target)) {
