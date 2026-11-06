@@ -25,6 +25,7 @@ import { HunkBar } from "./hunk-bar";
 import { labelOf } from "./labels";
 import { unchangedLines } from "./lines";
 import type { NumberedLine, Unchanged } from "./lines";
+import { LinesArea } from "./lines-menu";
 import { ModeBar } from "./mode-bar";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
@@ -210,7 +211,8 @@ interface HunksProps extends DiffBodyProps {
 // view's other diffs, until the next hunk's bar covers it or the file's diff ends. While the entire
 // file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
-// again, and the selection changing only the hunks it leaves or reaches.
+// again, and the selection changing only the hunks it leaves or reaches. Right-clicking its lines
+// opens their menu, which copies what was selected then.
 function Hunks({
   diff,
   file,
@@ -285,7 +287,12 @@ function Hunks({
         stuckBelow={barsBelow}
         theme={theme}
       />,
-      <View key={`lines ${hunk.oldStart},${hunk.newStart}`} style={styles.spaced}>
+      <LinesArea
+        key={`lines ${hunk.oldStart},${hunk.newStart}`}
+        path={file.path}
+        style={styles.spaced}
+        theme={theme}
+      >
         <View nativeID={hunkId(container, index)} />
         <HunkLines
           hunk={hunk}
@@ -303,20 +310,21 @@ function Hunks({
           window={window}
           theme={theme}
         />
-      </View>,
+      </LinesArea>,
     ];
   });
 
   const shown = [
-    <UnchangedLines
-      key="before"
-      lines={unchanged.before}
-      container={container}
-      focus={focus}
-      window={window}
-      style={styles.spaced}
-      theme={theme}
-    />,
+    <LinesArea key="before" path={file.path} theme={theme}>
+      <UnchangedLines
+        lines={unchanged.before}
+        container={container}
+        focus={focus}
+        window={window}
+        style={styles.spaced}
+        theme={theme}
+      />
+    </LinesArea>,
     ...hunks,
   ];
 

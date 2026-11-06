@@ -41,6 +41,7 @@ Replicates Sublime Merge as much as possible:
 - Click and drag selects text as usual, so it can still be copied. The lines the selection touches are the selected lines.
 - A selection stays within one hunk.
 - In side-by-side, the selection is in whichever side has focus: removals or additions.
+- Right-clicking a diff's lines opens a menu in place of the page's own, which closes with Escape or a click outside it. Its Copy copies the selected text, as copying it with the keyboard does, and is disabled while no text is selected.
 
 ### Whitespace changes
 

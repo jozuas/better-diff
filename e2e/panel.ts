@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { z } from "zod";
 
 // A group's files' rows in the sidebar, by the group's heading.
 export function group(page: Page, heading: string): Locator {
@@ -96,4 +97,10 @@ export async function dragBy(page: Page, locator: Locator, dx: number): Promise<
   const { x, y, width, height } = await box(locator);
 
   await dragFrom(page, x + width / 2, y + height / 2, dx);
+}
+
+// Reads what the page's clipboard holds, each time it's called. A string, since the tests
+// typecheck without the DOM library.
+export function clipboardOf(page: Page): () => Promise<string> {
+  return async () => z.string().parse(await page.evaluate("navigator.clipboard.readText()"));
 }

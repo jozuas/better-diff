@@ -44,6 +44,7 @@ interface PageSelection {
   getRangeAt: (index: number) => PageRange;
   containsNode: (node: PageNode, partly: boolean) => boolean;
   removeAllRanges: () => void;
+  toString: () => string;
 }
 
 declare const document: {
@@ -178,6 +179,11 @@ function onSelection(
   return () => {
     document.removeEventListener("selectionchange", read);
   };
+}
+
+// The text the page's selection has, as copying it with the keyboard copies it.
+export function selectedText(): string {
+  return Platform.OS === "web" ? (document.getSelection()?.toString() ?? "") : "";
 }
 
 export function clearSelection(): void {

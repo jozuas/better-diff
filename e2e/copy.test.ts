@@ -2,17 +2,10 @@ import { realpathSync } from "node:fs";
 import { join } from "node:path";
 
 import type { Page } from "@playwright/test";
-import { z } from "zod";
 
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { row } from "./panel";
-
-// Reads what the page's clipboard holds, each time it's called. A string, since the tests
-// typecheck without the DOM library.
-function clipboardOf(page: Page): () => Promise<string> {
-  return async () => z.string().parse(await page.evaluate("navigator.clipboard.readText()"));
-}
+import { clipboardOf, line, openFile, row, selectLines } from "./panel";
 
 // Right-clicks the file's row, and picks the item from its menu.
 async function copyFrom(page: Page, heading: string, path: string, item: string): Promise<void> {
@@ -123,4 +116,63 @@ test("Escape, or a click or right click outside it, closes a file's menu", async
   await row(page, "UNTRACKED FILES (1)", "a.txt").click({ button: "right" });
   await page.mouse.click(5, 5, { button: "right" });
   await expect(menu).toBeHidden();
+});
+
+// Commits `a.txt` as one line, then adds three after it, in one hunk.
+function addThree(repository: string): void {
+  writeFile(repository, "a.txt", "kept\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "kept\nalpha\nbravo\ncharlie\n");
+}
+
+// Right-clicks the line's text, and picks Copy from the menu of its file's lines.
+async function copyLine(page: Page, path: string, text: string): Promise<void> {
+  await line(page, text).click({ button: "right" });
+  await page
+    .getByRole("menu", { name: path })
+    .getByRole("menuitem", { name: "Copy", exact: true })
+    .click();
+}
+
+test("right-clicking a diff's lines opens a menu whose Copy copies the selected text, as copying it with the keyboard does", async ({
+  app,
+  page,
+  repository,
+}) => {
+  addThree(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await selectLines(page, "bravo", "charlie");
+  await page.keyboard.press("ControlOrMeta+C");
+  await expect.poll(clipboardOf(page)).toBe("bravo\ncharlie");
+  await page.evaluate("navigator.clipboard.writeText('before')");
+  await copyLine(page, "a.txt", "bravo");
+
+  await expect.poll(clipboardOf(page)).toBe("bravo\ncharlie");
+  await expect(page.getByRole("menu")).toBeHidden();
+});
+
+test("the Copy of a diff's lines is disabled while no text is selected", async ({
+  app,
+  page,
+  repository,
+}) => {
+  addThree(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  const copy = page
+    .getByRole("menu", { name: "a.txt" })
+    .getByRole("menuitem", { name: "Copy", exact: true });
+
+  await page.getByText("4", { exact: true }).click({ button: "right" });
+  await expect(copy).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await expect(copy).toBeHidden();
+
+  await selectLines(page, "kept");
+  await line(page, "kept").click({ button: "right" });
+  await expect(copy).toBeEnabled();
 });
