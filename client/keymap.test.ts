@@ -24,15 +24,33 @@ const code = fc.oneof(
   fc.constantFrom("Slash", "Digit7", "BracketLeft", "Enter", "ArrowDown", "Escape", "F10", ""),
 );
 
-// The key pressed as the chord writes it, wherever the keyboard has it.
-function pressOf({ key, shift = false, alt = false }: Chord, at: string): Keys {
-  return { ...plain, key, code: at, shiftKey: shift, altKey: alt };
+// The key pressed as the chord writes it, wherever the keyboard has it, on a Mac or elsewhere: with
+// ⌘ on a Mac and Ctrl elsewhere where it takes them.
+function pressOf(
+  { key, shift = false, alt = false, primary = false }: Chord,
+  at: string,
+  mac: boolean,
+): Keys {
+  return {
+    ...plain,
+    key,
+    code: at,
+    shiftKey: shift,
+    altKey: alt,
+    metaKey: primary && mac,
+    ctrlKey: primary && !mac,
+  };
+}
+
+// The computers the chord is on: a Mac, others, or both.
+function computersOf({ mac }: Chord): boolean[] {
+  return mac === undefined ? [true, false] : [mac];
 }
 
 test.each(keys)("in a %s, %o gives %s, wherever the keyboard has it", (place, chord, command) => {
   fc.assert(
-    fc.property(code, (at) => {
-      expect(commandOf(place, pressOf(chord, at))).toBe(command);
+    fc.property(code, fc.constantFrom(...computersOf(chord)), (at, mac) => {
+      expect(commandOf(place, pressOf(chord, at, mac), mac)).toBe(command);
     }),
   );
 });
@@ -117,14 +135,21 @@ function sameChord(chord: Chord, other: Chord): boolean {
   return (
     chord.key === other.key &&
     (chord.shift ?? false) === (other.shift ?? false) &&
-    (chord.alt ?? false) === (other.alt ?? false)
+    (chord.alt ?? false) === (other.alt ?? false) &&
+    (chord.primary ?? false) === (other.primary ?? false)
   );
 }
 
-// The command the table lists the chord as giving in the place, if it lists it there.
-function listedCommand(place: Place, chord: Chord | undefined): Command | undefined {
+// The command the table lists the chord as giving in the place, on a Mac or elsewhere, if it lists
+// it there.
+function listedCommand(place: Place, chord: Chord | undefined, mac: boolean): Command | undefined {
   const [listed] = keys.flatMap(([at, listedChord, command]) =>
-    at === place && chord !== undefined && sameChord(listedChord, chord) ? [command] : [],
+    at === place &&
+    chord !== undefined &&
+    sameChord(listedChord, chord) &&
+    computersOf(listedChord).includes(mac)
+      ? [command]
+      : [],
   );
 
   return listed;
@@ -132,20 +157,26 @@ function listedCommand(place: Place, chord: Chord | undefined): Command | undefi
 
 test("a key gives a command in a place only as one of the place's keys", () => {
   fc.assert(
-    fc.property(fc.constantFrom(...places), anyPress, (place, { press, chord }) => {
-      expect(commandOf(place, press)).toBe(listedCommand(place, chord));
-    }),
+    fc.property(
+      fc.constantFrom(...places),
+      anyPress,
+      fc.boolean(),
+      (place, { press, chord }, mac) => {
+        expect(commandOf(place, press, mac)).toBe(listedCommand(place, chord, mac));
+      },
+    ),
   );
 });
 
-test("no key gives a command with Cmd or Ctrl, which Paseo's own shortcuts take", () => {
+test("no key but the find bar's gives a command with Cmd or Ctrl, which Paseo's own shortcuts take", () => {
   fc.assert(
     fc.property(
       fc.constantFrom(...places),
       anyPress,
       fc.constantFrom({ ctrlKey: true }, { metaKey: true }),
-      (place, { press }, modifier) => {
-        expect(commandOf(place, { ...press, ...modifier })).toBeUndefined();
+      fc.boolean(),
+      (place, { press }, modifier, mac) => {
+        expect(commandOf(place, { ...press, ...modifier }, mac)).toBeUndefined();
       },
     ),
   );
@@ -163,17 +194,32 @@ function typed(letter: string): fc.Arbitrary<Pick<Keys, "key" | "code">> {
   );
 }
 
-test("a letter gives its command typed as itself or as another script's letter on its key, whatever Caps Lock does, and not with Shift", () => {
+// The chord with Shift, or without it.
+function shifted(chord: Chord): Chord {
+  return { ...chord, shift: chord.shift !== true };
+}
+
+test("a letter gives its command typed as itself or as another script's letter on its key, whatever Caps Lock does, and with Shift only as its key has it", () => {
   fc.assert(
     fc.property(
       fc
         .constantFrom(...letters)
-        .chain(([place, { key }, command]) =>
-          fc.tuple(fc.constant(place), typed(key), fc.constant(command)),
+        .chain(([place, chord, command]) =>
+          fc.tuple(
+            fc.constant(place),
+            fc.constant(chord),
+            typed(chord.key),
+            fc.constant(command),
+            fc.constantFrom(...computersOf(chord)),
+          ),
         ),
-      ([place, press, command]) => {
-        expect(commandOf(place, { ...plain, ...press })).toBe(command);
-        expect(commandOf(place, { ...plain, ...press, shiftKey: true })).toBeUndefined();
+      ([place, chord, { key, code: at }, command, mac]) => {
+        const press = { ...pressOf(chord, at, mac), key };
+
+        expect(commandOf(place, press, mac)).toBe(command);
+        expect(commandOf(place, { ...press, shiftKey: !press.shiftKey }, mac)).toBe(
+          listedCommand(place, shifted(chord), mac),
+        );
       },
     ),
   );
@@ -196,18 +242,31 @@ test.each<[string, Place, Pick<Keys, "key" | "code">, Command | undefined]>([
   ["a € on E's key, which isn't a letter", "bar", { key: "€", code: "KeyE" }, undefined],
   ["a dead key, on E's key", "bar", { key: "Dead", code: "KeyE" }, undefined],
 ])("%s, in a %s, %o, gives %s", (_, place, press, command) => {
-  expect(commandOf(place, { ...plain, ...press })).toBe(command);
+  expect(commandOf(place, { ...plain, ...press }, false)).toBe(command);
 });
 
 test("another character gives its command whichever way the keyboard types it, with Shift or without", () => {
-  expect(commandOf("panel", { ...plain, key: "/", code: "Digit7", shiftKey: true })).toBe("filter");
-  expect(commandOf("panel", { ...plain, key: "?", code: "Slash", shiftKey: true })).toBeUndefined();
+  expect(commandOf("panel", { ...plain, key: "/", code: "Digit7", shiftKey: true }, true)).toBe(
+    "filter",
+  );
+  expect(
+    commandOf("panel", { ...plain, key: "?", code: "Slash", shiftKey: true }, true),
+  ).toBeUndefined();
 });
 
 test("with Alt, a key gives another command or none, as it changes the character it types", () => {
-  expect(commandOf("panel", { ...plain, key: "/", code: "Slash", altKey: true })).toBeUndefined();
-  expect(commandOf("bar", { ...plain, key: "e", code: "KeyE", altKey: true })).toBeUndefined();
-  expect(commandOf("bar", { ...plain, key: "Enter", code: "Enter", altKey: true })).toBeUndefined();
+  expect(
+    commandOf("panel", { ...plain, key: "/", code: "Slash", altKey: true }, false),
+  ).toBeUndefined();
+  expect(
+    commandOf("bar", { ...plain, key: "e", code: "KeyE", altKey: true }, false),
+  ).toBeUndefined();
+  expect(
+    commandOf("bar", { ...plain, key: "Enter", code: "Enter", altKey: true }, false),
+  ).toBeUndefined();
+  expect(commandOf("find", { ...plain, key: "ç", code: "KeyC", altKey: true }, true)).toBe(
+    "matchCase",
+  );
 });
 
 test.each<Command>(["stage", "discard", "stageFile", "discardFile", "menu", "more"])(
@@ -226,10 +285,10 @@ test.each<Command>(["down", "up", "extendDown", "collapse", "single", "filter", 
 );
 
 test("a command's key is the first that gives it in the place, and a place where none does has none", () => {
-  expect(chordOf("filter", "first")).toStrictEqual(down);
-  expect(chordOf("row", "menu")).toStrictEqual({ key: "ContextMenu" });
-  expect(chordOf("bar", "stageFile")).toStrictEqual({ ...enter, shift: true });
-  expect(chordOf("row", "stage")).toBeUndefined();
+  expect(chordOf("filter", "first", true)).toStrictEqual(down);
+  expect(chordOf("row", "menu", false)).toStrictEqual({ key: "ContextMenu" });
+  expect(chordOf("bar", "stageFile", true)).toStrictEqual({ ...enter, shift: true });
+  expect(chordOf("row", "stage", false)).toBeUndefined();
 });
 
 test.each([
@@ -245,6 +304,11 @@ test.each([
   [{ key: "F10", shift: true }, "⇧F10", "Shift+F10"],
   [{ key: "e" }, "E", "E"],
   [{ key: "/" }, "/", "/"],
+  [{ key: "f", primary: true }, "⌘F", "Ctrl+F"],
+  [{ key: "g", shift: true, primary: true }, "⇧⌘G", "Ctrl+Shift+G"],
+  [{ key: "c", alt: true }, "⌥C", "Alt+C"],
+  [{ key: "F3", shift: true }, "⇧F3", "Shift+F3"],
+  [{ key: "Enter", shift: true, alt: true, primary: true }, "⌥⇧⌘↩", "Ctrl+Alt+Shift+Enter"],
 ])("%o is written %s on a Mac, and %s elsewhere", (chord, mac, elsewhere) => {
   expect(chordText(chord, true)).toBe(mac);
   expect(chordText(chord, false)).toBe(elsewhere);

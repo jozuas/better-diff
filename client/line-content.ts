@@ -1,4 +1,5 @@
 import type { TextRange } from "./changed-text";
+import type { FoundRange } from "./find";
 import type { NumberedLine } from "./lines";
 import type { Side } from "./side-by-side";
 
@@ -6,6 +7,8 @@ import type { Side } from "./side-by-side";
 export interface TextContent {
   line: NumberedLine;
   changes: readonly TextRange[];
+  // What the find bar found in it.
+  found: readonly FoundRange[];
 }
 
 // What a diff's line renders with, but its styles.
@@ -46,15 +49,21 @@ function sameRange({ start, end }: TextRange, other: TextRange): boolean {
   return start === other.start && end === other.end;
 }
 
+function sameFound(found: FoundRange, other: FoundRange): boolean {
+  return sameRange(found, other) && found.current === other.current;
+}
+
 // Whether the line's text's pieces render as they did, whatever its numbers and id, though what
 // they render with is made anew, as each time its diff is read again: by its kind, which its
-// trailing whitespace is marked by, its text, its runs and its changed text.
+// trailing whitespace is marked by, its text, its runs, its changed text and what the find bar
+// found in it.
 export function textAsBefore(before: TextContent, after: TextContent): boolean {
   return (
     before.line.kind === after.line.kind &&
     before.line.text === after.line.text &&
     alikeItems(before.line.runs, after.line.runs, sameRun) &&
-    alikeItems(before.changes, after.changes, sameRange)
+    alikeItems(before.changes, after.changes, sameRange) &&
+    alikeItems(before.found, after.found, sameFound)
   );
 }
 

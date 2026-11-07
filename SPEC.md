@@ -43,7 +43,7 @@ Replicates Sublime Merge as much as possible:
 
 ### Keyboard
 
-The panel works from the keyboard as it does with the pointer, in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl, and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
+The panel works from the keyboard as it does with the pointer, in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl but the find bar's ⌘F and ⌘G, or Ctrl+F elsewhere, which Paseo leaves free and other apps find with (see Find in diff), and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
 
 Tab reaches nothing in the panel: every action has a key of its own, and Tab moves focus on out of the panel.
 
@@ -95,6 +95,20 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 - Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter or Backspace under a hunk's, a mode change's or the selected lines' buttons, Shift+Enter or Shift+Backspace under a file's or a group's, and E under the hunk's toggle. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
 - Once focus rests on a bar for a second, Enter and Backspace show under the buttons they press from there: a hunk's, a mode change's or a file's own, or the selected lines' while the hunk has any.
 - Better Diff's settings page lists all the keys.
+
+### Find in diff
+
+Paseo's desktop app has no find of its own, and a browser's would search the whole page, and not the lines the view hasn't rendered yet, so the panel has one.
+
+- ⌘F on a Mac, Ctrl+F elsewhere, with focus anywhere in the panel, as after a click in it, the filter included, opens a find bar under the diff, with focus in its "Find in diff" input. Pressed while it's open, it moves focus back to the input and selects what's typed.
+- It finds what's typed in the text of the lines the view shows: the open file's diff, or in a group's or the selected files' view, all of their diffs, in the order they show. Not in line numbers, bars or labels. While a file shows only its modified hunks, only the hunks' lines, and while it shows the entire file, all of them. A collapsed diff's lines aren't searched until "Show diff" shows them, and the bar says how many collapsed files it left out: "1 collapsed file not searched".
+- Smart case, as in ripgrep: what's typed matches whatever the case, unless it has a capital letter, when it matches only that case. The bar's "Aa" button, Match case, or Alt+C in the find bar, makes it match only the case typed, capital letters or not. What's typed and Match case stay as they are as other files and groups open.
+- Each match is highlighted in the theme's warning colour, and the current one more strongly. The bar shows which match is current, of how many: "3 of 17", or "No results".
+- Typing makes the current match the first at or after the one that was, or with none, the first at or after the line at the top of the view.
+- Enter and Shift+Enter in the find bar, its ↓ and ↑ buttons, and ⌘G and ⇧⌘G on a Mac, F3 and Shift+F3 elsewhere, with focus anywhere in the panel while the find bar is open, move to the next match or the one before, from the last round to the first. A match that becomes current scrolls to the middle of the view, unless it's shown already, and the file shows more of its entire file first if it has to.
+- Escape in the find bar, or its × button, closes it and clears the highlights, and focus goes back where it was before it opened.
+- Keys in the find bar only find: Enter doesn't stage there, nor Backspace discard. Its buttons' keys show under them once the pointer rests on them, as other buttons' do, and Better Diff's settings page lists them with the others.
+- As the diff changes, its highlights follow, and the current match is the first at or after where it was, without scrolling the view. Once another file or group opens, its first match is current.
 
 ### Whitespace changes
 

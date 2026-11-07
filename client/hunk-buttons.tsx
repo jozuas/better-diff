@@ -38,7 +38,7 @@ export function EntireFileToggle({
       label={toggle.label}
       icon={toggle.icon}
       onPress={onPress}
-      shortcut={shortcutText(chordOf("bar", "more"), onMac())}
+      shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
       hidden={hidden}
       theme={theme}
     />

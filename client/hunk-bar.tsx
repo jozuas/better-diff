@@ -31,7 +31,7 @@ import { fileId, lineId } from "./selection";
 import type { LineRange } from "./selection";
 import type { Focus } from "./side-by-side";
 import { clearSelection, nearestLevel, selectedNow, selectLines } from "./text-selection";
-import { afterRender, useInsetFocusRing, useLatest, useStuckAt } from "./web";
+import { afterRender, onMac, useInsetFocusRing, useLatest, useStuckAt } from "./web";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -246,7 +246,7 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
     const cursor = lines.now();
 
     if (cursor === undefined) {
-      return handled(heard("bar", event), (command) =>
+      return handled(heard("bar", event, onMac()), (command) =>
         barCommand(
           command,
           own,
@@ -272,7 +272,7 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
       holdFocus,
     );
 
-    return handled(heard("lines", event), (command) =>
+    return handled(heard("lines", event, onMac()), (command) =>
       lineCommand(
         command,
         own,

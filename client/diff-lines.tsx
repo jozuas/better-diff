@@ -1,6 +1,6 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { View } from "react-native";
 
@@ -9,8 +9,11 @@ import type { TextRange } from "./changed-text";
 import { pairingOf } from "./changed-words";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
+import { hunkSection } from "./find";
+import type { FoundLines, FoundRange } from "./find";
+import { FindContext } from "./find-store";
 import { Block } from "./line-block";
-import type { ChangedText, IdOf, Selected } from "./line-block";
+import type { ChangedText, FoundText, IdOf, Selected } from "./line-block";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
 import type { PointedHunk } from "./pointed";
@@ -30,6 +33,17 @@ const unchanged: readonly TextRange[] = [];
 // The partners of lines outside hunks, which are unchanged.
 const unpaired: ReadonlyMap<number, number> = new Map();
 
+// What the find bar found in a line it found nothing in, the same each time.
+const notFound: readonly FoundRange[] = [];
+
+// What the find bar found in the lines of the section of the file shown at the container, as it
+// finds it.
+function useFoundLines(container: string, section: number): FoundLines {
+  const find = useContext(FindContext);
+
+  return useSyncExternalStore(find.subscribe, () => find.foundIn(container, section));
+}
+
 interface LinesProps {
   lines: NumberedLine[];
   idOf: IdOf;
@@ -37,6 +51,7 @@ interface LinesProps {
   // Undefined for an inline view.
   focus: Focus | undefined;
   changes: ChangedText;
+  found: FoundText;
   // The index of the added line each paired removed line is paired with, by the removed line's.
   partners: ReadonlyMap<number, number>;
   // The lines of the file's new version to render, of those the view renders a step at a time, or
@@ -56,6 +71,7 @@ function Lines({
   selected,
   focus,
   changes,
+  found,
   partners,
   window,
   styles,
@@ -76,6 +92,7 @@ function Lines({
       idOf={idOf}
       selected={selected}
       changes={changes}
+      found={found}
       styles={styles}
     />
   ));
@@ -107,6 +124,7 @@ function LinesOfHunk({
   const styles = useStyles(theme);
   const lines = useMemo(() => numberLines(hunk), [hunk]);
   const pairing = useMemo(() => pairingOf(lines), [lines]);
+  const found = useFoundLines(container, hunkSection(index));
 
   return (
     <View {...pointed.pointer(index)}>
@@ -116,6 +134,7 @@ function LinesOfHunk({
         selected={(line, side) => isSelected(selection, index, line, side)}
         focus={focus}
         changes={(line) => pairing.changes[line] ?? unchanged}
+        found={(line) => found.get(line) ?? notFound}
         partners={pairing.partners}
         styles={styles}
       />
@@ -129,8 +148,9 @@ export const HunkLines = memo(LinesOfHunk);
 
 interface UnchangedLinesProps {
   lines: NumberedLine[];
-  // The id of the file's diff they're in.
+  // The id of the file's diff they're in, and the section of it they are.
   container: string;
+  section: number;
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The lines of the file's new version to render, while the view renders them a step at a time.
@@ -144,6 +164,7 @@ interface UnchangedLinesProps {
 function LinesOutsideHunks({
   lines,
   container,
+  section,
   focus,
   window,
   style,
@@ -160,6 +181,8 @@ function LinesOutsideHunks({
 
   const selected = useCallback(() => false, []);
   const changes = useCallback(() => unchanged, []);
+  const foundLines = useFoundLines(container, section);
+  const found = useCallback((line: number) => foundLines.get(line) ?? notFound, [foundLines]);
 
   return lines.length === 0 ? null : (
     <View style={style}>
@@ -169,6 +192,7 @@ function LinesOutsideHunks({
         selected={selected}
         focus={focus}
         changes={changes}
+        found={found}
         partners={unpaired}
         window={window}
         styles={styles}

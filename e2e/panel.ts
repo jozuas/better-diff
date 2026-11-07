@@ -104,3 +104,19 @@ export async function dragBy(page: Page, locator: Locator, dx: number): Promise<
 export function clipboardOf(page: Page): () => Promise<string> {
   return async () => z.string().parse(await page.evaluate("navigator.clipboard.readText()"));
 }
+
+export function findInput(page: Page): Locator {
+  return page.getByRole("textbox", { name: "Find in diff", exact: true });
+}
+
+// The pieces of the diff's lines the find bar highlights as matching the text, which no other
+// element has as all of its text.
+export function found(page: Page, text: string): Locator {
+  return page.getByText(text, { exact: true });
+}
+
+// Clicks the line, which moves focus into the panel, and opens the find bar from there.
+export async function openFind(page: Page, at: string): Promise<void> {
+  await line(page, at).click();
+  await page.keyboard.press("ControlOrMeta+f");
+}

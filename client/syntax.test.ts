@@ -3,8 +3,9 @@ import { expect, test } from "vitest";
 
 import { lineText } from "../test/line-texts";
 import type { TextRange } from "./changed-text";
+import type { FoundRange } from "./find";
 import { schemeOf, segmentsOf } from "./syntax";
-import type { Mark, Segment, SyntaxColors } from "./syntax";
+import type { Found, Mark, Segment, SyntaxColors } from "./syntax";
 
 // Among them one named "null", which a run without a style isn't.
 const styles = ["keyword", "string", "comment", "variable", "null"];
@@ -30,6 +31,25 @@ const changes: fc.Arbitrary<TextRange[]> = fc
       start: sorted[2 * index] ?? 0,
       end: sorted[2 * index + 1] ?? 0,
     }));
+  });
+
+// Matches the find bar found, in order, apart from each other or right after each other, some of
+// them past the text's end, the current one among them or not.
+const finds: fc.Arbitrary<FoundRange[]> = fc
+  .tuple(
+    fc.array(fc.tuple(fc.nat({ max: 3 }), fc.integer({ min: 1, max: 3 })), { maxLength: 4 }),
+    fc.nat({ max: 4 }),
+  )
+  .map(([pieces, current]) => {
+    let end = 0;
+
+    return pieces.map(([gap, length], index) => {
+      const start = end + gap;
+
+      end = start + length;
+
+      return { start, end, current: index === current };
+    });
   });
 
 // The colour of each of the text's characters, by JavaScript's count: its run's style's, or none
@@ -60,13 +80,28 @@ function markAt(ranges: readonly TextRange[], trailing: number, at: number): Mar
   return ranges.some(({ start, end }) => start <= at && at < end) ? "changed" : undefined;
 }
 
-// The segments with both the colour of the one before them and its mark.
+// What the find bar found the character at the position to be: the current match or a match, where
+// one has it.
+function foundAt(found: readonly FoundRange[], at: number): Found | undefined {
+  const range = found.find(({ start, end }) => start <= at && at < end);
+
+  if (range === undefined) {
+    return undefined;
+  }
+
+  return range.current ? "current" : "match";
+}
+
+// The segments with the colour of the one before them, its mark and what the find bar found it to
+// be.
 function likeTheOneBefore(segments: readonly Segment[]): Segment[] {
   return segments
     .slice(1)
     .filter(
-      ({ color, mark }, index) =>
-        color === segments[index]?.color && mark === segments[index]?.mark,
+      ({ color, mark, found }, index) =>
+        color === segments[index]?.color &&
+        mark === segments[index]?.mark &&
+        found === segments[index]?.found,
     );
 }
 
@@ -79,6 +114,7 @@ const segmented = fc.tuple(
   colors,
   changes,
   fc.nat({ max: 14 }),
+  finds,
 );
 
 // The colour of each of the text's characters in the segments.
@@ -115,21 +151,24 @@ function miscolored(
   });
 }
 
-// The segments of only whitespace without a colour after a segment marked as they are, which they
-// could run on from.
+// The segments of only whitespace without a colour after a segment marked and found as they are,
+// which they could run on from.
 function separateWhitespace(segments: readonly Segment[]): Segment[] {
   return segments
     .slice(1)
     .filter(
-      ({ text: piece, color, mark }, index) =>
-        color === undefined && /^\s+$/u.test(piece) && mark === segments[index]?.mark,
+      ({ text: piece, color, mark, found }, index) =>
+        color === undefined &&
+        /^\s+$/u.test(piece) &&
+        mark === segments[index]?.mark &&
+        found === segments[index]?.found,
     );
 }
 
 test("the segments make up the text, each starting where the ones before it end", () => {
   fc.assert(
-    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
-      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing, found);
 
       expect(segments.map((segment) => segment.text).join("")).toBe(text);
       expect(segments.map((segment) => segment.start)).toStrictEqual(
@@ -147,8 +186,8 @@ test("the segments make up the text, each starting where the ones before it end"
 
 test("each of the text's characters is in the colour of its run's style, or the text's own past the runs or where the style has none, or whitespace without one in that of the text before it", () => {
   fc.assert(
-    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
-      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing, found);
 
       expect(
         miscolored(text, segments, colorsOfCharacters(text, textRuns, styleColors), (at) =>
@@ -168,6 +207,7 @@ test("each of the text's characters is in the colour of its run's style, or the 
             { keyword: "#111111" },
             [],
             14,
+            [],
           ],
         ],
       ],
@@ -177,9 +217,9 @@ test("each of the text's characters is in the colour of its run's style, or the 
 
 test("whitespace without a colour runs on from the text before it, where that's marked as it is, rather than starting a segment", () => {
   fc.assert(
-    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
       expect(
-        separateWhitespace(segmentsOf(text, textRuns, styleColors, ranges, trailing)),
+        separateWhitespace(segmentsOf(text, textRuns, styleColors, ranges, trailing, found)),
       ).toStrictEqual([]);
     }),
     {
@@ -196,6 +236,7 @@ test("whitespace without a colour runs on from the text before it, where that's 
             { keyword: "#111111", variable: "#222222" },
             [],
             14,
+            [],
           ],
         ],
         [
@@ -209,6 +250,7 @@ test("whitespace without a colour runs on from the text before it, where that's 
             { keyword: "#111111" },
             [{ start: 1, end: 2 }],
             14,
+            [],
           ],
         ],
         [
@@ -222,6 +264,7 @@ test("whitespace without a colour runs on from the text before it, where that's 
             { keyword: "#111111" },
             [],
             14,
+            [],
           ],
         ],
       ],
@@ -231,8 +274,8 @@ test("whitespace without a colour runs on from the text before it, where that's 
 
 test("each of the text's characters is trailing whitespace from where that starts, and before it, changed where a range of changed text has it", () => {
   fc.assert(
-    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
-      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing, found);
 
       expect(
         segments.flatMap(({ start, text: piece, mark }) =>
@@ -245,10 +288,24 @@ test("each of the text's characters is trailing whitespace from where that start
   );
 });
 
-test("no segment is empty, and none has both the colour of the one before it and its mark", () => {
+test("each of the text's characters is found as the find bar found it: the current match, a match, or neither", () => {
   fc.assert(
-    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing]) => {
-      const segments: Segment[] = segmentsOf(text, textRuns, styleColors, ranges, trailing);
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
+      const segments = segmentsOf(text, textRuns, styleColors, ranges, trailing, found);
+
+      expect(
+        segments.flatMap(({ start, text: piece, found: foundPiece }) =>
+          Array.from({ length: piece.length }, (_, index) => [start + index, foundPiece]),
+        ),
+      ).toStrictEqual(Array.from({ length: text.length }, (_, at) => [at, foundAt(found, at)]));
+    }),
+  );
+});
+
+test("no segment is empty, and none has the colour of the one before it, its mark and what the find bar found it to be", () => {
+  fc.assert(
+    fc.property(segmented, ([text, textRuns, styleColors, ranges, trailing, found]) => {
+      const segments: Segment[] = segmentsOf(text, textRuns, styleColors, ranges, trailing, found);
 
       expect(segments.filter((segment) => segment.text === "")).toStrictEqual([]);
       expect(likeTheOneBefore(segments)).toStrictEqual([]);

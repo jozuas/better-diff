@@ -8,8 +8,8 @@ import { FontSizesContext, textPadding } from "./fonts";
 import { lineAsBefore, textAsBefore } from "./line-content";
 import type { LineContent, TextContent } from "./line-content";
 import { numbersOf } from "./side-by-side";
-import { segmentsOf, SyntaxColorsContext } from "./syntax";
-import type { Mark, Segment } from "./syntax";
+import { isPlain, segmentsOf, SyntaxColorsContext } from "./syntax";
+import type { Found, Mark, Segment } from "./syntax";
 import { trailingWhitespaceAt } from "./whitespace";
 
 declare module "react-native" {
@@ -26,14 +26,27 @@ const paseoMonospace = { pmono: "" };
 interface SegmentTextProps {
   segment: Segment;
   markStyles: Record<Mark, TextStyle>;
+  foundStyles: Record<Found, TextStyle>;
 }
 
-// A piece of a line's text in its colour, highlighted as what it's marked as, if anything.
+// A piece of a line's text in its colour, highlighted as what it's marked as, if anything, and over
+// that, as what the find bar found it to be.
 function SegmentText({
-  segment: { text, color, mark },
+  segment: { text, color, mark, found },
   markStyles,
+  foundStyles,
 }: SegmentTextProps): ReactElement {
-  return <Text style={[{ color }, mark !== undefined && markStyles[mark]]}>{text}</Text>;
+  return (
+    <Text
+      style={[
+        { color },
+        mark !== undefined && markStyles[mark],
+        found !== undefined && foundStyles[found],
+      ]}
+    >
+      {text}
+    </Text>
+  );
 }
 
 interface DiffLineProps extends LineContent {
@@ -44,9 +57,9 @@ interface LineSegmentsProps extends TextContent {
   styles: Styles;
 }
 
-// The line's text in its syntax's colours, with its changed words and trailing whitespace
-// highlighted.
-function SegmentsOfLine({ line, changes, styles }: LineSegmentsProps): ReactNode[] {
+// The line's text in its syntax's colours, with its changed words, its trailing whitespace and what
+// the find bar found in it highlighted.
+function SegmentsOfLine({ line, changes, found, styles }: LineSegmentsProps): ReactNode[] {
   const colors = useContext(SyntaxColorsContext);
 
   const markStyles = {
@@ -54,12 +67,19 @@ function SegmentsOfLine({ line, changes, styles }: LineSegmentsProps): ReactNode
     "trailing whitespace": styles.trailingWhitespace,
   };
 
-  return segmentsOf(line.text, line.runs, colors, changes, trailingWhitespaceAt(line)).map(
+  const foundStyles = { match: styles.found, current: styles.currentFound };
+
+  return segmentsOf(line.text, line.runs, colors, changes, trailingWhitespaceAt(line), found).map(
     (segment) =>
-      segment.color === undefined && segment.mark === undefined ? (
+      isPlain(segment) ? (
         segment.text
       ) : (
-        <SegmentText key={segment.start} segment={segment} markStyles={markStyles} />
+        <SegmentText
+          key={segment.start}
+          segment={segment}
+          markStyles={markStyles}
+          foundStyles={foundStyles}
+        />
       ),
   );
 }
@@ -80,6 +100,7 @@ function Line({
   side,
   selectable,
   changes,
+  found,
   styles,
 }: DiffLineProps): ReactElement {
   const numbers = numbersOf(line, side);
@@ -94,7 +115,7 @@ function Line({
         </Text>
       ))}
       <Text nativeID={id} selectable={selectable} style={styles.text}>
-        <LineSegments line={line} changes={changes} styles={styles} />
+        <LineSegments line={line} changes={changes} found={found} styles={styles} />
       </Text>
     </View>
   );

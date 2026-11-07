@@ -5,6 +5,7 @@ import { View } from "react-native";
 import type { TextRange } from "./changed-text";
 import { DiffLine } from "./diff-line";
 import type { Styles } from "./diff-styles";
+import type { FoundRange } from "./find";
 import { FontSizesContext } from "./fonts";
 import { lineKey } from "./lines";
 import type { IndexedLine, NumberedLine } from "./lines";
@@ -26,6 +27,9 @@ export type Selected = (index: number, side?: Side) => boolean;
 // The changed text of each line, by its index among those shown.
 export type ChangedText = (index: number) => readonly TextRange[];
 
+// What the find bar found in each line, by its index among those shown.
+export type FoundText = (index: number) => readonly FoundRange[];
+
 // The id of a line's text, by the line, with its index, and whether its side has focus. One without
 // focus has an id a selection doesn't find it by.
 export type IdOf = (line: IndexedLine, focused: boolean) => string;
@@ -46,6 +50,7 @@ interface HalfProps {
   selected: Selected;
   focus: Focus;
   changes: ChangedText;
+  found: FoundText;
   styles: Styles;
 }
 
@@ -58,6 +63,7 @@ function Half({
   selected,
   focus,
   changes,
+  found,
   styles,
 }: HalfProps): ReactElement {
   return (
@@ -77,6 +83,7 @@ function Half({
           side={side}
           selectable={focused}
           changes={changes(shown.index)}
+          found={found(shown.index)}
           styles={styles}
         />
       )}
@@ -90,6 +97,7 @@ interface SideBySideRowProps {
   selected: Selected;
   focus: Focus;
   changes: ChangedText;
+  found: FoundText;
   styles: Styles;
 }
 
@@ -101,6 +109,7 @@ function SideBySideRow({
   selected,
   focus,
   changes,
+  found,
   styles,
 }: SideBySideRowProps): ReactElement {
   return (
@@ -115,6 +124,7 @@ function SideBySideRow({
           selected={selected}
           focus={focus}
           changes={changes}
+          found={found}
           styles={styles}
         />
       ))}
@@ -131,6 +141,7 @@ interface RowsProps {
   idOf: IdOf;
   selected: Selected;
   changes: ChangedText;
+  found: FoundText;
   styles: Styles;
 }
 
@@ -141,6 +152,7 @@ function InlineRows({
   idOf,
   selected,
   changes,
+  found,
   styles,
 }: RowsProps): ReactElement[] {
   return lines
@@ -154,6 +166,7 @@ function InlineRows({
         side={undefined}
         selectable
         changes={changes(start + at)}
+        found={found(start + at)}
         styles={styles}
       />
     ));
@@ -170,6 +183,7 @@ function SideBySideRows({
   idOf,
   selected,
   changes,
+  found,
   styles,
 }: SideBySideRowsProps): ReactElement[] {
   return rows
@@ -182,6 +196,7 @@ function SideBySideRows({
         selected={selected}
         focus={focus}
         changes={changes}
+        found={found}
         styles={styles}
       />
     ));

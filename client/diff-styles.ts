@@ -36,6 +36,15 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
     addedWords: { backgroundColor: tintOf(processColor(theme.colors.statusSuccess), 0.3) },
     // Over that, the spaces and tabs an added line ends with, in red, as Magit and git mark them.
     trailingWhitespace: { backgroundColor: theme.colors.statusDanger },
+    // Over all of those, what the find bar found, in the theme's warning colour, and the current
+    // match more strongly, and outlined, which takes no room from the text around it.
+    found: { backgroundColor: tintOf(processColor(theme.colors.statusWarning), 0.3) },
+    currentFound: {
+      backgroundColor: tintOf(processColor(theme.colors.statusWarning), 0.5),
+      outlineWidth: 1,
+      outlineStyle: "solid",
+      outlineColor: theme.colors.statusWarning,
+    },
     number: {
       width: fonts.number,
       paddingRight: 8,

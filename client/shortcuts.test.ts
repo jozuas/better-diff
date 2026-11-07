@@ -63,13 +63,17 @@ function pressOf(
 test.each<Place>(["bar", "lines"])(
   "in a %s, stages a part of a file with Enter, and Shift+Enter all of it, and Backspace and Shift+Backspace discard them",
   (place) => {
-    expect(shortcutOf({ operation: "stage" }, "part", place)).toStrictEqual({ key: "Enter" });
-    expect(shortcutOf({ operation: "stage" }, "file", place)).toStrictEqual({
+    expect(shortcutOf({ operation: "stage" }, "part", place, false)).toStrictEqual({
+      key: "Enter",
+    });
+    expect(shortcutOf({ operation: "stage" }, "file", place, false)).toStrictEqual({
       key: "Enter",
       shift: true,
     });
-    expect(shortcutOf({ operation: "discard" }, "part", place)).toStrictEqual({ key: "Backspace" });
-    expect(shortcutOf({ operation: "discard" }, "file", place)).toStrictEqual({
+    expect(shortcutOf({ operation: "discard" }, "part", place, false)).toStrictEqual({
+      key: "Backspace",
+    });
+    expect(shortcutOf({ operation: "discard" }, "file", place, false)).toStrictEqual({
       key: "Backspace",
       shift: true,
     });
@@ -77,24 +81,26 @@ test.each<Place>(["bar", "lines"])(
 );
 
 test("unstages with Enter too, as it moves the change to the other side, which is the key a button that unstages teaches", () => {
-  expect(shortcutOf({ operation: "unstage" }, "part", "bar")).toStrictEqual({ key: "Enter" });
-  expect(shortcutOf({ operation: "unstage" }, "file", "bar")).toStrictEqual({
+  expect(shortcutOf({ operation: "unstage" }, "part", "bar", false)).toStrictEqual({
+    key: "Enter",
+  });
+  expect(shortcutOf({ operation: "unstage" }, "file", "bar", false)).toStrictEqual({
     key: "Enter",
     shift: true,
   });
 });
 
 test("in a row or a group's heading, all of a file has keys, but a part of one has none", () => {
-  expect(shortcutOf({ operation: "stage" }, "file", "row")).toStrictEqual({
+  expect(shortcutOf({ operation: "stage" }, "file", "row", false)).toStrictEqual({
     key: "Enter",
     shift: true,
   });
-  expect(shortcutOf({ operation: "discard" }, "file", "heading")).toStrictEqual({
+  expect(shortcutOf({ operation: "discard" }, "file", "heading", false)).toStrictEqual({
     key: "Backspace",
     shift: true,
   });
-  expect(shortcutOf({ operation: "stage" }, "part", "row")).toBeUndefined();
-  expect(shortcutOf({ operation: "discard" }, "part", "heading")).toBeUndefined();
+  expect(shortcutOf({ operation: "stage" }, "part", "row", false)).toBeUndefined();
+  expect(shortcutOf({ operation: "discard" }, "part", "heading", false)).toBeUndefined();
 });
 
 test("in a modified or untracked file's hunk's bar, Enter stages the hunk and Backspace discards it, and Shift+Enter and Shift+Backspace stage and discard the file", () => {
@@ -145,7 +151,7 @@ test("every bar's actions have a key at each level, with focus in the bar or on 
       fc.constantFrom<Place>("bar", "lines"),
       (group, actions, level, place) => {
         for (const action of actions[group]) {
-          expect(shortcutOf(action, level, place)).toBeDefined();
+          expect(shortcutOf(action, level, place, false)).toBeDefined();
         }
       },
     ),

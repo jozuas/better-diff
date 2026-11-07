@@ -8,7 +8,8 @@ export const enter = { key: "Enter" };
 const backspace = { key: "Backspace" };
 const escape = { key: "Escape" };
 
-// Every place's keys, and the command each gives there.
+// Every place's keys, and the command each gives there. A key with `primary` takes ⌘ on a Mac and
+// Ctrl elsewhere, and one with `mac` is only a Mac's, or only other computers'.
 export const keys: [Place, Chord, Command][] = [
   ["row", down, "down"],
   ["row", up, "up"],
@@ -59,6 +60,17 @@ export const keys: [Place, Chord, Command][] = [
   ["menu", down, "down"],
   ["menu", up, "up"],
   ["panel", { key: "/" }, "filter"],
+  ["panel", { key: "f", primary: true }, "find"],
+  ["panel", { key: "g", primary: true, mac: true }, "findNext"],
+  ["panel", { key: "F3", mac: false }, "findNext"],
+  ["panel", { key: "g", shift: true, primary: true, mac: true }, "findPrevious"],
+  ["panel", { key: "F3", shift: true, mac: false }, "findPrevious"],
+  ["find", enter, "next"],
+  ["find", { key: "F3", mac: false }, "next"],
+  ["find", { ...enter, shift: true }, "previous"],
+  ["find", { key: "F3", shift: true, mac: false }, "previous"],
+  ["find", { key: "c", alt: true }, "matchCase"],
+  ["find", escape, "close"],
   ["question", escape, "cancel"],
 ];
 

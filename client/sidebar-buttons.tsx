@@ -134,7 +134,7 @@ function SidebarButton({
             <TintLayer color={styles.faces[look]} hovered={hovered} pressed={pressed} />
             <Face action={action} look={look} styles={styles} />
             <ShortcutTip
-              shortcut={shortcutText(shortcutOf(action, "file", place), onMac())}
+              shortcut={shortcutText(shortcutOf(action, "file", place, onMac()), onMac())}
               resting={hovered && !pressed}
               theme={theme}
             />

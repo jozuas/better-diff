@@ -18,6 +18,8 @@ import { applyAndTell, controlsStore, runBusy } from "./controls";
 import type { Layout } from "./diff-style";
 import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
+import { DiffWithFind } from "./find-bar";
+import { usePanelFind } from "./find-page";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { FontSizesProvider } from "./font-sizes";
 import { fileAfter, openAfter, placeholder, toggled } from "./groups";
@@ -261,8 +263,9 @@ function Changes({
   const controls = useControls(where, (file) => shownDiffs.get(shownFileKey(file)), refreshNow);
 
   const id = useId();
+  const findBar = usePanelFind(id);
 
-  usePanelKeys(id, focus, controls);
+  usePanelKeys(id, focus, controls, findBar.keys);
   useFocusOnOpen(
     requests,
     { workspace, panel: id },
@@ -274,7 +277,14 @@ function Changes({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        panel: { flex: 1, flexDirection: "row", backgroundColor: theme.colors.surface0 },
+        // It has focus after a click in it where nothing else takes it, so that keys pressed then
+        // reach it, and shows it no more than the page does.
+        panel: {
+          flex: 1,
+          flexDirection: "row",
+          backgroundColor: theme.colors.surface0,
+          outlineWidth: 0,
+        },
         diff: { flex: 1 },
       }),
     [theme],
@@ -291,6 +301,7 @@ function Changes({
   return (
     <View
       nativeID={id}
+      tabIndex={-1}
       style={styles.panel}
       onLayout={(event) => {
         setPanelWidth(event.nativeEvent.layout.width);
@@ -307,19 +318,21 @@ function Changes({
           theme={theme}
         />
         <View style={styles.diff}>
-          <ShownDiffsContext value={shownDiffs}>
-            <DiffView
-              open={sidebar.open}
-              placeholder={placeholder(changes.data)}
-              layout={layout}
-              directory={directory}
-              next={next}
-              filter={sidebar.filter}
-              hideWhitespace={hideWhitespace}
-              controls={controls}
-              theme={theme}
-            />
-          </ShownDiffsContext>
+          <DiffWithFind panelFind={findBar} theme={theme}>
+            <ShownDiffsContext value={shownDiffs}>
+              <DiffView
+                open={sidebar.open}
+                placeholder={placeholder(changes.data)}
+                layout={layout}
+                directory={directory}
+                next={next}
+                filter={sidebar.filter}
+                hideWhitespace={hideWhitespace}
+                controls={controls}
+                theme={theme}
+              />
+            </ShownDiffsContext>
+          </DiffWithFind>
         </View>
       </KeyboardFocusContext>
     </View>

@@ -19,6 +19,8 @@ import { StyleSheet, View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { HunkLines, UnchangedLines } from "./diff-lines";
+import { afterSection, beforeSection } from "./find";
+import { useFindableLines } from "./find-page";
 import type { OpenFile } from "./groups";
 import { HunkBar } from "./hunk-bar";
 import { unchangedLines } from "./lines";
@@ -80,13 +82,14 @@ export interface HunksProps {
   theme: PluginTheme;
 }
 
-// What a diff's hunks' bars do, with their hunk's index.
+// What a diff's hunks' bars do, with their hunk's index, and how tall they are.
 interface BarActions {
   onToggleEntire: (hunk: number) => void;
   onHeight: (height: number) => void;
   onRun: (hunk: number) => void;
   onShow: (hunk: number) => void;
   onReveal: (line: string) => void;
+  barHeight: () => number;
 }
 
 // What the bars act with, as the latest render gives it.
@@ -138,6 +141,7 @@ function useBarActions(container: string, state: BarState): BarActions {
 
         scrollToShow(view, line, barsBelow + barHeight.current);
       },
+      barHeight: () => barHeight.current,
     }),
     [container, latest, kept],
   );
@@ -257,6 +261,15 @@ export function Hunks({
 
   useKeptLines(file.path, shownDiff.hunks, unchanged, container, controls);
 
+  useFindableLines(container, {
+    view,
+    fileIndex,
+    hunks: shownDiff.hunks,
+    unchanged,
+    showAround,
+    margin: () => (barsBelow ?? 0) + bars.barHeight(),
+  });
+
   useEffect(() => {
     if (scrolls) {
       stopScrollAnchoring(view);
@@ -314,6 +327,7 @@ export function Hunks({
         <UnchangedLines
           lines={unchanged.after[index] ?? noLines}
           container={container}
+          section={afterSection(index)}
           focus={focus}
           window={window}
           theme={theme}
@@ -327,6 +341,7 @@ export function Hunks({
       <UnchangedLines
         lines={unchanged.before}
         container={container}
+        section={beforeSection}
         focus={focus}
         window={window}
         style={styles.spaced}

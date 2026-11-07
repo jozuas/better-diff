@@ -43,8 +43,9 @@ export function shortcutOf(
   { operation }: Pick<Action, "operation">,
   level: Level,
   place: Place,
+  mac: boolean,
 ): Chord | undefined {
-  return chordOf(place, commands[level][operation === "discard" ? "discard" : "move"]);
+  return chordOf(place, commands[level][operation === "discard" ? "discard" : "move"], mac);
 }
 
 // A bar's actions, as its buttons have them.
@@ -122,8 +123,9 @@ export function buttonKeys(
   mac: boolean,
 ): ButtonKeys {
   return {
-    pointed: level === undefined ? undefined : shortcutText(shortcutOf(action, level, place), mac),
-    keyed: keyed ? shortcutText(shortcutOf(action, "part", place), mac) : undefined,
+    pointed:
+      level === undefined ? undefined : shortcutText(shortcutOf(action, level, place, mac), mac),
+    keyed: keyed ? shortcutText(shortcutOf(action, "part", place, mac), mac) : undefined,
   };
 }
 

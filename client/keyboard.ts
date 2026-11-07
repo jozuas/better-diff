@@ -13,10 +13,11 @@ import type { KeyEvent } from "./key-events";
 import type { CommandIn, Place } from "./keymap";
 import type { Point } from "./menu";
 import { panelCommand } from "./panel-keys";
+import type { FindTargets } from "./panel-keys";
 import { markedHunk, pressedBar } from "./reveal";
 import { openStop } from "./sidebar-stops";
 import { selectedNow } from "./text-selection";
-import { keepsFocus, useLatest } from "./web";
+import { keepsFocus, onMac, useLatest } from "./web";
 
 // This plugin typechecks without the DOM library. Declare only what this module uses.
 interface PageMouseEvent {
@@ -157,7 +158,8 @@ export function useCommands<In extends Place>(
 ): void {
   useKeys(
     id,
-    (event, own) => handled(heard(place, event), (command) => listener(command, own, event.repeat)),
+    (event, own) =>
+      handled(heard(place, event, onMac()), (command) => listener(command, own, event.repeat)),
     capture,
   );
 }
@@ -170,8 +172,13 @@ export function useKeyUp(id: string, listener: () => void): void {
 // Keys anywhere in the panel with the id: `/` moves focus to the filter, and Escape takes back the
 // question an armed button asks, before anything else in the panel hears it. Pressing the pointer in the panel gives up moving focus to what keys
 // opened once it shows.
-export function usePanelKeys(id: string, focus: KeyboardFocus, controls: Controls): void {
-  useCommands(id, "panel", (command) => panelCommand(command, focus));
+export function usePanelKeys(
+  id: string,
+  focus: KeyboardFocus,
+  controls: Controls,
+  find: FindTargets,
+): void {
+  useCommands(id, "panel", (command) => panelCommand(command, { focus, find }));
   useCommands(id, "question", () => controls.cancel(), true);
   useListener(
     id,

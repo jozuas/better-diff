@@ -71,7 +71,7 @@ export function LabelRow({ label, diff, onExpand, theme }: LabelRowProps): React
                 </Text>
               </View>
               <ShortcutTip
-                shortcut={shortcutText(chordOf("bar", "more"), onMac())}
+                shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
                 resting={hovered && !pressed}
                 theme={theme}
               />

@@ -15,14 +15,17 @@ export interface KeyPress extends Keys {
 }
 
 // A key, by its event's `key`, and the modifiers pressed with it. A letter is written in lower case
-// and pressed without Shift, whatever Caps Lock does, and on a keyboard that types another script's
-// letters, where a US keyboard has it. Another character is pressed with Shift or without,
-// whichever the keyboard gives it with, as some give `/` only with Shift. A named key, such as
-// Enter, is pressed with Shift only where the chord says so.
+// and pressed with Shift only where the chord says so, whatever Caps Lock does, and on a keyboard
+// that types another script's letters, where a US keyboard has it. Another character is pressed
+// with Shift or without, whichever the keyboard gives it with, as some give `/` only with Shift. A
+// named key, such as Enter, is pressed with Shift only where the chord says so. `primary` keys are
+// pressed with ⌘ on a Mac and Ctrl elsewhere, and `mac` ones only on a Mac, or only elsewhere.
 export interface Chord {
   key: string;
   shift?: boolean;
   alt?: boolean;
+  primary?: boolean;
+  mac?: boolean;
 }
 
 const enter = { key: "Enter" } as const;
@@ -39,9 +42,16 @@ const shiftUp = { ...up, shift: true } as const;
 const shiftEnter = { ...enter, shift: true } as const;
 const shiftBackspace = { ...backspace, shift: true } as const;
 const more = { key: "e" } as const;
+const find = { key: "f", primary: true } as const;
+const findNext = { key: "g", primary: true, mac: true } as const;
+const findPrevious = { ...findNext, shift: true } as const;
+const f3 = { key: "F3", mac: false } as const;
+const shiftF3 = { ...f3, shift: true } as const;
 
 // Every key the panel hears, by the place focus is in and the command it gives there. None takes
-// Cmd or Ctrl, which Paseo's own shortcuts take, nor `?`, which shows Paseo's list of them.
+// Cmd or Ctrl, which Paseo's own shortcuts take, but the find bar's ⌘F and ⌘G, or Ctrl+F
+// elsewhere, which Paseo leaves free and other apps find with. None takes `?` either, which shows
+// Paseo's list of its shortcuts.
 const bindings = [
   { place: "row", command: "down", chords: [down] },
   { place: "row", command: "up", chords: [up] },
@@ -90,14 +100,21 @@ const bindings = [
   { place: "menu", command: "down", chords: [down] },
   { place: "menu", command: "up", chords: [up] },
   { place: "panel", command: "filter", chords: [{ key: "/" }] },
+  { place: "panel", command: "find", chords: [find] },
+  { place: "panel", command: "findNext", chords: [findNext, f3] },
+  { place: "panel", command: "findPrevious", chords: [findPrevious, shiftF3] },
+  { place: "find", command: "next", chords: [enter, f3] },
+  { place: "find", command: "previous", chords: [shiftEnter, shiftF3] },
+  { place: "find", command: "matchCase", chords: [{ key: "c", alt: true }] },
+  { place: "find", command: "close", chords: [escape] },
   { place: "question", command: "cancel", chords: [escape] },
 ] as const satisfies readonly { place: string; command: string; chords: readonly Chord[] }[];
 
 type Binding = (typeof bindings)[number];
 
 // Where focus is: a file's row or a group's heading in the sidebar, the filter, a bar in the diff,
-// or a hunk's selected lines, a file's menu, or anywhere in the panel, and anywhere in it while a
-// button asks its question, before anything in it hears the key.
+// or a hunk's selected lines, a file's menu, the find bar, or anywhere in the panel, and anywhere in
+// it while a button asks its question, before anything in it hears the key.
 export type Place = Binding["place"];
 
 export type Command = Binding["command"];
@@ -131,9 +148,20 @@ function typesLetter(letter: string, { key, code }: Keys): boolean {
   return otherScript(key) ? code === `Key${letter.toUpperCase()}` : key.toLowerCase() === letter;
 }
 
-// Whether the key pressed is the chord's. Neither Cmd nor Ctrl is any chord's.
-function matches({ key, shift = false, alt = false }: Chord, press: Keys): boolean {
-  if (press.ctrlKey || press.metaKey || press.altKey !== alt) {
+// Whether the chord is one of the computer's, a Mac or another.
+function isOn({ mac: only }: Chord, mac: boolean): boolean {
+  return only === undefined || only === mac;
+}
+
+// Whether the key pressed, on a Mac or another computer, is the chord's: one of the computer's,
+// with ⌘ on a Mac or Ctrl elsewhere where it's `primary`, and with neither Cmd nor Ctrl where it
+// isn't.
+function matches(chord: Chord, press: Keys, mac: boolean): boolean {
+  const { key, shift = false, alt = false, primary = false } = chord;
+  const primaryHeld = mac ? press.metaKey && !press.ctrlKey : press.ctrlKey && !press.metaKey;
+  const neitherHeld = !press.ctrlKey && !press.metaKey;
+
+  if (!isOn(chord, mac) || !(primary ? primaryHeld : neitherHeld) || press.altKey !== alt) {
     return false;
   }
 
@@ -142,17 +170,22 @@ function matches({ key, shift = false, alt = false }: Chord, press: Keys): boole
   }
 
   if (/\p{Letter}/u.test(key)) {
-    return typesLetter(key, press) && !press.shiftKey;
+    return typesLetter(key, press) && press.shiftKey === shift;
   }
 
   return press.key === key;
 }
 
-// The command the key gives in the place, if any: one of the place's.
-export function commandOf<In extends Place>(place: In, press: Keys): CommandIn<In> | undefined;
-export function commandOf(place: Place, press: Keys): Command | undefined {
+// The command the key gives in the place, on a Mac or another computer, if any: one of the place's.
+export function commandOf<In extends Place>(
+  place: In,
+  press: Keys,
+  mac: boolean,
+): CommandIn<In> | undefined;
+export function commandOf(place: Place, press: Keys, mac: boolean): Command | undefined {
   return bindings.find(
-    (binding) => binding.place === place && binding.chords.some((chord) => matches(chord, press)),
+    (binding) =>
+      binding.place === place && binding.chords.some((chord) => matches(chord, press, mac)),
   )?.command;
 }
 
@@ -161,16 +194,19 @@ export function isHeld(command: Command | undefined, { repeat }: KeyPress): bool
   return repeat && once.has(command);
 }
 
-// The keys that give the command in the place.
-export function chordsOf(place: Place, command: Command): readonly Chord[] {
-  return (
-    bindings.find((binding) => binding.place === place && binding.command === command)?.chords ?? []
-  );
+// The keys that give the command in the place, on a Mac or another computer.
+export function chordsOf(place: Place, command: Command, mac: boolean): readonly Chord[] {
+  const chords: readonly Chord[] =
+    bindings.find((binding) => binding.place === place && binding.command === command)?.chords ??
+    [];
+
+  return chords.filter((chord) => isOn(chord, mac));
 }
 
-// The key that gives the command in the place, the first if more than one does.
-export function chordOf(place: Place, command: Command): Chord | undefined {
-  return chordsOf(place, command)[0];
+// The key that gives the command in the place, on a Mac or another computer, the first if more than
+// one does.
+export function chordOf(place: Place, command: Command, mac: boolean): Chord | undefined {
+  return chordsOf(place, command, mac)[0];
 }
 
 // The names of keys, on a Mac and elsewhere, that aren't the character they type.
@@ -185,13 +221,14 @@ const names = new Map<string, readonly [string, string]>([
   ["ContextMenu", ["Menu", "Menu"]],
 ]);
 
-// How the chord is written: in a Mac's symbols on a Mac, ⌥⇧↩, and in words elsewhere, Alt+Shift+Enter.
-export function chordText({ key, shift, alt }: Chord, mac: boolean): string {
+// How the chord is written: in a Mac's symbols on a Mac, ⌥⇧⌘↩, and in words elsewhere,
+// Ctrl+Alt+Shift+Enter.
+export function chordText({ key, shift, alt, primary }: Chord, mac: boolean): string {
   const [onMac, elsewhere] = names.get(key) ?? [key.toUpperCase(), key.toUpperCase()];
 
   if (mac) {
-    return `${alt === true ? "⌥" : ""}${shift === true ? "⇧" : ""}${onMac}`;
+    return `${alt === true ? "⌥" : ""}${shift === true ? "⇧" : ""}${primary === true ? "⌘" : ""}${onMac}`;
   }
 
-  return `${alt === true ? "Alt+" : ""}${shift === true ? "Shift+" : ""}${elsewhere}`;
+  return `${primary === true ? "Ctrl+" : ""}${alt === true ? "Alt+" : ""}${shift === true ? "Shift+" : ""}${elsewhere}`;
 }

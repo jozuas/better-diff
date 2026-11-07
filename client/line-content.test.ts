@@ -24,6 +24,15 @@ const changeLists = fc.array(
   { maxLength: 2 },
 );
 
+const foundLists = fc.array(
+  fc.record({
+    start: fc.integer({ min: 0, max: 1 }),
+    end: fc.integer({ min: 1, max: 2 }),
+    current: fc.boolean(),
+  }),
+  { maxLength: 2 },
+);
+
 const content: fc.Arbitrary<LineContent> = fc.record({
   id: ids,
   line: fc.record({
@@ -38,6 +47,7 @@ const content: fc.Arbitrary<LineContent> = fc.record({
   side: sides,
   selectable: fc.boolean(),
   changes: changeLists,
+  found: foundLists,
 });
 
 // Either the value, or another of the arbitrary's.
@@ -68,6 +78,9 @@ const contents = content.chain((first) =>
       changes: sameOr(first.changes, changeLists).map((made) =>
         made.map(({ start, end }) => ({ start, end })),
       ),
+      found: sameOr(first.found, foundLists).map((made) =>
+        made.map(({ start, end, current }) => ({ start, end, current })),
+      ),
     }),
   ),
 );
@@ -89,6 +102,7 @@ const aLine: LineContent = {
   side: "new",
   selectable: true,
   changes: [{ start: 0, end: 2 }],
+  found: [{ start: 2, end: 3, current: false }],
 };
 
 // Lines like aLine but for one part each, a run's or a range of changed text's included, which
@@ -125,6 +139,10 @@ const othersButForOnePart: LineContent[] = [
   },
   { ...aLine, changes: [{ start: 1, end: 2 }] },
   { ...aLine, changes: [{ start: 0, end: 1 }] },
+  { ...aLine, found: [{ start: 1, end: 3, current: false }] },
+  { ...aLine, found: [{ start: 2, end: 4, current: false }] },
+  { ...aLine, found: [{ start: 2, end: 3, current: true }] },
+  { ...aLine, found: [] },
 ];
 
 const butForOnePart = othersButForOnePart.map((other): [[LineContent, LineContent]] => [
@@ -133,8 +151,8 @@ const butForOnePart = othersButForOnePart.map((other): [[LineContent, LineConten
 
 // The parts of a line its text's pieces render from, in a form that's equal for lines whose pieces
 // render the same.
-function textOf({ line, changes }: LineContent): string {
-  return JSON.stringify({ kind: line.kind, text: line.text, runs: line.runs, changes });
+function textOf({ line, changes, found }: LineContent): string {
+  return JSON.stringify({ kind: line.kind, text: line.text, runs: line.runs, changes, found });
 }
 
 function restOf({ id, selectable, line, selected, side }: LineContent): string {
@@ -154,7 +172,7 @@ function renderedOf(line: LineContent): string {
   return `${textOf(line)} ${restOf(line)}`;
 }
 
-test("a line's text renders its pieces as before while its kind, text, highlights and changed text are equal, whatever else", () => {
+test("a line's text renders its pieces as before while its kind, text, highlights, changed text and what the find bar found are equal, whatever else", () => {
   fc.assert(
     fc.property(contents, ([before, after]) => {
       expect(textAsBefore(before, after)).toBe(textOf(before) === textOf(after));

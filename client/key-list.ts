@@ -22,6 +22,16 @@ export const keyList: readonly KeySection[] = [
     title: "Keys anywhere in the panel",
     lines: [
       { place: "panel", commands: ["filter"], does: "Move to the filter" },
+      {
+        place: "panel",
+        commands: ["find"],
+        does: "Find in the diff, or move back to what's typed",
+      },
+      {
+        place: "panel",
+        commands: ["findNext", "findPrevious"],
+        does: "Move to the next match, or the one before, while the find bar is open",
+      },
       { place: "question", commands: ["cancel"], does: "Take back the question a discard asks" },
     ],
   },
@@ -159,6 +169,18 @@ export const keyList: readonly KeySection[] = [
     ],
   },
   {
+    title: "Keys in the find bar",
+    lines: [
+      {
+        place: "find",
+        commands: ["next", "previous"],
+        does: "Move to the next match, or the one before",
+      },
+      { place: "find", commands: ["matchCase"], does: "Match case, or stop matching it" },
+      { place: "find", commands: ["close"], does: "Close the find bar" },
+    ],
+  },
+  {
     title: "Keys in a file's menu",
     lines: [
       { place: "menu", commands: ["down", "up"], does: "Move to the next item, or the one before" },
@@ -169,6 +191,6 @@ export const keyList: readonly KeySection[] = [
 // How the line's keys are written, each command's keys in turn, apart.
 export function keysText({ place, commands }: KeyLine, mac: boolean): string {
   return commands
-    .flatMap((command) => chordsOf(place, command).map((chord) => chordText(chord, mac)))
+    .flatMap((command) => chordsOf(place, command, mac).map((chord) => chordText(chord, mac)))
     .join("  ");
 }

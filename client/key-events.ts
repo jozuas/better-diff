@@ -17,22 +17,30 @@ export interface KeyEvent extends Readonly<KeyPress> {
 // What takes text typed in it.
 const textFields = new Set<string | undefined>(["INPUT", "TEXTAREA", "SELECT"]);
 
+// The places that are text fields, whose keys give commands though they're typed into one.
+const typedIn: ReadonlySet<Place> = new Set<Place>(["filter", "find"]);
+
 // Whether the element takes text typed in it, as a text field does.
 export function takesText(element: KeyTarget | null): boolean {
   return element?.isContentEditable === true || textFields.has(element?.tagName);
 }
 
-// What the key pressed gives in the place: its command there, or "held" for a key held down whose
-// command runs only once, which runs nothing more. Keys typed into a text field give commands only
-// in the filter, and one something inside the element handled gives none.
+// Whether the key, pressed with Cmd or Ctrl, types nothing in a text field.
+function typesNothing({ ctrlKey, metaKey }: KeyEvent): boolean {
+  return ctrlKey || metaKey;
+}
+
+// What the key pressed gives in the place, on a Mac or another computer: its command there, or
+// "held" for a key held down whose command runs only once, which runs nothing more. Keys typed into
+// a text field give commands only in the filter and the find bar, but for those with Cmd or Ctrl,
+// which type nothing, and one something inside the element handled gives none.
 export function heard<In extends Place>(
   place: In,
   event: KeyEvent,
+  mac: boolean,
 ): CommandIn<In> | "held" | undefined {
-  const command =
-    event.defaultPrevented || (place !== "filter" && takesText(event.target))
-      ? undefined
-      : commandOf(place, event);
+  const typed = !typedIn.has(place) && takesText(event.target) && !typesNothing(event);
+  const command = event.defaultPrevented || typed ? undefined : commandOf(place, event, mac);
 
   return isHeld(command, event) ? "held" : command;
 }
