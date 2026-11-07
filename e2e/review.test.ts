@@ -158,7 +158,7 @@ test("the review is sent with the message written for the agent, with Cmd or Ctr
   await expect(messageBox(await openReview(page, 1))).toHaveValue("");
 });
 
-test("comments on lines their diffs no longer have stay pending, listed as no longer there, and aren't sent", async ({
+test("comments on lines their file's diffs no longer have stay pending, listed as no longer there, and aren't sent", async ({
   agents,
   app,
   page,
@@ -179,14 +179,14 @@ test("comments on lines their diffs no longer have stay pending, listed as no lo
 
   const opened = await openReview(page, 2);
 
-  await expect(pending(opened, "Not needed")).toContainText("No longer in its diff");
+  await expect(pending(opened, "Not needed")).toContainText("No longer in its diffs");
   await expect(opened.getByRole("button", { name: "Show line 5 of a.txt" })).toBeDisabled();
 
   await sendButton(opened).click();
 
   await expect(
     page.getByText(
-      "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diff.",
+      "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diffs.",
       { exact: true },
     ),
   ).toBeVisible();
@@ -199,7 +199,7 @@ test("comments on lines their diffs no longer have stay pending, listed as no lo
   await sendButton(opened).click();
 
   await expect(
-    page.getByText("Nothing was sent. 1 comment wasn't, as its line is no longer in its diff.", {
+    page.getByText("Nothing was sent. 1 comment wasn't, as its line is no longer in its diffs.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -306,38 +306,4 @@ test("comments on a partly staged file are sent with their lines' numbers in HEA
   ]);
   expect(runGit(repository, ["show", "HEAD:a.txt"]).split("\n")[8]).toBe("nine");
   expect(worktreeFile(repository, "a.txt")?.toString().split("\n")[1]).toBe("zero");
-});
-
-test("a comment on a line staged and then changed in the worktree stays pending, listed as changed since it was staged, and isn't sent", async ({
-  agents,
-  app,
-  page,
-  repository,
-}) => {
-  writeFile(repository, "a.txt", "one\ntwo\nthree\n");
-  commitAll(repository);
-  writeFile(repository, "a.txt", "one\nTWO\nthree\n");
-  runGit(repository, ["add", "a.txt"]);
-  writeFile(repository, "a.txt", "one\nTwo\nthree\n");
-
-  await app.openPanel();
-  await openFile(page, "STAGED FILES (1)", "a.txt");
-  await comment(page, "TWO", "Why uppercase?");
-
-  const reviewer = await agents.start("Reviewer");
-  const opened = await openReview(page, 1);
-
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
-  await expect(pending(opened, "Why uppercase?")).toContainText("Changed since it was staged");
-
-  await sendButton(opened).click();
-
-  await expect(
-    page.getByText(
-      "Nothing was sent. 1 comment wasn't, as its line has changed since it was staged.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await expect(pending(opened, "Why uppercase?")).toBeVisible();
-  expect(reviewer.sent()).toStrictEqual([]);
 });

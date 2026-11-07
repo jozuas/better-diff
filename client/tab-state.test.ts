@@ -58,7 +58,7 @@ test("a tab starts with the file list 280 wide, nothing open, no group collapsed
 });
 
 test("a tab that kept a comment on a line that isn't one isn't read", () => {
-  const comment = { diff: "staged", path: "a.txt", side: "old", line: 1, id: 1, body: "" };
+  const comment = { path: "a.txt", side: "old", line: 1, id: 1, body: "" };
 
   expect(tabState.safeParse({ fileListWidth: 280, comments: [comment] }).success).toBe(true);
   expect(
@@ -68,7 +68,7 @@ test("a tab that kept a comment on a line that isn't one isn't read", () => {
     tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, side: "both" }] }).success,
   ).toBe(false);
   expect(
-    tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, diff: "head" }] }).success,
+    tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, line: 1.5 }] }).success,
   ).toBe(false);
 });
 

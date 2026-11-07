@@ -3,12 +3,13 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
-import { commentTarget, diffHunks, reviewComments } from "../test/comments";
+import { asNumbered, commentTarget, diffHunks, reviewComments } from "../test/comments";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Unsent } from "./attachment";
 import { targetOf } from "./comments";
-import type { CommentedFile, CommentTarget, ReviewComment } from "./comments";
+import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
+import type { CommentedFile } from "./numbering";
 import { shows } from "./side-by-side";
 import type { Side } from "./side-by-side";
 
@@ -16,21 +17,31 @@ type Diff = RpcOutput<typeof diffRpc>;
 
 type Hunk = Diff["hunks"][number];
 
-const file = { diff: "unstaged", path: "a.txt" } as const;
+const file = { path: "a.txt" };
+
+// The file, where its other diff changes nothing, so that the review numbers its lines as its diff
+// does.
+function numberedFile(path: string) {
+  return { path, numbering: asNumbered };
+}
 
 // A diff that changes nothing, as the file's other diff does unless it's partly staged.
 const unchanged = { hunks: [] };
 
 // The diffs of a file that has changes only on the diff's side.
-function onlyIn(diff: Pick<Diff, "hunks">, side: CommentTarget["diff"]) {
+function onlyIn(diff: Pick<Diff, "hunks">, side: CommentedFile["diff"]) {
   return (each: CommentedFile) => (each.diff === side ? diff : unchanged);
 }
 
-// What a comment on the target is sent with, as a review of the diff sends it, if the diff has its
-// line, where the file's other diff changes nothing.
-function contextOf(diff: Pick<Diff, "hunks">, target: CommentTarget) {
-  return reviewOf("/repository", [{ ...target, id: 1, body: "" }], onlyIn(diff, target.diff))
-    .attachment?.comments[0]?.context;
+// What a comment on the target is sent with, as a review of the diff, unstaged or else staged, sends
+// it, if the diff has its line, where the file's other diff changes nothing.
+function contextOf(
+  diff: Pick<Diff, "hunks">,
+  target: CommentTarget,
+  side: CommentedFile["diff"] = "unstaged",
+) {
+  return reviewOf("/repository", [{ ...target, id: 1, body: "" }], onlyIn(diff, side)).attachment
+    ?.comments[0]?.context;
 }
 
 // The header a comment on the target in the hunk is sent with.
@@ -86,7 +97,7 @@ function sentWith(
   side: Side | undefined,
 ): (SentWith | "not the hunk's lines")[] {
   return lines.flatMap((line, at): (SentWith | "not the hunk's lines")[] => {
-    const target = targetOf(file, line, side);
+    const target = targetOf(numberedFile(file.path), line, side);
 
     if (target === undefined) {
       return [];
@@ -163,7 +174,9 @@ test("a line is sent with its numbers in each version it's in, and whether it's 
 // Whether some line of the hunks is on the target's side, at its number.
 function hasLine(numbered: readonly NumberedLine[][], target: CommentTarget): boolean {
   return numbered.some((lines) =>
-    lines.some((line) => targetOf(target, line, target.side)?.line === target.line),
+    lines.some(
+      (line) => targetOf(numberedFile(target.path), line, target.side)?.line === target.line,
+    ),
   );
 }
 
@@ -177,11 +190,12 @@ test("a comment on a line its diff doesn't have has nothing to send it with", ()
 
 type Diffs = (path: string) => { diff: Diff } | undefined;
 
-// What the review does with each comment, all on the side's diffs, by those diffs and whether each
-// file's other diff, which changes nothing, can be read: sends those on lines their diffs have, with
-// the lines around them, and says why it doesn't send the others.
+// What the review does with each comment, by the diffs on the side, and whether each file's other
+// diff, which changes nothing, can be read: sends those on lines their diffs have, with the lines
+// around them, and says why it doesn't send the others.
 function reviewed(
   comments: readonly ReviewComment[],
+  side: CommentedFile["diff"],
   diffs: Diffs,
   read: (path: string) => boolean,
 ): ({ comment: ReviewComment } & (
@@ -190,11 +204,12 @@ function reviewed(
 ))[] {
   return comments.map((comment) => {
     const diff = diffs(comment.path)?.diff;
-    const context = diff === undefined ? undefined : contextOf(diff, comment);
 
-    if (diff === undefined || (context !== undefined && !read(comment.path))) {
+    if (diff === undefined || !read(comment.path)) {
       return { comment, unsent: "unread" };
     }
+
+    const context = contextOf(diff, comment, side);
 
     return context === undefined
       ? { comment, unsent: "gone" }
@@ -213,7 +228,7 @@ function reviewed(
 
 // The diffs of each file: on the side, those generated, which can't be read where there's none, and
 // on the other, one that changes nothing, where it can be read.
-function diffsOn(side: CommentTarget["diff"], diffs: Diffs, read: (path: string) => boolean) {
+function diffsOn(side: CommentedFile["diff"], diffs: Diffs, read: (path: string) => boolean) {
   return ({ diff, path }: CommentedFile) => {
     if (diff === side) {
       return diffs(path)?.diff;
@@ -244,11 +259,9 @@ test("a review has the comments on lines their diffs have, in the order they wer
       fc.constantFrom("unstaged", "staged"),
       fc.func(fc.option(diffHunks, { nil: undefined })),
       fc.func(fc.boolean()),
-      (made, side, diffs, read) => {
-        const comments = made.map((comment) => ({ ...comment, diff: side }));
-
+      (comments, side, diffs, read) => {
         const review = reviewOf("/repository", comments, diffsOn(side, diffs, read));
-        const expected = reviewed(comments, diffs, read);
+        const expected = reviewed(comments, side, diffs, read);
         const sent = sentOf(expected);
 
         expect(review.sent).toStrictEqual(sent.map(({ comment }) => comment));

@@ -4,8 +4,9 @@ import type { diffRpc } from "../shared/diff";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Reviewed, Unsent } from "./attachment";
 import { bodyOf, recipientsOf, reviewPrompt } from "./comments";
-import type { CommentedFile, ListedAgent, Recipient, ReviewComment } from "./comments";
-import { fileKey } from "./review-list";
+import type { ListedAgent, Recipient, ReviewComment } from "./comments";
+import { fileKey } from "./numbering";
+import type { CommentedFile } from "./numbering";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -88,15 +89,11 @@ async function sendReview(
 
 // Why comments weren't sent, as said of one and of several.
 const why: Record<Unsent, readonly [string, string]> = {
-  gone: ["its line is no longer in its diff", "their lines are no longer in their diffs"],
-  unread: ["its diff couldn't be read", "their diffs couldn't be read"],
-  changed: [
-    "its line has changed since it was staged",
-    "their lines have changed since they were staged",
-  ],
+  gone: ["its line is no longer in its diffs", "their lines are no longer in their diffs"],
+  unread: ["its diffs couldn't be read", "their diffs couldn't be read"],
 };
 
-const reasons: readonly Unsent[] = ["gone", "unread", "changed"];
+const reasons: readonly Unsent[] = ["gone", "unread"];
 
 // What the panel says, after what was sent, of the comments that weren't, by why.
 function unsentSaid(unsent: readonly Unsent[]): string[] {

@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test, vi } from "vitest";
 
-import { reviewComments } from "../test/comments";
+import { asNumbered, reviewComments } from "../test/comments";
 import { hunkLines } from "../test/hunk-lines";
 import { commentedBy, commentsOn, pointedIn, subscribeToPointed } from "./commenting";
 import type { Commented, Commenting } from "./commenting";
@@ -14,10 +14,11 @@ import type { Review } from "./review-context";
 import { rowsOf, shows } from "./side-by-side";
 import type { Side } from "./side-by-side";
 
-const file = { diff: "unstaged", path: "a.txt" } as const;
+const file = { path: "a.txt", numbering: asNumbered };
 
 function reviewOf(comments: readonly ReviewComment[], editing?: Editing): Review {
   return {
+    numbering: vi.fn<Review["numbering"]>(),
     threads: threadsOf(comments),
     editing,
     revealing: undefined,
@@ -95,7 +96,7 @@ test("a line shown can be commented on: it hears the pointer, starts a comment w
   fc.assert(
     fc.property(hunkLines, sides, pointedAt, reviewComments, (lines, side, pointed, comments) => {
       const commenting = commentingOf();
-      const review = reviewOf(comments.map((comment) => ({ ...comment, ...file })));
+      const review = reviewOf(comments.map((comment) => ({ ...comment, path: file.path })));
       const commented = { file, pointer: commenting.pointed.pointer, pointed, review };
 
       expect(partsOf(commented, lines, side)).toStrictEqual(
@@ -126,8 +127,13 @@ test("the button over a line starts a comment on it", () => {
 
   comments.onComment?.();
 
-  expect(review.onStart).toHaveBeenCalledWith({ ...file, side: "old", line: 2 });
+  expect(review.onStart).toHaveBeenCalledWith({ path: "a.txt", side: "old", line: 2 });
 });
+
+// What the review numbers a line of a version it hasn't.
+function notInReview(): number | undefined {
+  return undefined;
+}
 
 test("lines that can't be commented on, or aren't there, have nothing to comment with", () => {
   const commenting = commentingOf();
@@ -148,6 +154,21 @@ test("lines that can't be commented on, or aren't there, have nothing to comment
   expect(commentsOn(undefined, { index: 0, line })).toStrictEqual(nothing);
   expect(commentsOn(commented, undefined, "new")).toStrictEqual(nothing);
   expect(commentsOn(commented, { index: 0, line }, "old")).toStrictEqual(nothing);
+
+  // A line only the index has, staged and then changed in the worktree.
+  const indexOnly = { ...file, numbering: { old: notInReview, new: notInReview } };
+
+  expect(
+    commentsOn(
+      {
+        ...commented,
+        file: indexOnly,
+        review: reviewOf([{ path: file.path, side: "new", line: 1, id: 1, body: "" }]),
+      },
+      { index: 0, line },
+      "new",
+    ),
+  ).toStrictEqual(nothing);
 });
 
 // Whether the line at the index is among those from `start` up to `end` of the lines inline, or

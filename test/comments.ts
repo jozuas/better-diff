@@ -4,17 +4,21 @@ import * as fc from "fast-check";
 import type { CommentTarget, ReviewComment } from "../client/comments";
 import { numberLines } from "../client/lines";
 import type { NumberedLine } from "../client/lines";
+import { numberingOf } from "../client/numbering";
 import type { diffRpc } from "../shared/diff";
 import { filePath } from "./file-names";
 import { hunkLines } from "./hunk-lines";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
+// How the review numbers the lines of a file whose diffs change nothing of each other's versions: as
+// the diffs number them.
+export const asNumbered = numberingOf("unstaged", { hunks: [] });
+
 // Two paths, so that comments are often on the same file, or any path.
 const path = fc.oneof(fc.constantFrom("a.txt", "b.txt"), filePath);
 
 const targetParts = {
-  diff: fc.constantFrom("unstaged", "staged"),
   path,
   side: fc.constantFrom("old", "new"),
   // Few lines, so that comments are often on the same line.
@@ -163,22 +167,43 @@ function hunksOf(entries: readonly Entry[], context: number): Diff["hunks"] {
   });
 }
 
-// A file's versions in HEAD, the index and the worktree, each line with text no other has, and its
-// staged diff, from HEAD to the index, and its unstaged one, from the index to the worktree.
+// A file's versions in HEAD, the index and the worktree, by which of them have each line, each line
+// with text no other has, and its staged diff, from HEAD to the index, and its unstaged one, from the
+// index to the worktree, each change with up to `context` unchanged lines either side.
+function filesOf(lines: readonly Presence[], context: number) {
+  const texts = lines.map((_, at) => `line ${String(at)}`);
+
+  function version(tree: Version): string[] {
+    return texts.filter((_, at) => lines[at]?.[tree] === true);
+  }
+
+  return {
+    versions: { head: version("head"), index: version("index"), worktree: version("worktree") },
+    diffs: {
+      staged: { hunks: hunksOf(entriesOf(texts, lines, "head", "index"), context) },
+      unstaged: { hunks: hunksOf(entriesOf(texts, lines, "index", "worktree"), context) },
+    },
+  };
+}
+
+const context = fc.integer({ min: 0, max: 3 });
+
+// A file's versions and diffs, often partly staged.
 export const partlyStaged = fc
-  .record({ lines: fc.array(presence, { maxLength: 24 }), context: fc.integer({ min: 0, max: 3 }) })
-  .map(({ lines, context }) => {
-    const texts = lines.map((_, at) => `line ${String(at)}`);
+  .record({ lines: fc.array(presence, { maxLength: 24 }), context })
+  .map(({ lines, context: around }) => filesOf(lines, around));
 
-    function version(tree: Version): string[] {
-      return texts.filter((_, at) => lines[at]?.[tree] === true);
-    }
-
-    return {
-      versions: { head: version("head"), index: version("index"), worktree: version("worktree") },
-      diffs: {
-        staged: { hunks: hunksOf(entriesOf(texts, lines, "head", "index"), context) },
-        unstaged: { hunks: hunksOf(entriesOf(texts, lines, "index", "worktree"), context) },
-      },
-    };
-  });
+// A file's versions and diffs, and its versions and diffs once its index has changed, as staging and
+// unstaging change it, with HEAD and the worktree as they were.
+export const restaged = fc
+  .record({ lines: fc.array(fc.tuple(presence, fc.boolean()), { maxLength: 24 }), context })
+  .map(({ lines, context: around }) => ({
+    before: filesOf(
+      lines.map(([line]) => line),
+      around,
+    ),
+    after: filesOf(
+      lines.map(([line, index]) => ({ ...line, index })),
+      around,
+    ),
+  }));

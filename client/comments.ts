@@ -3,17 +3,19 @@ import { z } from "zod";
 
 import type { Keys } from "./keymap";
 import type { NumberedLine } from "./lines";
+import { numbered } from "./numbering";
+import type { Numbering } from "./numbering";
 import type { Side } from "./side-by-side";
 
 type Paseo = PluginCommandCapabilities["paseo"];
 
 type Agent = Awaited<ReturnType<Paseo["agents"]["list"]>>["entries"][number]["agent"];
 
-// A line of the diff of a file, as opened from its group, which is unstaged or staged, by its
-// number in the version it's in: the old one for a removed line, and the new one for an added one.
-// An unchanged line is in both, and is the old one's on the old side of a side-by-side diff.
+// A line of a file's uncommitted changes, by its number in the version it's in, as the review the
+// agent reads numbers it: HEAD, on the old side, or the worktree, on the new one. A line both have
+// is in each. Neither stages nor unstages, so the line stays the same as the file's hunks are
+// staged and unstaged, and shows in whichever of the file's diffs has it.
 const commentTarget = z.object({
-  diff: z.enum(["unstaged", "staged"]),
   path: z.string(),
   side: z.enum(["old", "new"]) satisfies z.ZodType<Side>,
   line: z.int().positive(),
@@ -27,31 +29,41 @@ export const reviewComment = commentTarget.extend({ id: z.int().positive(), body
 
 export type ReviewComment = z.infer<typeof reviewComment>;
 
-// The diff of a file comments are on.
-export type CommentedFile = Pick<CommentTarget, "diff" | "path">;
-
-// The line's number in the side's version, if it's in it.
-export function numberIn(line: NumberedLine, side: Side): number | undefined {
-  return side === "old" ? line.oldNumber : line.newNumber;
+// The file whose diff lines are in, and how the review numbers them.
+export interface NumberedFile {
+  path: string;
+  numbering: Numbering;
 }
 
-// What a comment on the line of the file's diff is on: inline, a removed line's old number and any
-// other's new one, and side by side, the number the side shows it with. Undefined where the side
-// doesn't show it, as the new side doesn't a removed line.
+// The line of the file's diff on each of the sides whose version has it, in their order, as the
+// review numbers it.
+function onSides(
+  { path, numbering }: NumberedFile,
+  line: NumberedLine,
+  sides: readonly Side[],
+): CommentTarget[] {
+  return sides.flatMap((side) => {
+    const number = numbered(line, side, numbering);
+
+    return number === undefined ? [] : [{ path, side, line: number }];
+  });
+}
+
+// What a comment on the line of the file's diff is on: side by side, the line on the side it shows
+// on, and inline, the line in the worktree, or else in HEAD, as a removed line is, or an unchanged
+// one staged and then removed. Undefined where the review's version hasn't the line, as one only
+// the index has, staged and then changed, which the agent couldn't find.
 export function targetOf(
-  file: CommentedFile,
+  file: NumberedFile,
   line: NumberedLine,
   side?: Side,
 ): CommentTarget | undefined {
-  const version = side ?? (line.kind === "removed" ? "old" : "new");
-  const number = numberIn(line, version);
-
-  return number === undefined ? undefined : { ...file, side: version, line: number };
+  return onSides(file, line, side === undefined ? ["new", "old"] : [side])[0];
 }
 
 // Tells the comments on a line apart from those on others.
-function targetKey({ diff, path, side, line }: CommentTarget): string {
-  return JSON.stringify([diff, path, side, line]);
+function targetKey({ path, side, line }: CommentTarget): string {
+  return JSON.stringify([path, side, line]);
 }
 
 // The comments by the key of the line each is on, in the order they were made.
@@ -80,12 +92,12 @@ export function bodyOf(text: string): string | undefined {
 // The comments with one more on the target, after them, with an id none of them has.
 function withComment(
   comments: readonly ReviewComment[],
-  { diff, path, side, line }: CommentTarget,
+  { path, side, line }: CommentTarget,
   body: string,
 ): ReviewComment[] {
   const id = Math.max(0, ...comments.map((comment) => comment.id)) + 1;
 
-  return [...comments, { diff, path, side, line, id, body }];
+  return [...comments, { path, side, line, id, body }];
 }
 
 // The comments with the one with the id saying the body instead.
@@ -131,17 +143,11 @@ export function saved(
   return id === undefined ? withComment(comments, target, body) : withBody(comments, id, body);
 }
 
-// What the comments shown under the line, of the file's diff, are on: side by side, the number its
-// side shows, and inline, either of its numbers, as an unchanged line has both, and a comment made
-// on its old number side by side shows under it inline too.
-export function shownOn(file: CommentedFile, line: NumberedLine, side?: Side): CommentTarget[] {
-  const versions: Side[] = side === undefined ? ["old", "new"] : [side];
-
-  return versions.flatMap((version) => {
-    const number = numberIn(line, version);
-
-    return number === undefined ? [] : [{ ...file, side: version, line: number }];
-  });
+// What the comments shown under the line, of the file's diff, are on, as the review numbers it:
+// side by side, the line on its side, and inline, on either, as an unchanged line is on both, and a
+// comment made on its old side side by side shows under it inline too.
+export function shownOn(file: NumberedFile, line: NumberedLine, side?: Side): CommentTarget[] {
+  return onSides(file, line, side === undefined ? ["old", "new"] : [side]);
 }
 
 // What shows under a line commented on: the comments on it, in the order they were made, and the

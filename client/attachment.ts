@@ -2,11 +2,11 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 
 import type { diffRpc } from "../shared/diff";
-import { backward, forward } from "../shared/versions";
-import { numberIn } from "./comments";
-import type { CommentTarget, CommentedFile, ReviewComment } from "./comments";
+import type { CommentTarget, ReviewComment } from "./comments";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
+import { numbered, numberingOf } from "./numbering";
+import type { CommentedFile, Numbering } from "./numbering";
 import type { Side } from "./side-by-side";
 
 type Diff = RpcOutput<typeof diffRpc>;
@@ -27,38 +27,6 @@ export type ReviewAttachment = Extract<
 type ReviewContext = ReviewAttachment["comments"][number]["context"];
 
 type ContextLine = ReviewContext["targetLine"];
-
-// The other diff of the file: the staged one of an unstaged diff's, and the unstaged one of a staged
-// diff's.
-function otherOf({ diff, path }: CommentedFile): CommentedFile {
-  return { diff: diff === "unstaged" ? "staged" : "unstaged", path };
-}
-
-// What a line's number on a side of a diff is in the version the review has on that side, by the
-// file's other diff, or undefined where that version doesn't have the line.
-type Renumbering = Record<Side, (number: number) => number | undefined>;
-
-function same(number: number): number {
-  return number;
-}
-
-// How the lines of the diff, unstaged or staged, are numbered in the review, which is of the
-// worktree's uncommitted changes, as Paseo's own diff's is: from HEAD, on the old side, to the
-// worktree, on the new one. An unstaged diff goes from the index, and a staged one to it, and a line
-// of the index is numbered as it is in HEAD, or in the worktree, by the file's other diff, unless
-// that diff adds it, or removes it.
-function renumbering(diff: CommentedFile["diff"], other: Pick<Diff, "hunks">): Renumbering {
-  return diff === "unstaged"
-    ? { old: (number) => backward(other.hunks, number), new: same }
-    : { old: same, new: (number) => forward(other.hunks, number) };
-}
-
-// The line's number on the side as the review numbers it, if the side's version has it.
-function renumbered(line: NumberedLine, side: Side, review: Renumbering): number | undefined {
-  const number = numberIn(line, side);
-
-  return number === undefined ? undefined : review[side](number);
-}
 
 // How git counts a version's lines in a hunk's header: a count of one isn't written.
 function range(sign: string, start: number, count: number): string {
@@ -89,9 +57,9 @@ const signs = { old: "-", new: "+" } as const;
 // them: from the first of them that the side's version has, and how many it has, or, where it has
 // none, after the last line before them that it has. A hunk without lines on the side starts after
 // the line before it, and one with lines that the side's version hasn't starts with one of them.
-function rangeOf(side: Side, hunk: Hunk, lines: readonly NumberedLine[], review: Renumbering) {
+function rangeOf(side: Side, hunk: Hunk, lines: readonly NumberedLine[], review: Numbering) {
   const kept = lines.flatMap((line) => {
-    const number = renumbered(line, side, review);
+    const number = numbered(line, side, review);
 
     return number === undefined ? [] : [number];
   });
@@ -104,16 +72,16 @@ function rangeOf(side: Side, hunk: Hunk, lines: readonly NumberedLine[], review:
 // The hunk's header as git writes it, of its lines as the review numbers them, without the line git
 // writes after it, as of the function the hunk is in. Where the file's other diff changes nothing,
 // it's git's.
-function hunkHeader(hunk: Hunk, lines: readonly NumberedLine[], review: Renumbering): string {
+function hunkHeader(hunk: Hunk, lines: readonly NumberedLine[], review: Numbering): string {
   return `@@ ${rangeOf("old", hunk, lines, review)} ${rangeOf("new", hunk, lines, review)} @@`;
 }
 
 const types = { context: "context", removed: "remove", added: "add" } as const;
 
-function contextLine(line: NumberedLine, review: Renumbering): ContextLine {
+function contextLine(line: NumberedLine, review: Numbering): ContextLine {
   return {
-    oldLineNumber: renumbered(line, "old", review) ?? null,
-    newLineNumber: renumbered(line, "new", review) ?? null,
+    oldLineNumber: numbered(line, "old", review) ?? null,
+    newLineNumber: numbered(line, "new", review) ?? null,
     type: types[line.kind],
     content: line.text,
   };
@@ -123,25 +91,36 @@ function contextLine(line: NumberedLine, review: Renumbering): ContextLine {
 // as many as git shows around a change.
 const around = 3;
 
-// Where a comment's line is in a diff: its hunk, and the hunk's index among the diff's, the
-// hunk's lines, and the line at its index among them.
+// Where a comment's line is in one of its file's diffs: the diff, its hunk, and the hunk's index
+// among the diff's, the hunk's lines, and the line at its index among them, and how the review
+// numbers the diff's lines.
 interface Located {
+  diff: CommentedFile["diff"];
   hunk: Hunk;
   index: number;
   lines: NumberedLine[];
   at: number;
   line: NumberedLine;
+  numbering: Numbering;
 }
 
-// Where the comment's line is in the diff, if the diff has it.
-function locate(diff: Pick<Diff, "hunks">, target: CommentTarget): Located | undefined {
-  for (const [index, hunk] of diff.hunks.entries()) {
+// Where the comment's line is in the file's diff, as the review numbers it by the file's other
+// diff, if the diff has it.
+function locate(
+  diff: CommentedFile["diff"],
+  { hunks }: Pick<Diff, "hunks">,
+  other: Pick<Diff, "hunks">,
+  target: CommentTarget,
+): Located | undefined {
+  const numbering = numberingOf(diff, other);
+
+  for (const [index, hunk] of hunks.entries()) {
     const lines = numberLines(hunk);
-    const at = lines.findIndex((line) => numberIn(line, target.side) === target.line);
+    const at = lines.findIndex((line) => numbered(line, target.side, numbering) === target.line);
     const line = lines[at];
 
     if (line !== undefined) {
-      return { hunk, index, lines, at, line };
+      return { diff, hunk, index, lines, at, line, numbering };
     }
   }
 
@@ -149,74 +128,58 @@ function locate(diff: Pick<Diff, "hunks">, target: CommentTarget): Located | und
 }
 
 // The comment's line and those around it in its hunk, as the review the agent reads has them.
-function contextOf({ hunk, lines, at, line }: Located, review: Renumbering): ReviewContext {
+function contextOf({ hunk, lines, at, line, numbering }: Located): ReviewContext {
   return {
-    hunkHeader: hunkHeader(hunk, lines, review),
-    targetLine: contextLine(line, review),
+    hunkHeader: hunkHeader(hunk, lines, numbering),
+    targetLine: contextLine(line, numbering),
     lines: lines
       .slice(Math.max(0, at - around), at + around + 1)
-      .map((each) => contextLine(each, review)),
+      .map((each) => contextLine(each, numbering)),
   };
 }
 
-const opposite = { old: "new", new: "old" } as const;
-
-// Where the review has a comment on the side of the line: by the line's number on the side, or,
-// where the review's version hasn't it, by its number on the other, which only an unchanged line
-// has, as one staged after HEAD. Undefined for a line only the index has, staged and then changed in
-// the worktree.
-function sentAt(line: NumberedLine, side: Side, review: Renumbering) {
-  return [side, opposite[side]].flatMap((version) => {
-    const lineNumber = renumbered(line, version, review);
-
-    return lineNumber === undefined ? [] : [{ side: version, lineNumber }];
-  })[0];
-}
-
-type SentComment = ReviewAttachment["comments"][number];
-
-// Why a comment pending isn't sent: its line is no longer in its diff, one of its file's diffs can't
-// be read, or its line is only in the index, staged and then changed in the worktree, which neither
-// version the review is of has.
-export type Unsent = "gone" | "unread" | "changed";
+// Why a comment pending isn't sent: its line is in neither of its file's diffs, or one of them can't
+// be read.
+export type Unsent = "gone" | "unread";
 
 // The diff of a file comments are on, as read now, or undefined where it can't be read.
 type DiffOf = (file: CommentedFile) => Pick<Diff, "hunks"> | undefined;
 
-// Where a pending comment's line is in its diff, if its diff has it, and what the review sends of
+type SentComment = ReviewAttachment["comments"][number];
+
+// Where a pending comment's line is in its file's diffs, if one has it, and what the review sends of
 // the comment, or why it doesn't.
 export type Placement =
-  | { located: undefined; unsent: "gone" | "unread" }
-  | { located: Located; unsent: "unread" | "changed" }
+  | { located: undefined; unsent: Unsent }
   | { located: Located; sent: SentComment };
 
-// Where the comment's line is in its diff, and what the review sends of it, by the diffs of its file.
+// Where the comment's line is in the diffs of its file, the unstaged one's or else the staged one's,
+// but one that changes the line before one that has it unchanged, and what the review sends of it.
 export function placementOf(comment: ReviewComment, diffOf: DiffOf): Placement {
-  const diff = diffOf(comment);
-  const located = diff === undefined ? undefined : locate(diff, comment);
+  const unstaged = diffOf({ diff: "unstaged", path: comment.path });
+  const staged = diffOf({ diff: "staged", path: comment.path });
 
-  if (located === undefined) {
-    return { located, unsent: diff === undefined ? "unread" : "gone" };
+  if (unstaged === undefined || staged === undefined) {
+    return { located: undefined, unsent: "unread" };
   }
 
-  const other = diffOf(otherOf(comment));
+  const found = [
+    locate("unstaged", unstaged, staged, comment),
+    locate("staged", staged, unstaged, comment),
+  ].flatMap((each) => (each === undefined ? [] : [each]));
 
-  if (other === undefined) {
-    return { located, unsent: "unread" };
-  }
+  const located = found.find(({ line }) => line.kind !== "context") ?? found[0];
 
-  const review = renumbering(comment.diff, other);
-  const at = sentAt(located.line, comment.side, review);
-
-  return at === undefined
-    ? { located, unsent: "changed" }
+  return located === undefined
+    ? { located, unsent: "gone" }
     : {
         located,
         sent: {
           filePath: comment.path,
-          ...at,
+          side: comment.side,
+          lineNumber: comment.line,
           body: comment.body,
-          context: contextOf(located, review),
+          context: contextOf(located),
         },
       };
 }
@@ -261,13 +224,16 @@ export function reviewOf(
   };
 }
 
-// The diffs a review of the comments reads: both of each file they're on, once each, as a comment
-// on one is numbered by the other.
-export function reviewedDiffs(comments: readonly ReviewComment[]): CommentedFile[] {
-  const paths = new Set(comments.map(({ path }) => path));
-
-  return [...paths].flatMap((path): CommentedFile[] => [
+// Both diffs of each of the files at the paths, once each.
+export function bothDiffs(paths: readonly string[]): CommentedFile[] {
+  return [...new Set(paths)].flatMap((path): CommentedFile[] => [
     { diff: "unstaged", path },
     { diff: "staged", path },
   ]);
+}
+
+// The diffs a review of the comments reads: both of each file they're on, once each, as either may
+// have a comment's line, and each numbers the other's lines.
+export function reviewedDiffs(comments: readonly ReviewComment[]): CommentedFile[] {
+  return bothDiffs(comments.map(({ path }) => path));
 }

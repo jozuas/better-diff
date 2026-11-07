@@ -151,7 +151,7 @@ test("pending comments and their message stay once Paseo reloads", async ({
   await expect(messageBox(await openReview(page, 1))).toHaveValue("Fix these.");
 });
 
-test("each file's row in the sidebar says how many comments are pending on the diff it opens", async ({
+test("each file's row in the sidebar says how many comments are pending on the file, in MODIFIED and STAGED alike for a partly staged file", async ({
   app,
   page,
   repository,
@@ -173,9 +173,9 @@ test("each file's row in the sidebar says how many comments are pending on the d
   await expect(
     row(page, "STAGED FILES (1)", "b.txt").getByLabel("1 pending comment", { exact: true }),
   ).toBeVisible();
-  await expect(row(page, "MODIFIED FILES (2)", "b.txt").getByLabel(/pending comment/u)).toHaveCount(
-    0,
-  );
+  await expect(
+    row(page, "MODIFIED FILES (2)", "b.txt").getByLabel("1 pending comment", { exact: true }),
+  ).toBeVisible();
 });
 
 test("in a group's view, each file's lines are commented on, and sent with their paths", async ({

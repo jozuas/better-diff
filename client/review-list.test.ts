@@ -5,14 +5,15 @@ import { expect, test } from "vitest";
 import type { diffRpc } from "../shared/diff";
 import { groupName } from "../test/changes";
 import { diffHunks, reviewComments } from "../test/comments";
-import type { CommentedFile, ReviewComment } from "./comments";
-import { groups } from "./groups";
+import type { ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
+import type { CommentedFile } from "./numbering";
 import {
-  fileHeading,
-  lineMark,
+  lineLabel,
   lineNote,
+  lineNumberOf,
   openFileOf,
+  partlyStaged,
   pendingCounts,
   pendingLabel,
   pendingOn,
@@ -45,15 +46,9 @@ function diffIn(diffs: Diffs): (file: CommentedFile) => Pick<Diff, "hunks"> | un
   };
 }
 
-// The lines of the hunks of the file's diff, if it can be read.
-function numberedIn(diffs: Diffs, { diff, path }: CommentedFile): NumberedLine[][] | undefined {
-  const { side, read } = diffs(path);
-
-  return diff === side ? read?.numbered : read && [];
-}
-
-function sameFile(file: CommentedFile, other: CommentedFile): boolean {
-  return file.diff === other.diff && file.path === other.path;
+// The lines of the hunks of the file's diff that changes it, if it can be read.
+function numberedIn(diffs: Diffs, path: string): NumberedLine[][] | undefined {
+  return diffs(path).read?.numbered;
 }
 
 // Where the comment's line is in the hunks, by the hunk's index and its own in it, if they have it.
@@ -74,10 +69,10 @@ function placeIn(
   return undefined;
 }
 
-// Where the comment's line is, as the diff its file has, if any, has it: the line, or that it's gone,
-// or unread.
+// Where the comment's line is, as the diff of its file that changes it, if it can be read, has it:
+// the line and the diff, or that it's gone, or unread.
 function expectedPlace(diffs: Diffs, comment: ReviewComment): Placed {
-  const numbered = numberedIn(diffs, comment);
+  const numbered = numberedIn(diffs, comment.path);
   const place = numbered === undefined ? undefined : placeIn(numbered, comment);
   const line = place === undefined ? undefined : numbered?.[place[0]]?.[place[1]];
 
@@ -85,7 +80,7 @@ function expectedPlace(diffs: Diffs, comment: ReviewComment): Placed {
     return numbered === undefined ? "unread" : "gone";
   }
 
-  return { line, changed: false };
+  return { line, diff: diffs(comment.path).side };
 }
 
 // Whether the file's comments are in the order of their lines in its diff, comments on one line in
@@ -96,7 +91,7 @@ function inOrder(
   { comments: listed }: ListedFile,
 ): boolean {
   const orders = listed.map(({ comment }) => {
-    const place = placeIn(numberedIn(diffs, comment) ?? [], comment) ?? [Infinity, 0];
+    const place = placeIn(numberedIn(diffs, comment.path) ?? [], comment) ?? [Infinity, 0];
 
     return [...place, comments.indexOf(comment)];
   });
@@ -114,20 +109,16 @@ function inOrder(
   });
 }
 
-// Whether the files are unstaged ones before staged ones, and each by path, each once.
+// Whether the files are each by path, each once.
 function filesInOrder(files: readonly ListedFile[]): boolean {
-  return files.every(({ file }, at) => {
-    const previous = files[at - 1]?.file;
+  return files.every(({ path }, at) => {
+    const previous = files[at - 1]?.path;
 
-    return (
-      previous === undefined ||
-      (previous.diff === "unstaged" && file.diff === "staged") ||
-      (previous.diff === file.diff && previous.path < file.path)
-    );
+    return previous === undefined || previous < path;
   });
 }
 
-test("the review lists each file commented on once, unstaged before staged, each by path, with the comments on it", () => {
+test("the review lists each file commented on once, each by path, with the comments on it", () => {
   fc.assert(
     fc.property(reviewComments, fileDiffs, (comments, diffs) => {
       const files = reviewList(comments, diffIn(diffs));
@@ -139,15 +130,15 @@ test("the review lists each file commented on once, unstaged before staged, each
           .toSorted((a, b) => a - b),
       ).toStrictEqual(comments.map(({ id }) => id).toSorted((a, b) => a - b));
       expect(
-        files.every(({ file, comments: listed }) =>
-          listed.every(({ comment }) => sameFile(file, comment)),
+        files.every(({ path, comments: listed }) =>
+          listed.every(({ comment }) => comment.path === path),
         ),
       ).toBe(true);
     }),
   );
 });
 
-test("each comment's listed with its line as its diff has it, or as gone from it, or as unread, in the order of the lines", () => {
+test("each comment's listed with its line as the diff that has it has it, or as gone from its diffs, or as unread, in the order of the lines", () => {
   fc.assert(
     fc.property(reviewComments, fileDiffs, (comments, diffs) => {
       const files = reviewList(comments, diffIn(diffs));
@@ -160,33 +151,59 @@ test("each comment's listed with its line as its diff has it, or as gone from it
   );
 });
 
-// A diff of one line, x, of the kind.
-function oneLine(kind: NumberedLine["kind"]): Pick<Diff, "hunks"> {
-  const start = { oldStart: kind === "added" ? 0 : 1, newStart: kind === "removed" ? 0 : 1 };
-
-  return { hunks: [{ ...start, lines: [{ kind, text: "x", newline: true, runs: [] }] }] };
-}
-
-// The diffs of a file whose index adds x, which the worktree removes, if its unstaged diff can be
-// read.
-function restaged(unstagedRead: boolean) {
-  return ({ diff }: CommentedFile) => {
-    if (diff === "staged") {
-      return oneLine("added");
-    }
-
-    return unstagedRead ? oneLine("removed") : undefined;
+// A hunk of the lines, each added, or unchanged where it starts with a space.
+function hunkOf(oldStart: number, newStart: number, written: readonly string[]) {
+  return {
+    oldStart,
+    newStart,
+    lines: written.map((text) => ({
+      kind: text.startsWith(" ") ? ("context" as const) : ("added" as const),
+      text: text.trim(),
+      newline: true,
+      runs: [],
+    })),
   };
 }
 
-test("a comment on a line only the index has, staged and then changed in the worktree, is listed as changed since it was staged", () => {
-  const comment = { diff: "staged", path: "a.txt", side: "new", line: 1, id: 1, body: "" } as const;
+test("a file's comments in one of its diffs are listed in the order of its hunks, and of their lines in each", () => {
+  // HEAD has four lines, and the worktree x and y before them, and z after them.
+  const diffs: Record<CommentedFile["diff"], Pick<Diff, "hunks">> = {
+    staged: { hunks: [] },
+    unstaged: { hunks: [hunkOf(0, 1, ["x", "y"]), hunkOf(4, 7, ["z"])] },
+  };
 
-  expect(reviewList([comment], restaged(true))[0]?.comments).toMatchObject([
-    { comment, placed: { line: { text: "x" }, changed: true } },
+  const onZ = { path: "a.txt", side: "new", line: 7, id: 1, body: "" } as const;
+  const onY = { ...onZ, line: 2, id: 2 };
+  const onX = { ...onZ, line: 1, id: 3 };
+
+  expect(reviewList([onZ, onY, onX], ({ diff }) => diffs[diff])).toMatchObject([
+    { comments: [{ comment: onX }, { comment: onY }, { comment: onZ }] },
   ]);
-  expect(reviewList([comment], restaged(false))[0]?.comments).toMatchObject([
-    { comment, placed: { line: { text: "x" }, changed: false } },
+});
+
+test("a file's comments are listed in the order of their lines in its unstaged diff and then its staged one, those on staged lines saying so", () => {
+  // HEAD hasn't the file, the index has s, and the worktree s and then u.
+  const diffs: Record<CommentedFile["diff"], Pick<Diff, "hunks">> = {
+    staged: { hunks: [hunkOf(0, 1, ["s"])] },
+    unstaged: { hunks: [hunkOf(1, 1, [" s", "u"])] },
+  };
+
+  const onS = { path: "a.txt", side: "new", line: 1, id: 1, body: "" } as const;
+  const onU = { ...onS, line: 2, id: 2 };
+  const files = reviewList([onS, onU], ({ diff }) => diffs[diff]);
+
+  expect(files).toMatchObject([
+    {
+      path: "a.txt",
+      comments: [
+        { comment: onU, placed: { diff: "unstaged", line: { text: "u" } } },
+        { comment: onS, placed: { diff: "staged", line: { text: "s" } } },
+      ],
+    },
+  ]);
+  expect(files.flatMap(({ comments }) => comments.map(lineLabel))).toStrictEqual([
+    "+2",
+    "+1 staged",
   ]);
 });
 
@@ -209,16 +226,7 @@ test("a comment's file opens from the group that lists it: a staged one's from S
   expect(openFileOf({ diff: "unstaged", path: "s.txt" }, listed)).toBeUndefined();
 });
 
-// How many of the comments are on the file's diff.
-function countOn(
-  comments: readonly ReviewComment[],
-  diff: CommentedFile["diff"],
-  path: string,
-): number {
-  return comments.filter((comment) => sameFile(comment, { diff, path })).length;
-}
-
-test("a file's row counts the comments pending on the diff its group shows", () => {
+test("a file's row counts the comments pending on the file, whichever of its diffs has their lines", () => {
   fc.assert(
     fc.property(
       reviewComments,
@@ -226,7 +234,24 @@ test("a file's row counts the comments pending on the diff its group shows", () 
       fc.constantFrom("a.txt", "b.txt"),
       (comments, group, path) => {
         expect(pendingOn(pendingCounts(comments), { group, path })).toBe(
-          countOn(comments, groups[group].side, path),
+          comments.filter((comment) => comment.path === path).length,
+        );
+      },
+    ),
+  );
+});
+
+test("the files partly staged are those both MODIFIED and STAGED list", () => {
+  fc.assert(
+    fc.property(
+      fc.record({
+        modified: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
+        untracked: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
+        staged: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
+      }),
+      (listed) => {
+        expect(new Set(partlyStaged(listed))).toStrictEqual(
+          new Set(listed.modified.filter((path) => listed.staged.includes(path))),
         );
       },
     ),
@@ -242,27 +267,26 @@ const line: NumberedLine = {
   newNumber: 3,
 };
 
+const comment = { path: "a.txt", side: "old", line: 7, id: 1, body: "" } as const;
+
+// The comment is on line 7 of HEAD, and the line is numbered 2 in the old version of the diff that
+// has it, as a partly staged file's unstaged diff numbers HEAD's lines as the index does.
 const placings: [Placed, string, string][] = [
-  [{ line, changed: false }, "", "\tkept é"],
-  [{ line: { ...line, kind: "removed" }, changed: false }, "−", "\tkept é"],
-  [{ line: { ...line, kind: "added" }, changed: false }, "+", "\tkept é"],
-  [{ line: { ...line, kind: "added" }, changed: true }, "+", "Changed since it was staged"],
-  ["gone", "", "No longer in its diff"],
-  ["unread", "", ""],
+  [{ line, diff: "unstaged" }, "2", "\tkept é"],
+  [{ line: { ...line, kind: "removed" }, diff: "unstaged" }, "\u22122", "\tkept é"],
+  [{ line: { ...line, kind: "added" }, diff: "staged" }, "+2 staged", "\tkept é"],
+  ["gone", "7", "No longer in its diffs"],
+  ["unread", "7", ""],
 ];
 
 test.each(placings)(
-  "a comment's line in the review is marked and shown as removed, added or neither, or as changed since it was staged, gone or not yet read: %o",
-  (placed, mark, note) => {
-    expect(lineMark(placed)).toBe(mark);
+  "a comment's line in the review is labelled with its number where it's shown, marked as removed, added or neither, and as staged, or else the review's, and shown, or as gone or not yet read: %o",
+  (placed, label, note) => {
+    expect(lineLabel({ comment, placed })).toBe(label);
+    expect(String(lineNumberOf({ comment, placed }))).toBe(label.replaceAll(/\D+/gu, ""));
     expect(lineNote(placed)).toBe(note);
   },
 );
-
-test("the review lists a file's comments under its path, saying whether they're on its staged changes", () => {
-  expect(fileHeading({ diff: "unstaged", path: "a b.txt" })).toBe("a b.txt");
-  expect(fileHeading({ diff: "staged", path: "a b.txt" })).toBe("a b.txt (staged)");
-});
 
 test("a file's row says how many comments are pending on it", () => {
   expect(pendingLabel(1)).toBe("1 pending comment");

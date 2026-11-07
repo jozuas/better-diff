@@ -1,13 +1,12 @@
-import type { PluginTheme } from "@getpaseo/plugin";
+import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { ScrollView, useToast } from "@getpaseo/plugin/client/ui";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import type { Dispatch, ReactElement, SetStateAction } from "react";
 import { useContext, useId, useMemo } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { diffRpc } from "../shared/diff";
-import { reviewedDiffs } from "./attachment";
 import { unsent } from "./comments";
 import type { Recipient, ReviewComment } from "./comments";
 import { agentsIn, agentsPage, feedbackTo, messageAfter, recipientOf, sendLabel } from "./feedback";
@@ -16,11 +15,14 @@ import { FontSizesContext } from "./fonts";
 import { useContextMenu } from "./keyboard";
 import { panelPosition } from "./menu";
 import type { Rect } from "./menu";
+import type { CommentedFile } from "./numbering";
 import { AgentChoice, DiscardReview, MessageBox } from "./review-controls";
 import { ReviewFiles } from "./review-files";
-import { fileKey, reviewList } from "./review-list";
+import { reviewList } from "./review-list";
 import { TextButton } from "./text-button";
 import { useLatest } from "./web";
+
+type Diff = RpcOutput<typeof diffRpc>;
 
 // What feedback reaches the daemon with: the host's agents, those active most recently first, the
 // diffs of the worktree in the directory, as shown with whitespace changes hidden or not, and an
@@ -53,37 +55,6 @@ function useFeedbackServer(directory: string, hideWhitespace: boolean): Feedback
     }),
     [paseo, readDiff, directory, hideWhitespace],
   );
-}
-
-// Both diffs of each file the comments are on, by their keys, once they're read, as a file's view
-// reads them with their hunks though they would be collapsed, so that what one reads, the other has.
-function useCommentedDiffs(
-  directory: string,
-  hideWhitespace: boolean,
-  comments: readonly ReviewComment[],
-) {
-  const readDiff = useRpc(diffRpc);
-  const files = useMemo(() => reviewedDiffs(comments), [comments]);
-
-  const read = useQueries({
-    queries: files.map(({ diff, path }) => ({
-      queryKey: [directory, "diff", diff, path, true, false, hideWhitespace],
-      queryFn: async () => {
-        const diffRead = await readDiff({
-          directory,
-          path,
-          side: diff,
-          expand: true,
-          entire: false,
-          hideWhitespace,
-        });
-
-        return diffRead;
-      },
-    })),
-  });
-
-  return new Map(files.map((file, at) => [fileKey(file), read[at]?.data]));
 }
 
 function useStyles(theme: PluginTheme) {
@@ -146,9 +117,11 @@ export interface ReviewPanelProps {
   // Whether it's being sent, and what sends it, unless it's being sent.
   sending: boolean;
   onSending: (send: () => Promise<void>) => Promise<void>;
-  // Opens the comment's file, and shows the comment in it, and whether it can.
-  onShow: (comment: ReviewComment) => void;
-  canShow: (comment: ReviewComment) => boolean;
+  // Both diffs of each file comments are on, as read now, if they are.
+  diffOf: (file: CommentedFile) => Diff | undefined;
+  // Opens the file's diff, and shows the comment in it, and whether it can open it.
+  onShow: (comment: ReviewComment, file: CommentedFile) => void;
+  canShow: (file: CommentedFile) => boolean;
   theme: PluginTheme;
 }
 
@@ -190,7 +163,6 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
   const window = useWindowDimensions();
   const backdrop = useId();
   const server = useFeedbackServer(props.directory, props.hideWhitespace);
-  const diffs = useCommentedDiffs(props.directory, props.hideWhitespace, comments);
 
   const agents = useQuery({
     queryKey: ["better-diff agents", props.workspace],
@@ -225,10 +197,10 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
         />
         <ScrollView style={styles.list}>
           <ReviewFiles
-            files={reviewList(comments, (file) => diffs.get(fileKey(file)))}
-            onShow={(comment) => {
+            files={reviewList(comments, props.diffOf)}
+            onShow={(comment, file) => {
               onClose();
-              props.onShow(comment);
+              props.onShow(comment, file);
             }}
             canShow={props.canShow}
             theme={theme}

@@ -2,7 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 
 import { commitAll, writeFile } from "../test/repository";
 import { expect } from "./fixtures";
-import { button, line } from "./panel";
+import { box, button, line } from "./panel";
 
 // Commits `a.txt`, then changes its third line and adds one at its end, in one hunk.
 export function changeA(repository: string): void {
@@ -62,4 +62,22 @@ export function sendButton(scope: Locator): Locator {
 
 export function messageBox(scope: Locator): Locator {
   return scope.getByRole("textbox", { name: "Message for the agent", exact: true });
+}
+
+// Expects the pending comment that says the body to be under the line with the text, and above the
+// one with the other.
+export async function expectBetween(
+  page: Page,
+  body: string,
+  above: string,
+  below: string,
+): Promise<void> {
+  await expect(pending(page, body)).toBeVisible();
+
+  const over = await box(line(page, above));
+  const shown = await box(pending(page, body));
+  const under = await box(line(page, below));
+
+  expect(shown.y).toBeGreaterThan(over.y);
+  expect(shown.y).toBeLessThan(under.y);
 }

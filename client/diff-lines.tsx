@@ -8,7 +8,7 @@ import type { diffRpc } from "../shared/diff";
 import type { TextRange } from "./changed-text";
 import { pairingOf } from "./changed-words";
 import type { Commenting } from "./commenting";
-import type { CommentedFile } from "./comments";
+import type { NumberedFile } from "./comments";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
 import { hunkSection } from "./find";
@@ -111,8 +111,9 @@ function Lines({
 interface HunkLinesProps {
   hunk: Hunk;
   index: number;
-  // The diff they're in, which their comments are on.
-  file: CommentedFile;
+  // The file whose diff they're in, with how the review numbers its lines, or undefined while
+  // they can't be commented on, as until that's known.
+  file: NumberedFile | undefined;
   container: string;
   // Its lines the page's text selection touches, if any.
   selection: LineRange | undefined;
@@ -140,7 +141,11 @@ function LinesOfHunk({
   const pairing = useMemo(() => pairingOf(lines), [lines]);
   const found = useFoundLines(container, hunkSection(index));
   const pointedOver = useMemo(() => pointedLine(), []);
-  const commenting = useMemo(() => ({ file, pointed: pointedOver }), [file, pointedOver]);
+
+  const commenting = useMemo(
+    () => (file === undefined ? undefined : { file, pointed: pointedOver }),
+    [file, pointedOver],
+  );
 
   return (
     <View {...pointed.pointer(index)}>

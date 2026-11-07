@@ -9,9 +9,10 @@ import type { ReviewComment } from "./comments";
 import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import { IconButton } from "./icon-button";
+import type { CommentedFile } from "./numbering";
 import { ReviewContext } from "./review-context";
 import type { Review } from "./review-context";
-import { fileHeading, fileKey, lineMark, lineNote } from "./review-list";
+import { lineLabel, lineNote, lineNumberOf, placedLine } from "./review-list";
 import type { ListedComment, ListedFile } from "./review-list";
 
 // Paseo sets its UI font on everything in the app but what's marked data-pmono.
@@ -61,9 +62,9 @@ function useStyles(theme: PluginTheme) {
 type Styles = ReturnType<typeof useStyles>;
 
 interface Showing {
-  // Opens the comment's file, and shows the comment in it, and whether it can.
-  onShow: (comment: ReviewComment) => void;
-  canShow: (comment: ReviewComment) => boolean;
+  // Opens the file's diff, and shows the comment in it, and whether it can open it.
+  onShow: (comment: ReviewComment, file: CommentedFile) => void;
+  canShow: (file: CommentedFile) => boolean;
 }
 
 interface CommentLinkProps extends Showing {
@@ -71,30 +72,32 @@ interface CommentLinkProps extends Showing {
   styles: Styles;
 }
 
-// The comment's line, its number, marked as removed or added, and its text, or what's said of it,
-// and what the comment says, which shows the comment in its file's diff where it can.
-function CommentLink({
-  listed: { comment, placed },
-  onShow,
-  canShow,
-  styles,
-}: CommentLinkProps): ReactElement {
+// The comment's line, its number, marked as removed or added, and as staged, and its text, or
+// what's said of it, and what the comment says, which shows the comment in the diff that has its
+// line where it can.
+function CommentLink({ listed, onShow, canShow, styles }: CommentLinkProps): ReactElement {
+  const { comment } = listed;
+  const placed = placedLine(listed.placed);
+  const file = placed === undefined ? undefined : { diff: placed.diff, path: comment.path };
+
   return (
     <Hoverable
       accessibilityRole="button"
-      accessibilityLabel={`Show line ${String(comment.line)} of ${comment.path}`}
-      disabled={placed === "gone" || !canShow(comment)}
+      accessibilityLabel={`Show line ${String(lineNumberOf(listed))} of ${comment.path}`}
+      disabled={file === undefined || !canShow(file)}
       style={styles.link}
       onPress={() => {
-        onShow(comment);
+        if (file !== undefined) {
+          onShow(comment, file);
+        }
       }}
     >
       {({ hovered }) => (
         <View style={[styles.content, hovered && styles.hovered]}>
           <View dataSet={paseoMonospace} style={styles.line}>
-            <Text style={styles.number}>{`${lineMark(placed)}${String(comment.line)}`}</Text>
+            <Text style={styles.number}>{lineLabel(listed)}</Text>
             <Text numberOfLines={1} style={styles.code}>
-              {lineNote(placed)}
+              {lineNote(listed.placed)}
             </Text>
           </View>
           <Text numberOfLines={3} style={styles.body}>
@@ -163,14 +166,9 @@ export function ReviewFiles({ files, theme, ...showing }: ReviewFilesProps): Rea
 
   return review === undefined ? null : (
     <>
-      {files.map(({ file, comments }) => (
-        <View
-          key={fileKey(file)}
-          role="list"
-          accessibilityLabel={fileHeading(file)}
-          style={styles.file}
-        >
-          <Text style={styles.path}>{fileHeading(file)}</Text>
+      {files.map(({ path, comments }) => (
+        <View key={path} role="list" accessibilityLabel={path} style={styles.file}>
+          <Text style={styles.path}>{path}</Text>
           {comments.map((listed) => (
             <ReviewedComment
               key={listed.comment.id}

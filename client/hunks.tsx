@@ -18,6 +18,7 @@ import { StyleSheet, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import type { NumberedFile } from "./comments";
 import { HunkLines, UnchangedLines } from "./diff-lines";
 import { afterSection, beforeSection } from "./find";
 import { useFindableLines } from "./find-page";
@@ -32,6 +33,7 @@ import { pointedHunk } from "./pointed";
 import { covers, widened, windowAround } from "./rendering";
 import type { LineWindow } from "./rendering";
 import { hunkMark } from "./reveal";
+import { ReviewContext } from "./review-context";
 import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import { useFocus } from "./text-selection";
@@ -200,6 +202,18 @@ function useKeptLines(
   });
 }
 
+// The file a group lists, with how the review numbers the lines of its diff, once that's known, while
+// they can be commented on.
+function useNumbered({ group, path }: OpenFile): NumberedFile | undefined {
+  const review = useContext(ReviewContext);
+  const numbering = review?.numbering({ diff: groups[group].side, path });
+
+  return useMemo(
+    () => (numbering === undefined ? undefined : { path, numbering }),
+    [path, numbering],
+  );
+}
+
 // The diff to show: read again with every line of the file while the entire file is asked for, once
 // that's read, and else as it is.
 function useEntireDiff(diff: Diff, query: HunksProps["entireQuery"], entire: boolean): Diff {
@@ -280,10 +294,7 @@ export function Hunks({
   const focus = useFocus(sideBySide);
   const range = useMemo(() => onSide(selection, focus), [selection, focus]);
 
-  const commented = useMemo(
-    () => ({ diff: groups[file.group].side, path: file.path }),
-    [file.group, file.path],
-  );
+  const commented = useNumbered(file);
 
   const hunks = shownDiff.hunks.flatMap((hunk, index) => {
     const selected = rangeInHunk(range, index);

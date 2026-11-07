@@ -6,7 +6,7 @@ import type { diffRpc } from "../shared/diff";
 import { diffHunks, reviewComments } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
-import type { CommentedFile, ListedAgent, ReviewComment } from "./comments";
+import type { ListedAgent, ReviewComment } from "./comments";
 import {
   agentsIn,
   agentsNotice,
@@ -19,6 +19,7 @@ import {
   sendLabel,
 } from "./feedback";
 import type { FeedbackServer, Told } from "./feedback";
+import type { CommentedFile } from "./numbering";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -145,7 +146,6 @@ function lastPageOf(): LastPage {
 }
 
 const comment: ReviewComment = {
-  diff: "unstaged",
   path: "a.txt",
   side: "new",
   line: 1,
@@ -256,14 +256,14 @@ test("once comments are sent, the panel says who to, and how many weren't, as th
     sent: [comment],
   });
   await expect(told([comment, offDiff])).resolves.toMatchObject({
-    message: "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diff.",
+    message: "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diffs.",
   });
   await expect(told([offDiff, comment, { ...offDiff, id: 3 }])).resolves.toMatchObject({
     message:
       "Feedback sent to Reviewer. 2 comments weren't, as their lines are no longer in their diffs.",
   });
   await expect(told([offDiff])).resolves.toStrictEqual({
-    message: "Nothing was sent. 1 comment wasn't, as its line is no longer in its diff.",
+    message: "Nothing was sent. 1 comment wasn't, as its line is no longer in its diffs.",
     variant: "warning",
     sent: [],
   });
@@ -281,38 +281,10 @@ test("the panel says how many comments weren't sent as their diffs couldn't be r
     told([unreadable, offDiff, comment, { ...unreadable, id: 5 }], undefined, unreadableB),
   ).resolves.toMatchObject({
     message:
-      "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diff. 2 comments weren't, as their diffs couldn't be read.",
+      "Feedback sent to Reviewer. 1 comment wasn't, as its line is no longer in its diffs. 2 comments weren't, as their diffs couldn't be read.",
   });
   await expect(told([unreadable], undefined, unreadableB)).resolves.toMatchObject({
-    message: "Nothing was sent. 1 comment wasn't, as its diff couldn't be read.",
-  });
-});
-
-// The diffs of every file whose index adds a line, which the worktree removes.
-function restaged(side: CommentedFile["diff"]) {
-  const removed: Diff = {
-    ...diff,
-    added: 0,
-    removed: 1,
-    hunks: [
-      { oldStart: 1, newStart: 0, lines: [{ kind: "removed", text: "", newline: true, runs: [] }] },
-    ],
-  };
-
-  return { diff: side === "staged" ? diff : removed };
-}
-
-test("the panel says how many comments weren't sent as their lines have changed since they were staged", async () => {
-  const staged = { ...comment, diff: "staged" } as const;
-
-  await expect(told([staged], undefined, restaged)).resolves.toMatchObject({
-    message: "Nothing was sent. 1 comment wasn't, as its line has changed since it was staged.",
-  });
-  await expect(
-    told([staged, { ...staged, id: 2 }, { ...staged, line: 7, id: 3 }], undefined, restaged),
-  ).resolves.toMatchObject({
-    message:
-      "Nothing was sent. 1 comment wasn't, as its line is no longer in its diff. 2 comments weren't, as their lines have changed since they were staged.",
+    message: "Nothing was sent. 1 comment wasn't, as its diffs couldn't be read.",
   });
 });
 

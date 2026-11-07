@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { commentTarget, reviewComments } from "../test/comments";
+import { asNumbered, commentTarget, reviewComments } from "../test/comments";
 import { hunkLines } from "../test/hunk-lines";
 import { editedIn, shownOn, targetOf, threadAt, threadsOf } from "./comments";
 import type { CommentTarget, Editing, ReviewComment } from "./comments";
@@ -9,7 +9,9 @@ import type { NumberedLine } from "./lines";
 import { shows } from "./side-by-side";
 import type { Side } from "./side-by-side";
 
-const file = { diff: "unstaged", path: "a.txt" } as const;
+const file = { path: "a.txt", numbering: asNumbered };
+
+const path = "a.txt";
 
 const removed: NumberedLine = {
   kind: "removed",
@@ -26,11 +28,11 @@ const unchanged: NumberedLine = { ...removed, kind: "context", oldNumber: 2, new
 
 test("inline, the comments under an unchanged line are those on either of its numbers, and under any other line those on its one; side by side, those on the number its side shows", () => {
   expect([removed, added, unchanged].map((line) => shownOn(file, line))).toStrictEqual([
-    [{ ...file, side: "old", line: 3 }],
-    [{ ...file, side: "new", line: 4 }],
+    [{ path, side: "old", line: 3 }],
+    [{ path, side: "new", line: 4 }],
     [
-      { ...file, side: "old", line: 2 },
-      { ...file, side: "new", line: 5 },
+      { path, side: "old", line: 2 },
+      { path, side: "new", line: 5 },
     ],
   ]);
   expect(
@@ -38,8 +40,8 @@ test("inline, the comments under an unchanged line are those on either of its nu
       [removed, added, unchanged].map((line) => shownOn(file, line, side)),
     ),
   ).toStrictEqual([
-    [[{ ...file, side: "old", line: 3 }], [], [{ ...file, side: "old", line: 2 }]],
-    [[], [{ ...file, side: "new", line: 4 }], [{ ...file, side: "new", line: 5 }]],
+    [[{ path, side: "old", line: 3 }], [], [{ path, side: "old", line: 2 }]],
+    [[], [{ path, side: "new", line: 4 }], [{ path, side: "new", line: 5 }]],
   ]);
 });
 
@@ -93,15 +95,10 @@ test.each([undefined, "old", "new"] as const)(
 );
 
 function sameTarget(target: CommentTarget, other: CommentTarget): boolean {
-  return (
-    target.diff === other.diff &&
-    target.path === other.path &&
-    target.side === other.side &&
-    target.line === other.line
-  );
+  return target.path === other.path && target.side === other.side && target.line === other.line;
 }
 
-test("two comments are in one thread only if they're on the same line of the same file's same diff", () => {
+test("two comments are in one thread only if they're on the same line of the same file", () => {
   fc.assert(
     fc.property(commentTarget, commentTarget, (target, other) => {
       const threads = threadsOf([
@@ -219,8 +216,8 @@ test("under a line shows the comments on it, in the order they were made, and th
 });
 
 test("inline, an unchanged line shows the comments on its old number and its new one together, in the order they were made", () => {
-  const onNew = { ...file, side: "new", line: 5 } as const;
-  const onOld = { ...file, side: "old", line: 2 } as const;
+  const onNew = { path, side: "new", line: 5 } as const;
+  const onOld = { path, side: "old", line: 2 } as const;
 
   const comments = [
     { ...onNew, id: 1, body: "First" },
@@ -236,7 +233,7 @@ test("inline, an unchanged line shows the comments on its old number and its new
 });
 
 test("a comment is edited where it was started: under its line, or in the review's list", () => {
-  const target = { ...file, side: "new", line: 3 } as const;
+  const target = { path, side: "new", line: 3 } as const;
 
   expect(editedIn({ target, id: 2, where: "list" }, 2, "list")).toBe(true);
   expect(editedIn({ target, id: 2, where: "line" }, 2, "list")).toBe(false);

@@ -1,12 +1,12 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { commentBody, commentTarget, reviewComments } from "../test/comments";
+import { asNumbered, commentBody, commentTarget, reviewComments } from "../test/comments";
 import { bodyOf, reviewComment, saved, targetOf, unsent, without } from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
 
-const file = { diff: "unstaged", path: "a.txt" } as const;
+const file = { path: "a.txt", numbering: asNumbered };
 
 const removed: NumberedLine = {
   kind: "removed",
@@ -23,9 +23,9 @@ const unchanged: NumberedLine = { ...removed, kind: "context", oldNumber: 2, new
 
 test("inline, a comment on a removed line is on its old number, and on any other line on its new one", () => {
   expect([removed, added, unchanged].map((line) => targetOf(file, line))).toStrictEqual([
-    { ...file, side: "old", line: 3 },
-    { ...file, side: "new", line: 4 },
-    { ...file, side: "new", line: 5 },
+    { path: "a.txt", side: "old", line: 3 },
+    { path: "a.txt", side: "new", line: 4 },
+    { path: "a.txt", side: "new", line: 5 },
   ]);
 });
 
@@ -35,12 +35,12 @@ test("side by side, a comment is on the number the side shows the line with, and
       [removed, added, unchanged].map((line) => targetOf(file, line, side)),
     ),
   ).toStrictEqual([
-    { ...file, side: "old", line: 3 },
+    { path: "a.txt", side: "old", line: 3 },
     undefined,
-    { ...file, side: "old", line: 2 },
+    { path: "a.txt", side: "old", line: 2 },
     undefined,
-    { ...file, side: "new", line: 4 },
-    { ...file, side: "new", line: 5 },
+    { path: "a.txt", side: "new", line: 4 },
+    { path: "a.txt", side: "new", line: 5 },
   ]);
 });
 
@@ -67,22 +67,22 @@ test("a comment saved on a line comes after the others, as written, on its line,
   );
 });
 
-const comment: ReviewComment = { ...file, side: "new", line: 3, id: 2, body: "Why?" };
+const comment: ReviewComment = { path: "a.txt", side: "new", line: 3, id: 2, body: "Why?" };
 
 test("the first comment has the id 1, and one saved on the line of one edited is only what it says, on the line", () => {
-  const target: CommentTarget = { ...file, side: "new", line: 1 };
+  const target: CommentTarget = { path: "a.txt", side: "new", line: 1 };
 
   expect(saved([], { target, id: undefined }, "Why?")).toStrictEqual([
     { ...target, id: 1, body: "Why?" },
   ]);
   expect(saved([comment], { target: comment, id: undefined }, "And?")).toStrictEqual([
     comment,
-    { ...file, side: "new", line: 3, id: 3, body: "And?" },
+    { path: "a.txt", side: "new", line: 3, id: 3, body: "And?" },
   ]);
 });
 
 test("saving what's written makes a new comment on its line, or changes what the comment edited says, without whitespace at either end", () => {
-  const target: CommentTarget = { ...file, side: "old", line: 1 };
+  const target: CommentTarget = { path: "a.txt", side: "old", line: 1 };
 
   expect(saved([comment], { target, id: undefined }, "  Rename this\n")).toStrictEqual([
     comment,

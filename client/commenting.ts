@@ -1,21 +1,21 @@
 import { shownOn, targetOf, threadAt } from "./comments";
-import type { CommentedFile, Thread } from "./comments";
+import type { NumberedFile, Thread } from "./comments";
 import type { IndexedLine } from "./lines";
 import type { LineAt, PointedLine, PointerHandlers } from "./pointed";
 import type { Review } from "./review-context";
 import type { Row, Side } from "./side-by-side";
 
-// How lines can be commented on, as a hunk's can: the file whose diff they're in, and which of them
-// the pointer is over.
+// How lines can be commented on, as a hunk's can: the file whose diff they're in, with how the
+// review numbers its lines, and which of them the pointer is over.
 export interface Commenting {
-  file: CommentedFile;
+  file: NumberedFile;
   pointed: PointedLine;
 }
 
 // What some of those lines are commented on with: the file, what hears the pointer come over a
 // line, the line it's over, if it's one of them, and the view's review.
 export interface Commented {
-  file: CommentedFile;
+  file: NumberedFile;
   pointer: (line: LineAt) => PointerHandlers;
   pointed: LineAt | undefined;
   review: Review;
