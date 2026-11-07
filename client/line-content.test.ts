@@ -14,6 +14,16 @@ const texts = fc.constantFrom("", "x", "x\ty ", "é 😀\r");
 const numbers = fc.constantFrom(undefined, 1, 2);
 const sides = fc.constantFrom(undefined, "old", "new");
 
+// What lines hear the pointer with, and start a comment with, each the same each time.
+const handlers = [
+  undefined,
+  ...["a", "b"].map(() => ({ onPointerEnter() {}, onPointerLeave() {} })),
+];
+
+const starts = [undefined, ...["a", "b"].map(() => () => {})];
+const pointers = fc.constantFrom(...handlers);
+const onComments = fc.constantFrom(...starts);
+
 const runLists: fc.Arbitrary<Runs> = fc.array(
   fc.tuple(fc.integer({ min: 1, max: 2 }), fc.constantFrom(null, "keyword")),
   { maxLength: 2 },
@@ -48,6 +58,8 @@ const content: fc.Arbitrary<LineContent> = fc.record({
   selectable: fc.boolean(),
   changes: changeLists,
   found: foundLists,
+  pointer: pointers,
+  onComment: onComments,
 });
 
 // Either the value, or another of the arbitrary's.
@@ -81,6 +93,8 @@ const contents = content.chain((first) =>
       found: sameOr(first.found, foundLists).map((made) =>
         made.map(({ start, end, current }) => ({ start, end, current })),
       ),
+      pointer: sameOr(first.pointer, pointers),
+      onComment: sameOr(first.onComment, onComments),
     }),
   ),
 );
@@ -103,6 +117,8 @@ const aLine: LineContent = {
   selectable: true,
   changes: [{ start: 0, end: 2 }],
   found: [{ start: 2, end: 3, current: false }],
+  pointer: handlers[1],
+  onComment: undefined,
 };
 
 // Lines like aLine but for one part each, a run's or a range of changed text's included, which
@@ -143,6 +159,8 @@ const othersButForOnePart: LineContent[] = [
   { ...aLine, found: [{ start: 2, end: 4, current: false }] },
   { ...aLine, found: [{ start: 2, end: 3, current: true }] },
   { ...aLine, found: [] },
+  { ...aLine, pointer: handlers[2] },
+  { ...aLine, onComment: starts[1] },
 ];
 
 const butForOnePart = othersButForOnePart.map((other): [[LineContent, LineContent]] => [
@@ -155,7 +173,7 @@ function textOf({ line, changes, found }: LineContent): string {
   return JSON.stringify({ kind: line.kind, text: line.text, runs: line.runs, changes, found });
 }
 
-function restOf({ id, selectable, line, selected, side }: LineContent): string {
+function restOf({ id, selectable, line, selected, side, pointer, onComment }: LineContent): string {
   return JSON.stringify({
     id,
     selectable,
@@ -164,6 +182,8 @@ function restOf({ id, selectable, line, selected, side }: LineContent): string {
     newline: line.newline,
     selected,
     side: side ?? null,
+    pointer: handlers.indexOf(pointer),
+    onComment: starts.indexOf(onComment),
   });
 }
 
@@ -181,7 +201,7 @@ test("a line's text renders its pieces as before while its kind, text, highlight
   );
 });
 
-test("a line renders as before while its text's pieces do and its id, numbers, newline, selection and side are equal", () => {
+test("a line renders as before while its text's pieces do and its id, numbers, newline, selection, side, and what it hears the pointer and starts a comment with are equal", () => {
   fc.assert(
     fc.property(contents, ([before, after]) => {
       expect(lineAsBefore(before, after)).toBe(renderedOf(before) === renderedOf(after));

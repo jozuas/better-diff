@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 import { memo, useContext } from "react";
 import type { TextStyle } from "react-native";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 
 import type { Styles } from "./diff-styles";
 import { FontSizesContext, textPadding } from "./fonts";
@@ -91,8 +91,31 @@ const LineSegments = memo(
   (before, after) => before.styles === after.styles && textAsBefore(before, after),
 );
 
+interface CommentButtonProps {
+  // Undefined while the pointer isn't over the line, or it can't be commented on.
+  onPress: (() => void) | undefined;
+  styles: Styles;
+}
+
+// Starts a comment on the line, at the start of its numbers.
+function CommentButton({ onPress, styles }: CommentButtonProps): ReactElement | null {
+  return onPress === undefined ? null : (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Add review comment"
+      style={styles.comment}
+      onPress={onPress}
+    >
+      <Text selectable={false} style={styles.commentPlus}>
+        +
+      </Text>
+    </Pressable>
+  );
+}
+
 // Only the line's text can be selected, so copying a selection copies what the lines say. The
-// numbers of a selected line stand out.
+// numbers of a selected line stand out. While the pointer is over a line that can be commented on,
+// a button at the start of its numbers starts a comment on it.
 function Line({
   id,
   line,
@@ -101,6 +124,8 @@ function Line({
   selectable,
   changes,
   found,
+  pointer,
+  onComment,
   styles,
 }: DiffLineProps): ReactElement {
   const numbers = numbersOf(line, side);
@@ -108,7 +133,7 @@ function Line({
   const numberStyle = selected ? [styles.number, styles.selected] : styles.number;
 
   const row = (
-    <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]}>
+    <View dataSet={paseoMonospace} style={[styles.line, styles[line.kind]]} {...pointer}>
       {numbers.map(({ side: version, number }) => (
         <Text key={version} selectable={false} style={numberStyle}>
           {number}
@@ -117,6 +142,7 @@ function Line({
       <Text nativeID={id} selectable={selectable} style={styles.text}>
         <LineSegments line={line} changes={changes} found={found} styles={styles} />
       </Text>
+      <CommentButton onPress={onComment} styles={styles} />
     </View>
   );
 
@@ -137,9 +163,9 @@ function Line({
   );
 }
 
-// Rendered again only once it renders differently, so a line selected or unselected doesn't render
-// the others again, and nor does reading its diff again, which makes all it's rendered with anew,
-// though most lines are as they were.
+// Rendered again only once it renders differently, so a line selected or unselected, or the pointer
+// coming over it or leaving it, doesn't render the others again, and nor does reading its diff
+// again, which makes all it's rendered with anew, though most lines are as they were.
 export const DiffLine = memo(
   Line,
   (before, after) => before.styles === after.styles && lineAsBefore(before, after),

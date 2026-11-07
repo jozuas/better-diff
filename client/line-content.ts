@@ -1,6 +1,7 @@
 import type { TextRange } from "./changed-text";
 import type { FoundRange } from "./find";
 import type { NumberedLine } from "./lines";
+import type { PointerHandlers } from "./pointed";
 import type { Side } from "./side-by-side";
 
 // What a diff's line's text renders its pieces from.
@@ -19,6 +20,11 @@ export interface LineContent extends TextContent {
   // The side it shows on, with only that version's number, or undefined inline, with both.
   side: Side | undefined;
   selectable: boolean;
+  // What hears the pointer come over the line and leave it, the same each time for the same line,
+  // where it can be commented on.
+  pointer: PointerHandlers | undefined;
+  // Starts a comment on the line, while the pointer is over it and it can be commented on.
+  onComment: (() => void) | undefined;
 }
 
 type Run = NumberedLine["runs"][number];
@@ -68,7 +74,8 @@ export function textAsBefore(before: TextContent, after: TextContent): boolean {
 }
 
 // Whether the line renders as it did, though what it renders with is made anew: its text's pieces,
-// and its id, its numbers, whether it's selected and its newline.
+// and its id, its numbers, whether it's selected, its newline, and what it hears the pointer and
+// starts a comment with.
 export function lineAsBefore(before: LineContent, after: LineContent): boolean {
   return (
     textAsBefore(before, after) &&
@@ -78,6 +85,8 @@ export function lineAsBefore(before: LineContent, after: LineContent): boolean {
     before.line.newNumber === after.line.newNumber &&
     before.line.newline === after.line.newline &&
     before.selected === after.selected &&
-    before.side === after.side
+    before.side === after.side &&
+    before.pointer === after.pointer &&
+    before.onComment === after.onComment
   );
 }

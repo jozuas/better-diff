@@ -21,6 +21,7 @@ import type { Controls } from "./actions";
 import { HunkLines, UnchangedLines } from "./diff-lines";
 import { afterSection, beforeSection } from "./find";
 import { useFindableLines } from "./find-page";
+import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { HunkBar } from "./hunk-bar";
 import { unchangedLines } from "./lines";
@@ -279,6 +280,11 @@ export function Hunks({
   const focus = useFocus(sideBySide);
   const range = useMemo(() => onSide(selection, focus), [selection, focus]);
 
+  const commented = useMemo(
+    () => ({ diff: groups[file.group].side, path: file.path }),
+    [file.group, file.path],
+  );
+
   const hunks = shownDiff.hunks.flatMap((hunk, index) => {
     const selected = rangeInHunk(range, index);
     const mark = { hunk: hunkMark([fileIndex, index]) };
@@ -318,6 +324,7 @@ export function Hunks({
         <HunkLines
           hunk={hunk}
           index={index}
+          file={commented}
           container={container}
           selection={selected}
           pointed={pointed}

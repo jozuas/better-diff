@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { PluginTab, PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
-import { useRpc, useSettings, useTabState, useWorkspace } from "@getpaseo/plugin/client";
-import { Loading, useToast } from "@getpaseo/plugin/client/ui";
+import type { PluginTab } from "@getpaseo/plugin/client";
+import { useRpc, useTabState } from "@getpaseo/plugin/client";
+import { useToast } from "@getpaseo/plugin/client/ui";
 import { notifyManager, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -9,29 +9,26 @@ import { StyleSheet, View } from "react-native";
 
 import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
 import { applyFileRpc, applyGroupRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
-import { viewSettings } from "../shared/settings";
-import type { ViewValues } from "../shared/settings";
 import type { Controls } from "./actions";
 import type { Server, Where } from "./apply";
+import type { ReviewComment } from "./comments";
 import { confirmation } from "./confirmation";
 import { applyAndTell, controlsStore, runBusy } from "./controls";
 import type { Layout } from "./diff-style";
-import { TabSizeContext } from "./diff-styles";
 import { DiffView } from "./diff-view";
 import { DiffWithFind } from "./find-bar";
 import { usePanelFind } from "./find-page";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
-import { FontSizesProvider } from "./font-sizes";
 import { fileAfter, openAfter, placeholder, toggled } from "./groups";
 import type { Open } from "./groups";
 import { useFocusOnOpen, usePanelKeys } from "./keyboard";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { requests } from "./requests";
-import { viewSettingsOf } from "./settings";
+import { ReviewProvider } from "./review";
+import { pendingCounts } from "./review-list";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
 import type { SidebarState } from "./sidebar";
-import { SyntaxColorsProvider } from "./syntax-colors";
 import { startingTab, tabState } from "./tab-state";
 import { clearSelection } from "./text-selection";
 import { useLatest } from "./web";
@@ -166,21 +163,31 @@ function useOpen(kept: Open | undefined, changes: Listed | undefined) {
   return [open, setOpen] as const;
 }
 
-// What the sidebar shows, as the tab kept it before Paseo reloaded, if it did, and kept in the tab
-// whenever it changes, so that the tab shows it again once Paseo reloads.
-function useSidebarState(tab: PluginTab, changes: Listed | undefined): SidebarState {
+// What the sidebar shows, and the review comments pending and the message they're to be sent with,
+// with what changes them, as the tab kept them before Paseo reloaded, if it did, and kept in the
+// tab whenever they change, so that the tab shows them again once Paseo reloads.
+function useKeptState(tab: PluginTab, changes: Listed | undefined) {
   const [kept, keep] = useTabState(tab, tabState, startingTab);
   const [open, setOpen] = useOpen(kept.open ?? undefined, changes);
   const [filter, setFilter] = useState(kept.filter);
   const [collapsed, setCollapsed] = useState(kept.collapsed);
   const [width, setWidth] = useState(kept.fileListWidth);
+  const [comments, setComments] = useState<readonly ReviewComment[]>(kept.comments);
+  const [message, setMessage] = useState(kept.message);
   const latestKeep = useLatest(keep);
 
   useEffect(() => {
-    latestKeep.current({ fileListWidth: width, open: open ?? null, collapsed, filter });
-  }, [latestKeep, width, open, collapsed, filter]);
+    latestKeep.current({
+      fileListWidth: width,
+      open: open ?? null,
+      collapsed,
+      filter,
+      comments: [...comments],
+      message,
+    });
+  }, [latestKeep, width, open, collapsed, filter, comments, message]);
 
-  return {
+  const sidebar: SidebarState = {
     open,
     onOpen: setOpen,
     filter,
@@ -192,16 +199,12 @@ function useSidebarState(tab: PluginTab, changes: Listed | undefined): SidebarSt
     width,
     onWidth: setWidth,
   };
+
+  return { sidebar, review: { comments, onComments: setComments, message, onMessage: setMessage } };
 }
 
-// The settings once they're read.
-function useViewValues(): ViewValues | undefined {
-  const toast = useToast();
-
-  return viewSettingsOf(useSettings(viewSettings), toast.error)?.values;
-}
-
-interface ChangesProps {
+export interface ChangesProps {
+  // The workspace's ID, whose agents review comments are sent to.
   workspace: string;
   directory: string;
   layout: Layout;
@@ -211,7 +214,7 @@ interface ChangesProps {
   theme: PluginTheme;
 }
 
-function Changes({
+export function Changes({
   workspace,
   directory,
   layout,
@@ -231,7 +234,8 @@ function Changes({
     },
   });
 
-  const sidebar = useSidebarState(tab, changes.data);
+  const { sidebar, review } = useKeptState(tab, changes.data);
+  const pending = useMemo(() => pendingCounts(review.comments), [review.comments]);
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const focus = useMemo(() => keyboardFocus(), []);
@@ -315,54 +319,38 @@ function Changes({
           controls={controls}
           refresh={refreshNow}
           panelWidth={panelWidth}
+          pending={pending}
           theme={theme}
         />
         <View style={styles.diff}>
-          <DiffWithFind panelFind={findBar} theme={theme}>
-            <ShownDiffsContext value={shownDiffs}>
-              <DiffView
-                open={sidebar.open}
-                placeholder={placeholder(changes.data)}
-                layout={layout}
-                directory={directory}
-                next={next}
-                filter={sidebar.filter}
-                hideWhitespace={hideWhitespace}
-                controls={controls}
-                theme={theme}
-              />
-            </ShownDiffsContext>
-          </DiffWithFind>
+          <ReviewProvider
+            directory={directory}
+            workspace={workspace}
+            {...review}
+            listed={changes.data}
+            onOpen={sidebar.onOpen}
+            hideWhitespace={hideWhitespace}
+            tab={tab}
+            theme={theme}
+          >
+            <DiffWithFind panelFind={findBar} theme={theme}>
+              <ShownDiffsContext value={shownDiffs}>
+                <DiffView
+                  open={sidebar.open}
+                  placeholder={placeholder(changes.data)}
+                  layout={layout}
+                  directory={directory}
+                  next={next}
+                  filter={sidebar.filter}
+                  hideWhitespace={hideWhitespace}
+                  controls={controls}
+                  theme={theme}
+                />
+              </ShownDiffsContext>
+            </DiffWithFind>
+          </ReviewProvider>
         </View>
       </KeyboardFocusContext>
     </View>
-  );
-}
-
-// The workspace's changed files, and the diff of the one opened, shown as the host's settings say
-// once it says.
-export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelProps): ReactElement {
-  const directory = useWorkspace(workspaceId, (workspace) => workspace.directory);
-  const settings = useViewValues();
-
-  if (directory === null || settings === undefined) {
-    return <Loading />;
-  }
-
-  return (
-    <FontSizesProvider settings={settings}>
-      <TabSizeContext value={settings.tabSize}>
-        <SyntaxColorsProvider theme={theme}>
-          <Changes
-            workspace={workspaceId}
-            directory={directory}
-            layout={settings}
-            hideWhitespace={settings.hideWhitespace}
-            tab={tab}
-            theme={theme}
-          />
-        </SyntaxColorsProvider>
-      </TabSizeContext>
-    </FontSizesProvider>
   );
 }

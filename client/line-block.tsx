@@ -1,15 +1,22 @@
+import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { memo, useContext } from "react";
+import { memo, useContext, useSyncExternalStore } from "react";
 import { View } from "react-native";
 
 import type { TextRange } from "./changed-text";
+import { CommentThread } from "./comment-thread";
+import { commentedBy, commentsOn, pointedIn, subscribeToPointed } from "./commenting";
+import type { Commented, Commenting, LineComments } from "./commenting";
+import type { Thread } from "./comments";
 import { DiffLine } from "./diff-line";
 import type { Styles } from "./diff-styles";
 import type { FoundRange } from "./find";
-import { FontSizesContext } from "./fonts";
+import { FontSizesContext, textPadding } from "./fonts";
 import { lineKey } from "./lines";
 import type { IndexedLine, NumberedLine } from "./lines";
+import type { LineAt } from "./pointed";
 import { blockTall } from "./rendering";
+import { ReviewContext } from "./review-context";
 import { rowKey, sides } from "./side-by-side";
 import type { Focus, Row, Side } from "./side-by-side";
 
@@ -51,6 +58,7 @@ interface HalfProps {
   focus: Focus;
   changes: ChangedText;
   found: FoundText;
+  comments: LineComments;
   styles: Styles;
 }
 
@@ -64,6 +72,7 @@ function Half({
   focus,
   changes,
   found,
+  comments,
   styles,
 }: HalfProps): ReactElement {
   return (
@@ -84,6 +93,8 @@ function Half({
           selectable={focused}
           changes={changes(shown.index)}
           found={found(shown.index)}
+          pointer={comments.pointer}
+          onComment={comments.onComment}
           styles={styles}
         />
       )}
@@ -91,42 +102,26 @@ function Half({
   );
 }
 
-interface SideBySideRowProps {
-  row: Row;
-  idOf: IdOf;
-  selected: Selected;
-  focus: Focus;
-  changes: ChangedText;
-  found: FoundText;
+// Each side's comments under a row, under its side.
+interface ThreadsRowProps {
+  threads: Record<Side, Thread | undefined>;
+  theme: PluginTheme;
   styles: Styles;
 }
 
-// Each side's line level with the other's. Only the text of the side with focus can be selected,
-// and has the ids a selection finds lines by, so a selection has only that side's.
-function SideBySideRow({
-  row,
-  idOf,
-  selected,
-  focus,
-  changes,
-  found,
-  styles,
-}: SideBySideRowProps): ReactElement {
+function ThreadsRow({ threads, theme, styles }: ThreadsRowProps): ReactElement | null {
+  const fonts = useContext(FontSizesContext);
+
+  if (threads.old === undefined && threads.new === undefined) {
+    return null;
+  }
+
   return (
     <View style={styles.line}>
       {sides.map((side) => (
-        <Half
-          key={side}
-          side={side}
-          shown={row[side]}
-          idOf={idOf}
-          focused={focus.side === side}
-          selected={selected}
-          focus={focus}
-          changes={changes}
-          found={found}
-          styles={styles}
-        />
+        <View key={side} style={[styles.half, styles[side]]}>
+          <CommentThread thread={threads[side]} indent={fonts.number + textPadding} theme={theme} />
+        </View>
       ))}
     </View>
   );
@@ -143,8 +138,14 @@ interface RowsProps {
   changes: ChangedText;
   found: FoundText;
   styles: Styles;
+  theme: PluginTheme;
 }
 
+interface CommentedRowsProps extends RowsProps {
+  commented: Commented | undefined;
+}
+
+// Each line, and under one commented on, its comments.
 function InlineRows({
   lines,
   start,
@@ -153,29 +154,48 @@ function InlineRows({
   selected,
   changes,
   found,
+  commented,
   styles,
-}: RowsProps): ReactElement[] {
-  return lines
-    .slice(start, end)
-    .map((line, at) => (
+  theme,
+}: CommentedRowsProps): ReactElement[] {
+  const fonts = useContext(FontSizesContext);
+
+  return lines.slice(start, end).flatMap((line, at) => {
+    const index = start + at;
+    const key = lineKey(line);
+    const { pointer, onComment, thread } = commentsOn(commented, { index, line });
+
+    return [
       <DiffLine
-        key={lineKey(line)}
-        id={idOf({ index: start + at, line }, true)}
+        key={key}
+        id={idOf({ index, line }, true)}
         line={line}
-        selected={selected(start + at)}
+        selected={selected(index)}
         side={undefined}
         selectable
-        changes={changes(start + at)}
-        found={found(start + at)}
+        changes={changes(index)}
+        found={found(index)}
+        pointer={pointer}
+        onComment={onComment}
         styles={styles}
-      />
-    ));
+      />,
+      <CommentThread
+        key={`${key} comments`}
+        thread={thread}
+        indent={2 * fonts.number + textPadding}
+        theme={theme}
+      />,
+    ];
+  });
 }
 
-interface SideBySideRowsProps extends RowsProps {
+interface SideBySideRowsProps extends CommentedRowsProps {
   sideBySide: SideBySide;
 }
 
+// Each side's line level with the other's, and under a row with a side commented on, that side's
+// comments. Only the text of the side with focus can be selected, and has the ids a selection finds
+// lines by, so a selection has only that side's.
 function SideBySideRows({
   sideBySide: { rows, focus },
   start,
@@ -184,22 +204,41 @@ function SideBySideRows({
   selected,
   changes,
   found,
+  commented,
   styles,
+  theme,
 }: SideBySideRowsProps): ReactElement[] {
-  return rows
-    .slice(start, end)
-    .map((row) => (
-      <SideBySideRow
-        key={rowKey(row)}
-        row={row}
-        idOf={idOf}
-        selected={selected}
-        focus={focus}
-        changes={changes}
-        found={found}
-        styles={styles}
-      />
-    ));
+  return rows.slice(start, end).flatMap((row) => {
+    const key = rowKey(row);
+
+    const comments = {
+      old: commentsOn(commented, row.old, "old"),
+      new: commentsOn(commented, row.new, "new"),
+    };
+
+    const threads = { old: comments.old.thread, new: comments.new.thread };
+
+    return [
+      <View key={key} style={styles.line}>
+        {sides.map((side) => (
+          <Half
+            key={side}
+            side={side}
+            shown={row[side]}
+            idOf={idOf}
+            focused={focus.side === side}
+            selected={selected}
+            focus={focus}
+            changes={changes}
+            found={found}
+            comments={comments[side]}
+            styles={styles}
+          />
+        ))}
+      </View>,
+      <ThreadsRow key={`${key} comments`} threads={threads} theme={theme} styles={styles} />,
+    ];
+  });
 }
 
 interface BlockRowsProps extends RowsProps {
@@ -207,7 +246,27 @@ interface BlockRowsProps extends RowsProps {
   sideBySide: SideBySide | undefined;
 }
 
-function BlockRows({ sideBySide, ...rows }: BlockRowsProps): ReactElement {
+interface BlockProps extends BlockRowsProps {
+  // Whether it renders its lines, rather than only the room they take, until it does.
+  rendered: boolean;
+  // Undefined for lines that can't be commented on.
+  commenting: Commenting | undefined;
+}
+
+// The line the pointer is over, if it's one the block shows: only the pointer moving onto one of
+// the block's lines, or from one, renders the block again.
+function usePointedIn(
+  { sideBySide, start, end }: BlockRowsProps,
+  commenting: Commenting | undefined,
+): LineAt | undefined {
+  return useSyncExternalStore(subscribeToPointed(commenting), () =>
+    pointedIn(commenting, sideBySide?.rows, start, end),
+  );
+}
+
+type CommentedBlockRowsProps = BlockRowsProps & CommentedRowsProps;
+
+function BlockRows({ sideBySide, ...rows }: CommentedBlockRowsProps): ReactElement {
   return sideBySide === undefined ? (
     <InlineRows {...rows} />
   ) : (
@@ -215,28 +274,28 @@ function BlockRows({ sideBySide, ...rows }: BlockRowsProps): ReactElement {
   );
 }
 
-interface BlockProps extends BlockRowsProps {
-  // Whether it renders its lines, rather than only the room they take, until it does.
-  rendered: boolean;
-}
-
 // Some of the lines, one under the other, or side by side. The browser lays them out and paints
 // them, and finds what's under the pointer among them, only while they're on screen, in the room
 // they take until then, so that scrolling a view of thousands of lines, or moving the pointer over
 // it, takes as long as the lines on screen.
-function BlockOfLines({ sideBySide, rendered, ...rows }: BlockProps): ReactElement {
+function BlockOfLines({ rendered, commenting, ...rows }: BlockProps): ReactElement {
   const fonts = useContext(FontSizesContext);
-  const height = blockTall(rows.lines, sideBySide?.rows, rows) * fonts.codeLine;
+  const review = useContext(ReviewContext);
+  const pointed = usePointedIn(rows, commenting);
+  const height = blockTall(rows.lines, rows.sideBySide?.rows, rows) * fonts.codeLine;
 
-  return rendered ? (
+  if (!rendered) {
+    return <View style={{ height }} />;
+  }
+
+  return (
     <View style={{ contentVisibility: "auto", containIntrinsicSize: `auto ${String(height)}px` }}>
-      <BlockRows sideBySide={sideBySide} {...rows} />
+      <BlockRows {...rows} commented={commentedBy(review, commenting, pointed)} />
     </View>
-  ) : (
-    <View style={{ height }} />
   );
 }
 
 // Rendered again only once what it's rendered with changes, as once the view renders the lines
-// whose room it took, and not as other blocks are.
+// whose room it took, or the pointer moves onto one of its lines or from one, or the comments
+// change, and not as other blocks are.
 export const Block = memo(BlockOfLines);

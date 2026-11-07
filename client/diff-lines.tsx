@@ -7,6 +7,8 @@ import { View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { TextRange } from "./changed-text";
 import { pairingOf } from "./changed-words";
+import type { Commenting } from "./commenting";
+import type { CommentedFile } from "./comments";
 import { useStyles } from "./diff-styles";
 import type { Styles } from "./diff-styles";
 import { hunkSection } from "./find";
@@ -16,6 +18,7 @@ import { Block } from "./line-block";
 import type { ChangedText, FoundText, IdOf, Selected } from "./line-block";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
+import { pointedLine } from "./pointed";
 import type { PointedHunk } from "./pointed";
 import { blocksOfRows, rendersBlock } from "./rendering";
 import type { LineWindow } from "./rendering";
@@ -57,7 +60,10 @@ interface LinesProps {
   // The lines of the file's new version to render, of those the view renders a step at a time, or
   // undefined to render them all.
   window?: LineWindow | undefined;
+  // Undefined for lines that can't be commented on.
+  commenting?: Commenting | undefined;
   styles: Styles;
+  theme: PluginTheme;
 }
 
 // How many rows of lines the browser renders as one block: it lays out, paints and finds what's under
@@ -74,7 +80,9 @@ function Lines({
   found,
   partners,
   window,
+  commenting,
   styles,
+  theme,
 }: LinesProps): ReactElement[] {
   const sideBySide = useMemo(
     () => (focus === undefined ? undefined : { rows: rowsOf(lines, partners), focus }),
@@ -93,7 +101,9 @@ function Lines({
       selected={selected}
       changes={changes}
       found={found}
+      commenting={commenting}
       styles={styles}
+      theme={theme}
     />
   ));
 }
@@ -101,6 +111,8 @@ function Lines({
 interface HunkLinesProps {
   hunk: Hunk;
   index: number;
+  // The diff they're in, which their comments are on.
+  file: CommentedFile;
   container: string;
   // Its lines the page's text selection touches, if any.
   selection: LineRange | undefined;
@@ -112,9 +124,11 @@ interface HunkLinesProps {
   theme: PluginTheme;
 }
 
+// The hunk's lines, which can be commented on.
 function LinesOfHunk({
   hunk,
   index,
+  file,
   container,
   selection,
   pointed,
@@ -125,6 +139,8 @@ function LinesOfHunk({
   const lines = useMemo(() => numberLines(hunk), [hunk]);
   const pairing = useMemo(() => pairingOf(lines), [lines]);
   const found = useFoundLines(container, hunkSection(index));
+  const pointedOver = useMemo(() => pointedLine(), []);
+  const commenting = useMemo(() => ({ file, pointed: pointedOver }), [file, pointedOver]);
 
   return (
     <View {...pointed.pointer(index)}>
@@ -136,7 +152,9 @@ function LinesOfHunk({
         changes={(line) => pairing.changes[line] ?? unchanged}
         found={(line) => found.get(line) ?? notFound}
         partners={pairing.partners}
+        commenting={commenting}
         styles={styles}
+        theme={theme}
       />
     </View>
   );
@@ -196,6 +214,7 @@ function LinesOutsideHunks({
         partners={unpaired}
         window={window}
         styles={styles}
+        theme={theme}
       />
     </View>
   );

@@ -39,6 +39,7 @@ interface PageElement {
     readonly width: number;
   };
   querySelectorAll: (selectors: string) => Iterable<PageElement>;
+  scrollIntoView: (options: { block: "center" }) => void;
 }
 
 declare const document: {
@@ -175,6 +176,13 @@ export function scrollToTop(id: string): void {
 
   if (scroller !== null) {
     scroller.scrollTop = 0;
+  }
+}
+
+// Scrolls the views the element with the id is in to show it in their middle, if it's on the page.
+export function scrollIntoView(id: string): void {
+  if (Platform.OS === "web") {
+    document.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: "center" });
   }
 }
 

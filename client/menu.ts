@@ -44,3 +44,30 @@ const steps: Record<CommandIn<"menu">, number> = { down: 1, up: -1 };
 export function menuStep(command: CommandIn<"menu">, index: number, count: number): number {
   return (index + steps[command] + count) % count;
 }
+
+// Where something is on the page: its top left corner, and its size.
+export interface Rect extends Point, Size {}
+
+// Where a panel goes, by its right and bottom edges' distances from the window's, how wide it is,
+// and how tall it can be.
+interface PanelPlacement {
+  right: number;
+  bottom: number;
+  width: number;
+  maxHeight: number;
+}
+
+// Where a panel opened from a button goes: above the button, its right edge at the button's, as wide as `width` where the window
+// leaves room for that, and no taller than the room above the button, with a margin to the window's
+// edges, and a gap to the button.
+export function panelPosition(button: Rect, window: Size, width: number): PanelPlacement {
+  const margin = 8;
+  const gap = 6;
+
+  return {
+    right: Math.max(margin, window.width - button.x - button.width),
+    bottom: window.height - button.y + gap,
+    width: Math.min(width, window.width - 2 * margin),
+    maxHeight: Math.max(0, button.y - gap - margin),
+  };
+}

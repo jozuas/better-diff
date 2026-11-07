@@ -110,6 +110,25 @@ Paseo's desktop app has no find of its own, and a browser's would search the who
 - Keys in the find bar only find: Enter doesn't stage there, nor Backspace discard. Its buttons' keys show under them once the pointer rests on them, as other buttons' do, and Better Diff's settings page lists them with the others.
 - As the diff changes, its highlights follow, and the current match is the first at or after where it was, without scrolling the view. Once another file or group opens, its first match is current.
 
+### Review comments
+
+As in Paseo's own diff, lines are commented on, and the comments sent to an agent in the workspace. Like a GitHub review's, a comment is pending until the review is sent, and the review is looked over, as GitHub's "Finish your review" does, before it is.
+
+- While the pointer is over a hunk's line, a + button at the start of its numbers starts a comment on it, clear of its text, where a selection starts. Inline, a removed line's comment is on its old number and any other line's on its new one; side by side, on the number its side shows. The comment is written in a box under the line, and saved with Comment, or Cmd+Enter (Ctrl+Enter), unless it's only whitespace, or left with Cancel or Escape. One comment is written at a time. What's written of it stays as its file changes, under the line that then has its number.
+- A press in a comment, or under a line among its comments, is theirs rather than the lines': focus stays in a box a comment is written in, rather than moving to the hunk's bar, and a right click opens the page's own menu, which pastes, rather than the lines' menu.
+- A comment saved is pending: it shows under its line, marked Pending, with buttons that edit it and delete it. A line can have several. A comment is on the line of the diff its file was opened from, unstaged or staged, by its number. Inline, an unchanged line shows the comments made on either of its sides side by side.
+- Each file's row in the sidebar says how many comments are pending on the diff it opens, after its path.
+- Pending comments, and the review's message, are kept in the tab, as what it shows is once Paseo reloads, and while any comments are, the tab shows it has unsaved work, and asks before it's closed.
+- While comments are pending, a bar under the diff has Review, with how many are pending, as "Review (3)", which opens the review above it, until it's closed, with Escape or a click outside it. Escape in a comment being edited in it leaves the comment, and the review stays open. In it:
+  - A message for the agent, empty at first, which the review asks the agent instead of "Please address this code review.", as Paseo's own diff asks it, while it says anything. Cmd+Enter (Ctrl+Enter) in it sends the review.
+  - The comments pending, under the files they're on, unstaged ones before staged ones, which say so, each by path, and each file's in the order of their lines in its diff, as it is now. Each shows its line's number, marked as removed or added, and the line, or that its diff no longer has it, or that it's changed since it was staged, and what the comment says, with buttons that edit it there and delete it. A comment whose line its diff has, of a file a group lists, opens its file's diff when pressed, which scrolls to show it, and it stands out for a moment.
+  - The agent it goes to: the workspace's, or of several, the one chosen from a menu, those active most recently first, which is the one active most recently until another is chosen. The workspace's agents are those not archived: plugins can't tell which have tabs open, as Paseo's own diff does. Without an agent in the workspace, it says to start one, and can't be sent.
+  - Send feedback, which sends the review as Paseo's own diff sends it: the message with a review attachment, of each comment with its file, side, line number and the lines of its hunk up to three either side, from the diffs as they are then. An agent at work gets it without being interrupted. While it's being sent, Send feedback is disabled, and Cmd+Enter does nothing, though the review is closed and opened again.
+  - Discard review, which deletes the comments pending, and the message, and asks for confirmation as discarding changes does.
+- The review sent is of the worktree's uncommitted changes, as Paseo's own diff's is, from HEAD to the worktree, so its lines are numbered as HEAD and the worktree number them, not as the index does. A partly staged file's staged diff goes to the index and its unstaged diff from it, so a line there is numbered as its other diff has it in HEAD or the worktree, and so is its hunk's header. An unchanged line commented on on a side whose version hasn't it, as one staged after HEAD's, is sent on its other side.
+- Comments sent are no longer pending, and the message is empty again, unless it was changed while they were sent. One edited while it was sent stays pending, as what it says now wasn't sent, and so does one made then.
+- A comment isn't sent, and stays pending, whose line its diff no longer has, or whose file's diffs can't be read, or whose line only the index has, staged and then changed in the worktree, which neither HEAD nor the worktree has for the agent to find. The message that says who the others were sent to says how many weren't, and why. Without one to send, nothing is sent, and it says so, and why.
+
 ### Whitespace changes
 
 - A "Hide whitespace" switch in Better Diff's settings hides changes only to whitespace, as `git diff --ignore-all-space` hides them, and as lazygit does: a line whose only change is to whitespace shows unchanged, as the new version has it, and a hunk with no other changes doesn't show. The counts on the file bar are of the lines shown.
@@ -216,7 +235,6 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 ### Later
 
-- Sending line comments to an agent.
 - Mobile.
 
 ### Out of scope

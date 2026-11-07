@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { itemLook, menuPosition, menuStep } from "./menu";
+import { itemLook, menuPosition, menuStep, panelPosition } from "./menu";
 
 const length = fc.integer({ min: 0, max: 2000 });
 
@@ -101,4 +101,21 @@ test("↓ and ↑ move focus to a menu's next item or the one before, round from
       },
     ),
   );
+});
+
+test("a panel opens above its button, its right edge at the button's, as wide as asked where the window has room, and no taller than the room above", () => {
+  const window = { width: 1280, height: 720 };
+
+  expect(panelPosition({ x: 1100, y: 690, width: 100, height: 24 }, window, 560)).toStrictEqual({
+    right: 80,
+    bottom: 36,
+    width: 560,
+    maxHeight: 676,
+  });
+  expect(
+    panelPosition({ x: 300, y: 400, width: 100, height: 24 }, { width: 400, height: 500 }, 560),
+  ).toStrictEqual({ right: 8, bottom: 106, width: 384, maxHeight: 386 });
+  expect(panelPosition({ x: 0, y: 4, width: 10, height: 10 }, window, 100)).toMatchObject({
+    maxHeight: 0,
+  });
 });

@@ -1,0 +1,5 @@
+{
+  "id": "better-diff-test-agent",
+  "name": "Better Diff's test agent",
+  "requirements": { "paseo": ">=0.14.0" }
+}

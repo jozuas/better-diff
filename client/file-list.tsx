@@ -54,6 +54,8 @@ interface FileListProps {
   // Copies what a file's menu item names of the file at the path.
   onCopy: (item: CopyItem, path: string) => void;
   ignoring: Ignoring;
+  // How many review comments are pending on each file's diff, by its key.
+  pending: ReadonlyMap<string, number>;
   theme: PluginTheme;
 }
 
@@ -162,6 +164,7 @@ export function FileList({
   controls,
   onCopy,
   ignoring,
+  pending,
   theme,
 }: FileListProps): ReactElement {
   const [menu, setMenu] = useState<{ file: OpenFile; point: Point }>();
@@ -209,6 +212,7 @@ export function FileList({
               onToggle(group.name);
             }}
             stops={stops}
+            pending={pending}
             controls={controls}
             theme={theme}
           />

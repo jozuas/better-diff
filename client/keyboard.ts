@@ -25,9 +25,10 @@ interface PageMouseEvent {
   readonly clientX: number;
   readonly clientY: number;
   preventDefault: () => void;
+  stopPropagation: () => void;
 }
 
-interface PageKeyboardEvent extends KeyEvent {
+export interface PageKeyboardEvent extends KeyEvent {
   preventDefault: () => void;
   stopPropagation: () => void;
 }
@@ -124,6 +125,14 @@ export function useContextMenu(id: string, listener: (point: Point) => void): vo
   });
 }
 
+// Leaves a right click on the element with the id to the page's own menu, as one in a text field
+// pastes, rather than to the menu of what it's in.
+export function usePageMenu(id: string): void {
+  useListener(id, "contextmenu", (event) => {
+    event.stopPropagation();
+  });
+}
+
 // Calls the latest listener with each key pressed in the element with the id, and whether focus was
 // on the element itself, rather than on something inside it, such as one of its buttons, while the
 // caller is mounted. A key the listener says it handled does nothing else on the page, and nothing
@@ -164,8 +173,8 @@ export function useCommands<In extends Place>(
   );
 }
 
-// Calls the latest listener each time a key is let go in the element with the id.
-export function useKeyUp(id: string, listener: () => void): void {
+// Calls the latest listener with each key let go in the element with the id.
+export function useKeyUp(id: string, listener: (event: PageKeyboardEvent) => void): void {
   useListener(id, "keyup", listener);
 }
 
@@ -193,11 +202,16 @@ export function usePanelKeys(
 // What a hunk's lines are inside of, marked with the hunk, where the pointer can press them.
 const hunkMarked = "[data-hunk]";
 
-// Has a press of the pointer's main button in the element with the id, outside the bars there, move
-// focus once it's let go to the bar of the hunk whose lines it selected in the diffs of the element
-// with the id `view`, or else of the hunk whose lines it was pressed on, so that keys act on what it
-// pressed. A bar it's pressed on, or what's in one, takes focus itself, and a right click opens the
-// lines' menu, which has focus then.
+// What a line's comments are inside of, among the lines, where a press is the comments', as in a
+// comment being written.
+export const commentsMark = { comments: "thread" };
+const commentsMarked = "[data-comments]";
+
+// Has a press of the pointer's main button in the element with the id, outside the bars and the
+// lines' comments there, move focus once it's let go to the bar of the hunk whose lines it selected
+// in the diffs of the element with the id `view`, or else of the hunk whose lines it was pressed
+// on, so that keys act on what it pressed. A bar it's pressed on, or what's in one, takes focus
+// itself, and a right click opens the lines' menu, which has focus then.
 export function useFocusOnPress(id: string, view: string, focus: KeyboardFocus): void {
   useListener(
     id,
@@ -208,6 +222,7 @@ export function useFocusOnPress(id: string, view: string, focus: KeyboardFocus):
       if (
         target === null ||
         button !== 0 ||
+        (target.closest?.(commentsMarked) ?? null) !== null ||
         (focusable !== null &&
           document.querySelector(`#${CSS.escape(id)}`)?.contains(focusable) === true)
       ) {

@@ -1,4 +1,5 @@
 import type { PluginTheme } from "@getpaseo/plugin";
+import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
 import { memo, useCallback, useContext, useId, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -14,6 +15,7 @@ import { useCommands, useContextMenu } from "./keyboard";
 import type { CommandIn } from "./keymap";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
+import { pendingLabel, pendingOn } from "./review-list";
 import { withShift } from "./shift";
 import { SidebarButtons } from "./sidebar-buttons";
 import { groupBar, rowBar } from "./sidebar-keys";
@@ -65,9 +67,27 @@ export interface StopHandlers {
   onHold: (stop: SidebarStop) => void;
 }
 
+interface PendingProps {
+  count: number;
+  styles: Styles;
+  theme: PluginTheme;
+}
+
+// How many review comments are pending on the file, after its path, if any are.
+function Pending({ count, styles, theme }: PendingProps): ReactElement | null {
+  return count === 0 ? null : (
+    <View accessibilityLabel={pendingLabel(count)} style={styles.pending}>
+      <Icon name="MessageSquare" size={12} color={theme.colors.foregroundMuted} />
+      <Text style={styles.pendingCount}>{count}</Text>
+    </View>
+  );
+}
+
 interface FileRowProps extends Omit<StopHandlers, "onHeadingKey"> {
   group: GroupName;
   path: string;
+  // How many review comments are pending on its diff.
+  pending: number;
   // What's open, as the row shows it.
   open: Open | undefined;
   controls: Controls;
@@ -80,6 +100,7 @@ interface FileRowProps extends Omit<StopHandlers, "onHeadingKey"> {
 function RowOfFile({
   group,
   path,
+  pending,
   open,
   onPress,
   onRowKey,
@@ -140,7 +161,9 @@ function RowOfFile({
         }}
         {...reveal}
       >
-        <FileLabel path={path} style={[styles.path, look === "plain" && styles.dimmedPath]} />
+        <FileLabel path={path} style={[styles.path, look === "plain" && styles.dimmedPath]}>
+          <Pending count={pending} styles={styles} theme={theme} />
+        </FileLabel>
       </Pressable>
       <SidebarButtons
         {...actions}
@@ -270,6 +293,8 @@ interface GroupSectionProps {
   onToggle: () => void;
   // What its heading and its files' rows hear things with.
   stops: StopHandlers;
+  // How many review comments are pending on each file's diff, by its key.
+  pending: ReadonlyMap<string, number>;
   controls: Controls;
   theme: PluginTheme;
 }
@@ -282,6 +307,7 @@ export function GroupSection({
   expanded,
   onToggle,
   stops,
+  pending,
   controls,
   theme,
 }: GroupSectionProps): ReactElement {
@@ -307,6 +333,7 @@ export function GroupSection({
             key={path}
             group={group.name}
             path={path}
+            pending={pendingOn(pending, { group: group.name, path })}
             open={rowOpen(open, group.name, path)}
             {...stops}
             controls={controls}

@@ -43,6 +43,8 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
     path: { fontSize: fonts.text, color: theme.colors.foreground },
     // As Paseo's Changes tab dims a file's name while it isn't hovered or selected.
     dimmedPath: { opacity: 0.76 },
+    pending: { flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 0 },
+    pendingCount: { fontSize: fonts.small, color: theme.colors.foregroundMuted },
     plain: {},
     revealed: { backgroundColor: theme.colors.surface1 },
     open: { backgroundColor: theme.colors.surface2 },

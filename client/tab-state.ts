@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { reviewComment } from "./comments";
 import type { GroupName } from "./groups";
 import { defaultWidth } from "./resize";
 
@@ -13,12 +14,15 @@ const open = z.union([
 ]);
 
 // What the panel keeps of each tab across reloads: the file list's width, what's open, if anything,
-// the groups collapsed and the filter. A tab kept with only the width has the rest as a tab starts.
+// the groups collapsed, the filter, the review comments pending and the message they're to be sent
+// with. A tab kept with only the width has the rest as a tab starts.
 export const tabState = z.object({
   fileListWidth: z.number(),
   open: open.nullable().default(null),
   collapsed: z.array(group).default([]),
   filter: z.string().default(""),
+  comments: z.array(reviewComment).default([]),
+  message: z.string().default(""),
 });
 
 export type TabState = z.infer<typeof tabState>;

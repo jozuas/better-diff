@@ -1,6 +1,10 @@
 {
   "$schema": "./node_modules/knip/schema.json",
-  "entry": ["index.{client,server}.{ts,tsx}!", "test/stryker-runner.ts"],
+  "entry": [
+    "index.{client,server}.{ts,tsx}!",
+    "test/stryker-runner.ts",
+    "e2e/agent/index.server.ts"
+  ],
   "project": [
     "**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}!",
     "!vitest.setup.ts!",

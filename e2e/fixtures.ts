@@ -5,6 +5,10 @@ import { expect, test as base } from "@playwright/test";
 import { z } from "zod";
 
 import { inRepository } from "../test/repository";
+import { sendRequest, startAgent } from "./agents";
+import type { Agents } from "./agents";
+import { hold, read } from "./messages";
+import type { Held } from "./messages";
 import { addressOf, paseoUi, pluginId } from "./paseo";
 import type { Daemon } from "./paseo";
 
@@ -45,6 +49,9 @@ interface App {
   // gives is called, so the panel lists none until then, whether it asks before or after. Before
   // openPanel.
   holdList: () => Promise<() => void>;
+  // Keeps each message the page sends an agent from reaching the daemon until the release it gives
+  // is called, as if they were sent until then, and gives how many it's kept. Before openPanel.
+  holdSends: () => Promise<Held>;
 }
 
 // pageErrors and pluginLogs check each test, and give it nothing.
@@ -57,6 +64,7 @@ interface Fixtures extends Record<"pageErrors" | "pluginLogs", void> {
   // daemon isn't left watching a directory that's gone.
   workspace: string;
   app: App;
+  agents: Agents;
 }
 
 const waitRequest = z.object({
@@ -99,22 +107,6 @@ const rpcResponse = z.object({
     payload: z.object({ requestId: z.string() }),
   }),
 });
-
-// A message between the page and the daemon, as the schema reads it, if it does. Text that isn't
-// JSON doesn't.
-function read<Message>(schema: z.ZodType<Message>, message: string | Buffer): Message | undefined {
-  const text = z.string().safeParse(message);
-
-  if (!text.success) {
-    return undefined;
-  }
-
-  try {
-    return schema.safeParse(JSON.parse(text.data)).data;
-  } catch {
-    return undefined;
-  }
-}
 
 async function show(page: Page, path: string): Promise<void> {
   // A fresh browser sent straight to a deep link lands on /open-project, and one sent there before
@@ -290,6 +282,26 @@ export const test = base.extend<Fixtures>({
       },
       holdAction: holdingFirst(actionRequest),
       holdList: holdingFirst(listRequest),
+      holdSends: async () => {
+        const held = await hold(page, sendRequest);
+
+        return held;
+      },
+    });
+  },
+
+  agents: async ({ daemon, workspace }, provide, testInfo) => {
+    await provide({
+      start: async (title) => {
+        const agent = await startAgent(
+          daemon,
+          workspace,
+          title,
+          testInfo.outputPath(`${title}.jsonl`),
+        );
+
+        return agent;
+      },
     });
   },
 

@@ -75,6 +75,27 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
     new: { borderLeftWidth: 1, borderColor: theme.colors.border },
     // Where a side has no line level with the other's.
     filler: { flex: 1, backgroundColor: theme.colors.surface1 },
+    // What starts a comment on the line the pointer is over, at the start of its numbers, where they
+    // leave room, and clear of its text, which a selection starts in. Like the numbers, it's no part
+    // of the text a selection of lines has.
+    comment: {
+      position: "absolute",
+      userSelect: "none",
+      top: 1,
+      left: 2,
+      width: fonts.codeLine - 2,
+      height: fonts.codeLine - 2,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 4,
+      backgroundColor: theme.colors.accent,
+    },
+    commentPlus: {
+      fontSize: fonts.code + 2,
+      lineHeight: fonts.codeLine - 2,
+      fontWeight: "700",
+      color: theme.colors.accentForeground,
+    },
   });
 }
 

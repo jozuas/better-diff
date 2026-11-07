@@ -81,3 +81,39 @@ export function passAddress(daemon: Daemon, started: string): void {
 export function addressOf(daemon: Daemon): Address {
   return address.parse(JSON.parse(z.string().parse(process.env[variableOf(daemon)])));
 }
+
+// The plugin whose provider's agents the tests send review comments to, and that provider.
+export const testAgent = "better-diff-test-agent";
+
+const providers = z.array(z.object({ provider: z.string(), status: z.string() }));
+
+async function testAgentAvailable(daemon: Daemon): Promise<boolean> {
+  const listed = await paseoUi(daemon, ["paseo", "provider", "ls", "--json"]);
+
+  return providers
+    .parse(JSON.parse(listed))
+    .some(({ provider, status }) => provider === testAgent && status === "available");
+}
+
+// Waits, up to `tries` half seconds, for the test agent's provider to be available, as it is once
+// its plugin has loaded.
+async function untilAvailable(daemon: Daemon, tries: number): Promise<void> {
+  if (await testAgentAvailable(daemon)) {
+    return;
+  }
+
+  if (tries === 0) {
+    throw new Error("The test agent's provider didn't become available.");
+  }
+
+  await new Promise((resolve) => {
+    setTimeout(resolve, 500);
+  });
+  await untilAvailable(daemon, tries - 1);
+}
+
+// Installs the plugin of the agents that note what they're sent, e2e/agent, on the daemon.
+export async function addTestAgent(daemon: Daemon): Promise<void> {
+  await paseoUi(daemon, ["paseo", "plugin", "add", join(root, "e2e", "agent"), "--id", testAgent]);
+  await untilAvailable(daemon, 60);
+}

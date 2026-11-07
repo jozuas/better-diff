@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { pointedHunk } from "./pointed";
+import { pointedHunk, pointedLine } from "./pointed";
 import type { PointedHunk } from "./pointed";
 
 // The pointer coming over a hunk, by its index, or leaving one. Few hunks, so it often comes over
@@ -90,4 +90,33 @@ test("a hunk's handlers are the same each time, and another hunk's others", () =
 
   expect(pointed.pointer(0)).toBe(first);
   expect(pointed.pointer(1)).not.toBe(first);
+});
+
+test("a line's handlers are the same each time, and another line's, or the line's on another side, others", () => {
+  const pointed = pointedLine();
+  const first = pointed.pointer({ index: 0, side: "old" });
+
+  expect(pointed.pointer({ index: 0, side: "old" })).toBe(first);
+  expect(pointed.pointer({ index: 1, side: "old" })).not.toBe(first);
+  expect(pointed.pointer({ index: 0, side: "new" })).not.toBe(first);
+  expect(pointed.pointer({ index: 0, side: undefined })).not.toBe(first);
+});
+
+test("the line is the one the pointer last came over, the same each time it comes over it, until it leaves one", () => {
+  const pointed = pointedLine();
+  const heard: unknown[] = [];
+
+  pointed.subscribe(() => {
+    heard.push(pointed.line());
+  });
+  pointed.pointer({ index: 2, side: undefined }).onPointerEnter();
+
+  const line = pointed.line();
+
+  pointed.pointer({ index: 2, side: undefined }).onPointerEnter();
+  pointed.pointer({ index: 2, side: undefined }).onPointerLeave();
+
+  expect(line).toStrictEqual({ index: 2, side: undefined });
+  expect(heard).toStrictEqual([line, undefined]);
+  expect(heard[0]).toBe(line);
 });

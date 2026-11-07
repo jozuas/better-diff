@@ -212,7 +212,7 @@ export function Menu({ label, point, sections, onClose, theme }: MenuProps): Rea
 
             return (
               <Item
-                key={item.label}
+                key={at}
                 {...item}
                 onPress={() => {
                   onClose();

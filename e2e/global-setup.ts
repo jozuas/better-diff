@@ -2,7 +2,7 @@ import { rmSync } from "node:fs";
 
 import type { FullConfig } from "@playwright/test";
 
-import { daemons, homeOf, paseoUi, passAddress } from "./paseo";
+import { addTestAgent, daemons, homeOf, paseoUi, passAddress } from "./paseo";
 import type { Daemon } from "./paseo";
 
 // devenv's Chromium is nixpkgs' build for one version of Playwright, and another version looks
@@ -22,12 +22,13 @@ async function stop(daemon: Daemon): Promise<void> {
 }
 
 // Starts the daemon fresh, so nothing carries over from an earlier run or from checks with the
-// paseo-ui skill, and passes the tests its address.
+// paseo-ui skill, with the test agent's plugin, and passes the tests its address.
 async function start(daemon: Daemon): Promise<void> {
   // A run that was killed leaves its daemon running.
   await stop(daemon);
   rmSync(homeOf(daemon), { recursive: true, force: true });
   passAddress(daemon, await paseoUi(daemon, ["start"]));
+  await addTestAgent(daemon);
 }
 
 // The tests' own daemons, for this run.

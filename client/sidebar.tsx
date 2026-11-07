@@ -136,6 +136,8 @@ function useFileListWidth(
 interface SidebarProps extends SidebarState {
   directory: string;
   changes: UseQueryResult<Listed>;
+  // How many review comments are pending on each file's diff, by its key.
+  pending: ReadonlyMap<string, number>;
   controls: Controls;
   // Shows the changes as they are now, as once a file's ignored.
   refresh: () => Promise<void>;
@@ -159,6 +161,7 @@ export function Sidebar({
   controls,
   refresh,
   panelWidth,
+  pending,
   theme,
 }: SidebarProps): ReactElement {
   const fileList = useId();
@@ -191,6 +194,7 @@ export function Sidebar({
               controls={controls}
               onCopy={onCopy}
               ignoring={ignoring}
+              pending={pending}
               theme={theme}
             />
           )}

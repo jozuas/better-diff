@@ -1,5 +1,5 @@
 import { Icon } from "@getpaseo/plugin/client/ui";
-import type { ReactElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useContext, useMemo } from "react";
 import type { StyleProp, TextStyle } from "react-native";
 import { StyleSheet, Text, View } from "react-native";
@@ -24,10 +24,12 @@ function useStyles(fonts: FontSizes) {
 interface FileLabelProps {
   path: string;
   style: StyleProp<TextStyle>;
+  // What follows the path.
+  children?: ReactNode;
 }
 
 // A file's path, after the icon Paseo's Changes tab draws for the file.
-export function FileLabel({ path, style }: FileLabelProps): ReactElement {
+export function FileLabel({ path, style, children }: FileLabelProps): ReactElement {
   const fonts = useContext(FontSizesContext);
   const styles = useStyles(fonts);
   const icon = useMemo(() => fileIcon(path), [path]);
@@ -40,6 +42,7 @@ export function FileLabel({ path, style }: FileLabelProps): ReactElement {
       <Text numberOfLines={1} style={[styles.path, style]}>
         {path}
       </Text>
+      {children}
     </View>
   );
 }

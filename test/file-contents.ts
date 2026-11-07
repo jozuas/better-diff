@@ -97,3 +97,16 @@ export const fileVersions: fc.Arbitrary<FileVersions> = fc
     index: version(lines, finalNewline, fates, "index"),
     worktree: version(lines, finalNewline, fates, "worktree"),
   }));
+
+// The version's lines, as a diff's text has them, without their newlines. None for a version without
+// the file.
+export function versionLines(contents: Buffer | undefined): string[] {
+  // Latin-1 reads each byte as one character, so bytes that aren't UTF-8 survive until each line is
+  // read as UTF-8, as a diff's lines are.
+  const lines = (contents ?? Buffer.alloc(0)).toString("latin1").split("\n");
+
+  // What follows the last newline is a last line without one, unless it's empty.
+  return (lines.at(-1) === "" ? lines.slice(0, -1) : lines).map((line) =>
+    Buffer.from(line, "latin1").toString("utf8"),
+  );
+}
