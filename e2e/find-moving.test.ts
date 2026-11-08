@@ -53,6 +53,27 @@ test("with no current match, typing in the find bar makes current the first matc
   await expect(line(page, "needle 150")).toBeInViewport();
 });
 
+test("once the current match is scrolled out of view, typing in the find bar makes current the first match at or after the line at the top of the view", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", linesWithNeedles(200, [5, 100, 150]));
+
+  await app.openPanel();
+  await openFind(page, "line 2");
+  await findInput(page).pressSequentially("needle");
+
+  await expect(page.getByText("1 of 3", { exact: true })).toBeVisible();
+
+  await scrollToTop(page, "line 120");
+  await expect(line(page, "needle 5")).not.toBeInViewport();
+  await findInput(page).pressSequentially(" 1");
+
+  await expect(page.getByText("2 of 2", { exact: true })).toBeVisible();
+  await expect(line(page, "needle 150")).toBeInViewport();
+});
+
 test("Enter and Shift+Enter in the find bar, its ↓ and ↑ buttons, and ⌘G, or F3 elsewhere, move to the next match or the one before, round from the last to the first, and each shows", async ({
   app,
   page,

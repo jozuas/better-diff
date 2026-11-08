@@ -56,7 +56,27 @@ test("the find bar starts closed, with nothing typed, Match case off, and nothin
   expect(find.state()).toMatchObject({ open: true, text: "", count: 0, current: undefined });
 });
 
-test("once another view shows, its first match is current, and typing makes current the first at or after its top", () => {
+test("once another view shows, its first match is current, and typing makes current the first at or after it while the view shows it", () => {
+  const { find, revealed, add } = testView();
+  const remove = add({ index: 0, sections: [["a a a"]] }, "one");
+
+  find.open();
+  find.search("a");
+  stepTimes(find, 1, 2);
+  remove();
+  add({ index: 0, sections: [["a", "a"]], offsets: [[0, 20]] }, "two");
+  revealed.length = 0;
+
+  expect(find.state()).toMatchObject({ count: 2, current: 0 });
+  expect(revealed).toStrictEqual([]);
+
+  find.search("a");
+
+  expect(find.state()).toMatchObject({ count: 2, current: 0 });
+  expect(revealed).toStrictEqual([{ index: 0, section: 0, line: 0 }]);
+});
+
+test("once another view shows, typing makes current the first match at or after its top once its first match is scrolled out of it", () => {
   const { find, revealed, add } = testView();
   const remove = add({ index: 0, sections: [["a a a"]] }, "one");
 

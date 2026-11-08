@@ -43,28 +43,42 @@ function lineOf(id: string): PageElement | null {
   return elementOf(id) ?? elementOf(unfocusedId(id));
 }
 
+// How far the view with the id `view` scrolls to show the line with the id, below the `margin` at
+// its top, as revealDistance has it, if the page has the line.
+function distanceTo(view: string, id: string, margin: number): number | undefined {
+  const scroller = elementOf(view);
+  const line = lineOf(id);
+
+  if (scroller === null || line === null) {
+    return undefined;
+  }
+
+  const { top, height } = line.getBoundingClientRect();
+
+  return revealDistance(
+    top - scroller.getBoundingClientRect().top,
+    height,
+    scroller.clientHeight,
+    margin,
+  );
+}
+
 // The lines of the view with the id `view` on the page.
 function linePage(view: string): LinePage {
   return {
     reveal: (id, margin) => {
       const scroller = elementOf(view);
-      const line = lineOf(id);
+      const distance = distanceTo(view, id, margin);
 
-      if (scroller === null || line === null) {
+      if (scroller === null || distance === undefined) {
         return false;
       }
 
-      const { top, height } = line.getBoundingClientRect();
-
-      scroller.scrollTop += revealDistance(
-        top - scroller.getBoundingClientRect().top,
-        height,
-        scroller.clientHeight,
-        margin,
-      );
+      scroller.scrollTop += distance;
 
       return true;
     },
+    inView: (id, margin) => distanceTo(view, id, margin) === 0,
     offsetOf: (id) => {
       const scroller = elementOf(view);
       const line = lineOf(id);

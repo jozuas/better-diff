@@ -28,6 +28,8 @@ function onPage(
       return offsets.has(id);
     },
     offsetOf: (id) => offsets.get(id),
+    // Shows a line whole that's at or below the margin, as far down as it goes.
+    inView: (id, at) => (offsets.get(id) ?? -1) >= at,
   };
 
   const file = findableLines({
@@ -100,6 +102,16 @@ function belowMargin(
   return offset === undefined ? undefined : offset - margin;
 }
 
+// Whether the page shows the line whole, below the bars stuck at the view's top: on a fake page,
+// whether it has it at or below them.
+function shownWhole(
+  line: LineOnPage,
+  offsets: ReadonlyMap<string, number>,
+  margin: number,
+): boolean {
+  return (belowMargin(line, offsets, margin) ?? -1) >= 0;
+}
+
 test("the find bar shows a line of a diff on the page, or once the entire file has rendered the lines around it, if the page hasn't it yet", () => {
   fc.assert(
     fc.property(linesOnPage, ({ hunks, unchanged, margin, offsets, lines }) => {
@@ -126,6 +138,18 @@ test("a line of a diff is as far below what stays at the top of the view as the 
   );
 });
 
+test("a line of a diff is in view as the page shows it whole, below the bars stuck at the view's top, and not while the page hasn't it", () => {
+  fc.assert(
+    fc.property(linesOnPage, ({ hunks, unchanged, margin, offsets, lines }) => {
+      const { file } = onPage(hunks, unchanged, offsets, margin);
+
+      expect(lines.map(({ section, line }) => file.inView(section, line))).toStrictEqual(
+        lines.map((line) => shownWhole(line, offsets, margin)),
+      );
+    }),
+  );
+});
+
 // The offsets the file gives the lines, by section and index, where it gives any.
 function offsetsOf(file: FindableFile, lines: readonly [number, number][]): number[] {
   return lines.flatMap(([section, line]) => file.offsetOf(section, line) ?? []);
@@ -138,7 +162,7 @@ function pastTheEnds(hunks: Hunks, unchanged: Unchanged): [number, number][] {
   );
 }
 
-test("past the last line of a section of unchanged lines, there's nothing to show nor be below the view's top", () => {
+test("past the last line of a section of unchanged lines, there's nothing to show, be below the view's top, nor be in view", () => {
   fc.assert(
     fc.property(linesOnPage, ({ hunks, unchanged, margin, offsets }) => {
       const { file, events } = onPage(hunks, unchanged, offsets, margin);
@@ -150,6 +174,7 @@ test("past the last line of a section of unchanged lines, there's nothing to sho
 
       expect(events).toStrictEqual([]);
       expect(offsetsOf(file, ends)).toStrictEqual([]);
+      expect(ends.filter(([section, line]) => file.inView(section, line))).toStrictEqual([]);
     }),
   );
 });
@@ -161,6 +186,7 @@ test("a diff's lines are a file the find bar finds in, at its index in its view,
   expect(file).toMatchObject({ view: "view", index: 1, sections: [[]], collapsed: false });
   expect(collapsed).toMatchObject({ view: "view", index: 2, sections: [], collapsed: true });
   expect(collapsed.offsetOf(0, 0)).toBeUndefined();
+  expect(collapsed.inView(0, 0)).toBe(false);
   expect(() => {
     collapsed.reveal(0, 0);
   }).not.toThrow();

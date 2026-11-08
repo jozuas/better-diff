@@ -75,7 +75,7 @@ export interface Find {
   open: () => void;
   // Closes the find bar, which then finds nothing until it opens again.
   close: () => void;
-  // Finds the text, from the current match, or else the top of the view.
+  // Finds the text, from the current match while the view shows it, or else the top of the view.
   search: (text: string) => void;
   setMatchCase: (matchCase: boolean) => void;
   // Moves to the next match, 1, or the one before, -1, round from either end, and shows it.
@@ -199,18 +199,23 @@ export function findStore(): Find {
   function fromCurrent(): void {
     const { matches, match } = foundNow();
 
-    if (position !== undefined && shows(position)) {
-      moveTo(match);
-    } else {
+    if (position === undefined) {
       const top = matches.findIndex(
         ({ file, section, line }) => (file.offsetOf(section, line) ?? -1) >= 0,
       );
 
       moveTo(matches[Math.max(0, top)]);
+    } else {
+      moveTo(match);
     }
   }
 
+  // Finds what's typed again: from the match shown as current while the view shows it, and else, as
+  // once it's scrolled out of the view, from the top of the view.
   function searchAgain(): void {
+    const { match } = foundNow();
+
+    position = match?.file.inView(match.section, match.line) === true ? match : undefined;
     search = finder(text, matchCase);
 
     for (const entry of entries.values()) {

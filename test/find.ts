@@ -23,7 +23,8 @@ export function placesOf(line: string, text: string): TextRange[] {
 
 // What a test's view shows of a file: its index among the view's files, its sections' lines,
 // whether it's collapsed, and how far below what stays at the top of the view each line's top is,
-// by section, where the page has it.
+// by section, where the page has it. The view shows a line whose top is at or below what stays at
+// its top, and every line of a file without offsets.
 export interface Shown {
   index: number;
   sections: readonly (readonly string[])[];
@@ -66,6 +67,8 @@ export function testView(): TestView {
           revealed.push({ index: shown.index, section, line });
         },
         offsetOf: (section, line) => shown.offsets?.[section]?.[line],
+        inView: (section, line) =>
+          shown.offsets === undefined || (shown.offsets[section]?.[line] ?? -1) >= 0,
       }),
   };
 }
@@ -157,6 +160,21 @@ export function firstAtTop(files: readonly Shown[], places: readonly Place[]): n
   );
 
   return places.length === 0 ? undefined : Math.max(0, top);
+}
+
+// The index of the first of the places at or after the one that was current, while the view shows
+// it, in the files with their offsets, or else of the first at or after the top of the view, while
+// there are any.
+export function firstTypedFrom(
+  files: readonly Shown[],
+  places: readonly Place[],
+  was: Place | undefined,
+): number | undefined {
+  const offsets = new Map(files.map(({ index, offsets: those }) => [index, those]));
+
+  const shown = was !== undefined && (offsets.get(was.index)?.[was.section]?.[was.line] ?? -1) >= 0;
+
+  return shown ? firstFrom(places, was) : firstAtTop(files, places);
 }
 
 // Each section of each of the files, by the id of the file's diff and the section's index.

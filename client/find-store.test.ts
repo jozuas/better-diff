@@ -6,6 +6,7 @@ import {
   firstAtTop,
   firstFrom,
   firstOf,
+  firstTypedFrom,
   foundIn,
   lineAt,
   linesOf,
@@ -136,7 +137,7 @@ test("closed, the find bar finds nothing and counts no collapsed files, and open
   );
 });
 
-test("typing makes the current match the first at or after the one that was, or else the first, and shows it", () => {
+test("typing makes the current match the first at or after the one that was, while the view shows it, or else the first, and shows it", () => {
   fc.assert(
     fc.property(shownFiles, storeText, storeText, fc.nat(), (files, first, then, steps) => {
       const { find, revealed } = searched(files, first);
@@ -159,6 +160,51 @@ test("typing makes the current match the first at or after the one that was, or 
       examples: [
         [[{ index: 0, sections: [["ab ab"]] }], "b", "a", 1],
         [[{ index: 0, sections: [["a b"], ["b"]] }], "b", "a", 1],
+      ],
+    },
+  );
+});
+
+test("typing makes current the first match at or after the one that was while the view shows it, and else, as once it's scrolled out of the view, the first at or after the top of the view, and shows it", () => {
+  fc.assert(
+    fc.property(
+      scrolledFiles,
+      storeText,
+      storeText,
+      fc.nat(),
+      ({ files, scroll, rendered }, first, then, steps) => {
+        const scrolled = withOffsets(files, scroll, rendered, 20);
+        const { find, revealed } = searched(scrolled, first);
+        const firstPlaces = placesIn(files, first);
+
+        stepTimes(find, 1, steps % (firstPlaces.length + 1));
+
+        const was = currentOf(find, firstPlaces);
+
+        revealed.length = 0;
+        find.search(then);
+
+        const places = placesIn(files, then);
+        const expected = firstTypedFrom(scrolled, places, was);
+
+        expect(find.state().current).toBe(expected);
+        expect(revealed).toStrictEqual(lineAt(places, expected));
+      },
+    ),
+    {
+      examples: [
+        [
+          { files: [{ index: 0, sections: [["ab", "b", "ab"]] }], scroll: 20, rendered: [] },
+          "a",
+          "b",
+          0,
+        ],
+        [
+          { files: [{ index: 0, sections: [["ab", "b", "ab"]] }], scroll: 0, rendered: [] },
+          "a",
+          "b",
+          1,
+        ],
       ],
     },
   );

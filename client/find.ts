@@ -124,6 +124,8 @@ export interface FindableFile {
   reveal: (section: number, line: number) => void;
   // How far below what stays at the top of the view the line's top is, while the page has it.
   offsetOf: (section: number, line: number) => number | undefined;
+  // Whether the view shows the line whole, below what stays at its top.
+  inView: (section: number, line: number) => boolean;
 }
 
 // A view's lines on the page, by their elements' ids.
@@ -134,6 +136,9 @@ export interface LinePage {
   reveal: (id: string, margin: number) => boolean;
   // How far below the top of the view the line's top is, if the page has it.
   offsetOf: (id: string) => number | undefined;
+  // Whether the view shows the line whole, below the `margin` at its top that bars stuck there
+  // take. False if the page hasn't the line.
+  inView: (id: string, margin: number) => boolean;
 }
 
 // What a diff at the container shows, in the view at the index among its files, as the find bar
@@ -183,6 +188,12 @@ export function findableLines({
 
       return offset === undefined ? undefined : offset - margin;
     },
+    inView: (section, line) => {
+      const { unchanged, margin } = now();
+      const shown = sectionLine(container, unchanged, section, line);
+
+      return shown !== undefined && page.inView(shown.id, margin);
+    },
   };
 }
 
@@ -196,5 +207,6 @@ export function collapsedFile(view: string, index: number): FindableFile {
     collapsed: true,
     reveal: () => {},
     offsetOf: () => {},
+    inView: () => false,
   };
 }
