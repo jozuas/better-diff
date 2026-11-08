@@ -109,10 +109,14 @@ export interface Hidden {
   collapsed: readonly GroupName[];
 }
 
-// The file the sidebar lists first, with what it hides hidden, which opens once the changes are
-// first listed, if it lists any.
-function firstFile(changes: Changes, { filter, collapsed }: Hidden): OpenFile | undefined {
-  const [first] = order.flatMap((group) =>
+// The file the sidebar lists first, of the groups', with what it hides hidden, which opens once the
+// changes are first listed, if it lists any.
+function firstFile(
+  changes: Changes,
+  { filter, collapsed }: Hidden,
+  listing: readonly GroupName[] = order,
+): OpenFile | undefined {
+  const [first] = listing.flatMap((group) =>
     collapsed.includes(group)
       ? []
       : changes[group].flatMap((path) => (matches(path, filter) ? [{ group, path }] : [])),
@@ -287,20 +291,23 @@ function reopened(shown: Open | undefined, changes: Changes, hidden: Hidden): Op
   );
 }
 
-// The file of the group that opens once the files at the paths leave it, from its list before and
-// after, of those the sidebar lists under the filter: the next file in the list before that it still
-// lists, after the last of them, or else the closest one before it, or else the first one it lists
-// now. None if it lists none. A group collapsed is moved on in all the same, as it hides its files
-// only to tidy the sidebar, while the filter picks the files worked on.
+// The file that opens once the files at the paths leave their group, from the lists before and
+// after, of those the sidebar lists under the filter: the next file in the group's list before that
+// it still lists, after the last of them, or else the closest one before it, or else the first one
+// it lists now. A group collapsed is moved on in all the same, as it hides its files only to tidy
+// the sidebar, while the filter picks the files worked on. Once the group lists none, the first file
+// the sidebar lists in a group after it, with what it hides hidden, or else the first it lists, as
+// on opening Better Diff. None if it lists none.
 function movedOn(
   group: GroupName,
   paths: readonly string[],
-  previous: readonly string[],
-  after: readonly string[],
-  filter: string,
+  before: Changes,
+  after: Changes,
+  hidden: Hidden,
 ): OpenFile | undefined {
+  const previous = before[group];
   const last = Math.max(...paths.map((path) => previous.indexOf(path)));
-  const listed = after.filter((path) => matches(path, filter));
+  const listed = after[group].filter((path) => matches(path, hidden.filter));
 
   // Searched after the files that follow the last one, which are gone by then, the reversed list
   // finds the closest one before it.
@@ -308,7 +315,9 @@ function movedOn(
     (candidate) => listed.includes(candidate),
   );
 
-  return path === undefined ? undefined : { group, path };
+  return path === undefined
+    ? (firstFile(after, hidden, order.slice(order.indexOf(group) + 1)) ?? firstFile(after, hidden))
+    : { group, path };
 }
 
 // What to show once the changes are listed, from what was open and the lists before, if they were
@@ -317,7 +326,8 @@ function movedOn(
 // that, as after an action, the open group, or the open file or those of the files selected that
 // its group still lists. Otherwise the next file in the group's list before that it still lists
 // under the filter, after the last of them, or else the closest one before it, or else the first
-// one it lists now. None if it lists none, or nothing was open.
+// one it lists now, or once it lists none, the first file the sidebar lists in a group after it, or
+// else the first it lists. None if it lists none, or nothing was open.
 export function openAfter(
   open: Open | undefined,
   before: Changes | undefined,
@@ -332,22 +342,21 @@ export function openAfter(
     return undefined;
   }
 
-  const listed = after[open.group];
-  const kept = stillOpen(open, listed);
+  const kept = stillOpen(open, after[open.group]);
 
   if (kept !== undefined) {
     return kept;
   }
 
-  return movedOn(open.group, openPaths(open), before[open.group], listed, hidden.filter);
+  return movedOn(open.group, openPaths(open), before, after, hidden);
 }
 
 // The file that opens once the open file leaves its group, as after an action on it, whose diff is
-// worth reading before then. None unless a file is open, not a group or files selected, and its
-// group lists another under the filter.
+// worth reading before then. None unless a file is open, not a group or files selected, and there's
+// another to move on to.
 export function fileAfter(
   open: Open | undefined,
-  filter: string,
+  hidden: Hidden,
   changes?: Changes,
 ): OpenFile | undefined {
   if (open?.path === undefined || changes === undefined) {
@@ -355,13 +364,12 @@ export function fileAfter(
   }
 
   const { group, path } = open;
-  const listed = changes[group];
 
   return movedOn(
     group,
     [path],
-    listed,
-    listed.filter((other) => other !== path),
-    filter,
+    changes,
+    { ...changes, [group]: changes[group].filter((other) => other !== path) },
+    hidden,
   );
 }

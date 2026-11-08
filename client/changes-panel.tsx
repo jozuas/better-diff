@@ -242,9 +242,11 @@ export function Changes({
   const focus = useMemo(() => keyboardFocus(), []);
   const where = { directory, hideWhitespace };
 
+  const { filter, collapsed } = sidebar;
+
   const next = useMemo(
-    () => fileAfter(sidebar.open, sidebar.filter, changes.data),
-    [sidebar.open, sidebar.filter, changes.data],
+    () => fileAfter(sidebar.open, { filter, collapsed }, changes.data),
+    [sidebar.open, filter, collapsed, changes.data],
   );
 
   const readVersion = useRpc(versionRpc);

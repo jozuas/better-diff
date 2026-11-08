@@ -216,21 +216,6 @@ test("moves only within the open file's group", () => {
   ).toStrictEqual({ group: "staged", path: "b" });
 });
 
-test("opens no file once the group lists none, whatever the others list", () => {
-  expect(
-    openAfter(
-      { group: "modified", path: "a" },
-      modified("a"),
-      {
-        modified: [],
-        untracked: ["b"],
-        staged: ["a"],
-      },
-      nothingHidden,
-    ),
-  ).toBeUndefined();
-});
-
 test("opens no file when none was open", () => {
   expect(openAfter(undefined, modified("a"), modified("a", "b"), nothingHidden)).toBeUndefined();
 });
@@ -255,16 +240,6 @@ test("opens a file the open one's group lists after the action, if it lists any"
         expect(listed).toContain(next?.path);
       },
     ),
-  );
-});
-
-test("opens no file once the open one's group lists none", () => {
-  fc.assert(
-    fc.property(groupName, filePath, changes, changes, (group, path, before, after) => {
-      expect(
-        openAfter({ group, path }, before, { ...after, [group]: [] }, nothingHidden),
-      ).toBeUndefined();
-    }),
   );
 });
 

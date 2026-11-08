@@ -192,3 +192,28 @@ test("in a group's view, once the file at the top of the view leaves the group, 
   await expect(line(page, "b 210 changed")).toHaveCount(0);
   expect(await topOf(page, "c 10 changed")).toBe(y + below);
 });
+
+test("once the open file's group has no file left, the view moves on to the first file the sidebar lists in a group below, or else to the first it lists", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "changed\n");
+  writeFile(repository, "b.txt", "untracked\n");
+
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "b.txt");
+  await button(page, "Stage").click();
+
+  await expect(page.getByRole("heading", { name: "STAGED b.txt" })).toBeVisible();
+  await expect(line(page, "untracked")).toBeVisible();
+  expect(runGit(repository, ["status", "--porcelain"])).toBe(" M a.txt\nA  b.txt\n");
+
+  await button(page, "Unstage").click();
+
+  await expect(page.getByRole("heading", { name: "MODIFIED a.txt" })).toBeVisible();
+  await expect(line(page, "changed")).toBeVisible();
+  expect(runGit(repository, ["status", "--porcelain"])).toBe(" M a.txt\n?? b.txt\n");
+});

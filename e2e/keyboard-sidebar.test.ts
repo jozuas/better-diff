@@ -133,7 +133,7 @@ test("`/` moves focus to the filter from anywhere in the panel, where ↓ and En
   await expect(fileBar(page, "MODIFIED a.txt")).toBeVisible();
 });
 
-test("Shift+Enter and Shift+Backspace in a file's row act on the file as the row's buttons do, and focus moves to the row that takes its place", async ({
+test("Shift+Enter and Shift+Backspace in a file's row act on the file as the row's buttons do, and focus moves to the row of the file the view moves on to, in a group below once its group has no file left", async ({
   app,
   page,
   repository,
@@ -154,8 +154,29 @@ test("Shift+Enter and Shift+Backspace in a file's row act on the file as the row
   await page.keyboard.press("Shift+Backspace");
 
   await expect(heading(page, "MODIFIED FILES (0)")).toBeVisible();
-  await expect(heading(page, "UNTRACKED FILES (1)")).toBeFocused();
+  await expect(fileBar(page, "UNTRACKED c.txt")).toBeVisible();
+  await expect(button(page, "c.txt")).toBeFocused();
   expect(status(repository)).toBe("M  a.txt\n?? c.txt\n");
+});
+
+test("once an action runs from a file's row and no file is left for the view to move on to, focus moves to the row or heading that takes its place", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "changed a\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await page.keyboard.press("Shift+Backspace");
+  await expect(button(page, "Confirm discard?")).toBeVisible();
+  await page.keyboard.press("Shift+Backspace");
+
+  await expect(heading(page, "MODIFIED FILES (0)")).toBeVisible();
+  await expect(heading(page, "UNTRACKED FILES (0)")).toBeFocused();
+  expect(status(repository)).toBe("");
 });
 
 test("Shift+Enter in a selected file's row stages the selected files, and Escape there opens just that file", async ({

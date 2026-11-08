@@ -38,6 +38,32 @@ test("Enter in a hunk's bar stages the hunk, and focus moves on to the hunk that
   expect(status(repository)).toBe("M  a.txt\nM  b.txt\n");
 });
 
+test("once the open file's group has no file left, Enter moves focus on to the first hunk of the first file of a group below, so Enter stages one file after another from MODIFIED to UNTRACKED and then to STAGED", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "a\n");
+  commitAll(repository);
+  writeFile(repository, "a.txt", "changed a\n");
+  writeFile(repository, "b.txt", "b\n");
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await hunkBar(page, "a.txt").focus();
+  await page.keyboard.press("Enter");
+
+  await expect(fileBar(page, "UNTRACKED b.txt")).toBeVisible();
+  await expect(hunkBar(page, "b.txt")).toBeFocused();
+  expect(status(repository)).toBe("M  a.txt\n?? b.txt\n");
+
+  await page.keyboard.press("Enter");
+
+  await expect(fileBar(page, "STAGED a.txt")).toBeVisible();
+  await expect(hunkBar(page, "a.txt")).toBeFocused();
+  expect(status(repository)).toBe("M  a.txt\nA  b.txt\n");
+});
+
 test("Backspace in a hunk's bar discards the hunk once pressed again to confirm, held down asks only once, and Escape takes the question back", async ({
   app,
   page,
