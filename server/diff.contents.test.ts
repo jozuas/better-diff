@@ -125,6 +125,14 @@ test.each(sides)(
         examples: [
           [apart(6), "myers"],
           [apart(7), "myers"],
+          // An untracked file named `-`, which `git diff --no-index` would read from its input.
+          [
+            {
+              path: "-",
+              versions: { head: Buffer.from("a"), index: undefined, worktree: Buffer.from("a") },
+            },
+            "myers",
+          ],
         ],
       },
     );

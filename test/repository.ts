@@ -36,11 +36,19 @@ export function runGitBytes(repository: string, args: readonly string[], input =
   });
 }
 
+// The path as `git diff --no-index` reads it as a file's: it reads one named `-` from its input, as
+// it does after `--` too, and one named `./-` from the file.
+function asFile(path: string): string {
+  return path === "-" ? "./-" : path;
+}
+
 // Runs `git diff --no-index`, which exits with 1 where the files differ, and returns what it prints.
 export function diffNoIndex(repository: string, from: string, to: string): Buffer {
-  return spawnSync("git", ["--literal-pathspecs", "diff", "--no-index", "--", from, to], {
-    cwd: repository,
-  }).stdout;
+  return spawnSync(
+    "git",
+    ["--literal-pathspecs", "diff", "--no-index", "--", asFile(from), asFile(to)],
+    { cwd: repository },
+  ).stdout;
 }
 
 // For a property test whose runs each set up a repository, which takes git about 100ms.
