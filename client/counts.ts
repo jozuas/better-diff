@@ -6,14 +6,19 @@ type Diff = RpcOutput<typeof diffRpc>;
 
 const numbers = new Intl.NumberFormat("en-US");
 
-// The numbers of lines a text diff adds and removes, as GitHub shows them after a file's path.
-// None for a diff of another kind, whose label says what changed instead.
+// The numbers of lines a text diff adds and removes, as GitHub shows them after a file's path, even
+// while it's collapsed. None for a diff of another kind, or a new or deleted empty file's, whose
+// label says what changed instead.
 export function countsOf({
   kind,
+  hunks,
+  collapsed,
   added,
   removed,
-}: Pick<Diff, "kind" | "added" | "removed">): { added: string; removed: string } | undefined {
-  if (kind !== "text") {
+}: Pick<Diff, "kind" | "hunks" | "collapsed" | "added" | "removed">):
+  | { added: string; removed: string }
+  | undefined {
+  if (kind !== "text" || (hunks.length === 0 && collapsed === undefined)) {
     return undefined;
   }
 
@@ -25,7 +30,9 @@ export function countsOf({
 export function barLabel(
   status: string,
   path: string,
-  diff: Pick<Diff, "kind" | "added" | "removed" | "renamedFrom"> | undefined,
+  diff:
+    | Pick<Diff, "kind" | "hunks" | "collapsed" | "added" | "removed" | "renamedFrom">
+    | undefined,
 ): string {
   const counts = diff === undefined ? undefined : countsOf(diff);
   const renamed = diff?.renamedFrom === undefined ? undefined : `${diff.renamedFrom} →`;
