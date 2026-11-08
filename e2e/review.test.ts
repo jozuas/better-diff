@@ -128,7 +128,7 @@ test("without an agent in the workspace, the review says to start one, and can't
   await expect(sendButton(opened)).toBeDisabled();
 });
 
-test("the review is sent with the message written for the agent, with Cmd or Ctrl and Enter, and the message is empty again after", async ({
+test("the review is sent with the message written for the agent, with Enter, Shift+Enter starting a new line in it, and the message is empty again after", async ({
   agents,
   app,
   page,
@@ -145,8 +145,11 @@ test("the review is sent with the message written for the agent, with Cmd or Ctr
 
   await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
 
-  await messageBox(opened).fill("  Fix these,\nthen run the tests.\n");
-  await messageBox(opened).press("ControlOrMeta+Enter");
+  await messageBox(opened).fill("  Fix these,");
+  await messageBox(opened).press("Shift+Enter");
+  await messageBox(opened).pressSequentially("then run the tests.");
+  await messageBox(opened).press("Shift+Enter");
+  await messageBox(opened).press("Enter");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect
@@ -206,7 +209,7 @@ test("comments on lines their file's diffs no longer have stay pending, listed a
   expect(reviewer.sent()).toHaveLength(1);
 });
 
-test("the review is sent once at a time: while it's sent, Send feedback is disabled, and Cmd+Enter does nothing, though the review is closed and opened again, and a message changed meanwhile stays", async ({
+test("the review is sent once at a time: while it's sent, Send feedback is disabled, and Enter does nothing, though the review is closed and opened again, and a message changed meanwhile stays", async ({
   agents,
   app,
   page,
@@ -226,11 +229,11 @@ test("the review is sent once at a time: while it's sent, Send feedback is disab
   await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
 
   await messageBox(opened).fill("Fix this.");
-  await messageBox(opened).press("ControlOrMeta+Enter");
+  await messageBox(opened).press("Enter");
 
   await expect.poll(sends.held).toBe(1);
 
-  await messageBox(opened).press("ControlOrMeta+Enter");
+  await messageBox(opened).press("Enter");
   await messageBox(opened).fill("Fix this, and test it.");
   await page.keyboard.press("Escape");
 

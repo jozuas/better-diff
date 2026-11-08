@@ -53,7 +53,7 @@ interface MessageBoxProps {
 }
 
 // What the agent's asked with the review, which Paseo's own diff asks where it's left empty, with
-// focus once the review opens. Cmd or Ctrl with Enter sends the review.
+// focus once the review opens. Enter sends the review, as Paseo's message box sends a message.
 export function MessageBox({ message, onMessage, onSend, theme }: MessageBoxProps): ReactElement {
   const styles = useStyles(theme);
   const id = useId();

@@ -12,11 +12,22 @@ const modifiers = fc.record({
   metaKey: fc.boolean(),
 });
 
+// A key's code, but for the 229 of a key an input method takes.
+const keyCode = fc.nat({ max: 255 }).filter((code) => code !== 229);
+
+// A key an input method takes while it composes text, or once it's done, as some browsers give it.
+const composing = fc.oneof(
+  fc.record({ isComposing: fc.constant(true), keyCode }),
+  fc.constant({ isComposing: false, keyCode: 229 }),
+);
+
+const typing = fc.record({ isComposing: fc.constant(false), keyCode });
+
 test("releasing Escape cancels the comment being written, and pressing it does nothing, whatever modifiers are held", () => {
   fc.assert(
-    fc.property(modifiers, (held) => {
+    fc.property(modifiers, typing, (held, typed) => {
       expect(editorKeyUp({ ...held, key: "Escape" })).toBe("cancel");
-      expect(editorKey({ ...held, key: "Escape" })).toBeUndefined();
+      expect(editorKey({ ...held, ...typed, key: "Escape" })).toBeUndefined();
     }),
   );
 });
@@ -29,28 +40,38 @@ test("releasing any other key does nothing", () => {
   );
 });
 
-test("pressing Enter with Cmd or Ctrl saves the comment being written, and with Alt too", () => {
-  expect(editorKey({ ...plain, key: "Enter", metaKey: true })).toBe("save");
-  expect(editorKey({ ...plain, key: "Enter", ctrlKey: true })).toBe("save");
-  expect(editorKey({ ...plain, key: "Enter", metaKey: true, ctrlKey: true, altKey: true })).toBe(
-    "save",
+test("pressing Enter without Shift saves the comment being written, or sends the review, whether Cmd, Ctrl or Alt is held or not, as Paseo's message box sends a message", () => {
+  fc.assert(
+    fc.property(modifiers, typing, (held, typed) => {
+      expect(editorKey({ ...held, ...typed, shiftKey: false, key: "Enter" })).toBe("save");
+    }),
   );
 });
 
-test("pressing Enter on its own, or with Shift, starts a new line", () => {
-  expect(editorKey({ ...plain, key: "Enter" })).toBeUndefined();
-  expect(editorKey({ ...plain, key: "Enter", shiftKey: true })).toBeUndefined();
-  expect(editorKey({ ...plain, key: "Enter", shiftKey: true, metaKey: true })).toBeUndefined();
-  expect(editorKey({ ...plain, key: "Enter", altKey: true })).toBeUndefined();
+test("pressing Enter with Shift starts a new line, whatever else is held", () => {
+  fc.assert(
+    fc.property(modifiers, typing, (held, typed) => {
+      expect(editorKey({ ...held, ...typed, shiftKey: true, key: "Enter" })).toBeUndefined();
+    }),
+  );
+});
+
+test("pressing Enter while an input method composes text only picks what it composes, whatever is held", () => {
+  fc.assert(
+    fc.property(modifiers, composing, (held, composed) => {
+      expect(editorKey({ ...held, ...composed, key: "Enter" })).toBeUndefined();
+    }),
+  );
 });
 
 test("other keys do as they do in any text box", () => {
   fc.assert(
     fc.property(
       modifiers,
+      fc.oneof(typing, composing),
       fc.constantFrom("a", "Backspace", "Tab", "ArrowUp", " "),
-      (held, key) => {
-        expect(editorKey({ ...held, key })).toBeUndefined();
+      (held, typed, key) => {
+        expect(editorKey({ ...held, ...typed, key })).toBeUndefined();
       },
     ),
   );

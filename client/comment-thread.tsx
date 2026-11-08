@@ -66,8 +66,8 @@ interface CommentEditorProps {
   theme: PluginTheme;
 }
 
-// Where a comment is written, with focus once it shows, as in Paseo's own diff: Comment, or Cmd or
-// Ctrl with Enter, saves it, unless it's only whitespace, and Cancel, or Escape, leaves it. It starts
+// Where a comment is written, with focus once it shows: Comment, or Enter, as in Paseo's message box,
+// saves it, unless it's only whitespace, and Cancel, or Escape, as in Paseo's own diff, leaves it. It starts
 // with what's written of the comment, which is what the comment edited says, or nothing for a new
 // one, until something else is written.
 export function CommentEditor({ review, theme }: CommentEditorProps): ReactElement {

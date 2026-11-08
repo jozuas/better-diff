@@ -55,7 +55,7 @@ test("a line's comment is written under it, and is pending, edited and deleted u
   await expect(button(page, "Review (1)")).toBeHidden();
 });
 
-test("a comment is saved with Cmd or Ctrl and Enter, unless it's only whitespace, and left with Escape or Cancel", async ({
+test("a comment is saved with Enter, unless it's only whitespace, Shift+Enter starts a new line in it, and it's left with Escape or Cancel", async ({
   app,
   page,
   repository,
@@ -69,15 +69,17 @@ test("a comment is saved with Cmd or Ctrl and Enter, unless it's only whitespace
 
   await expect(button(page, "Save review comment")).toBeDisabled();
 
-  await editor(page).press("ControlOrMeta+Enter");
+  await editor(page).press("Enter");
   await editor(page).press("Escape");
 
   await expect(editor(page)).toBeHidden();
   await expect(page.getByRole("group", { name: "Pending review comment" })).toHaveCount(0);
 
   await startComment(page, "delta");
-  await editor(page).fill("Why?\nAnd why here?");
-  await editor(page).press("ControlOrMeta+Enter");
+  await editor(page).fill("Why?");
+  await editor(page).press("Shift+Enter");
+  await editor(page).pressSequentially("And why here?");
+  await editor(page).press("Enter");
 
   await expect(pending(page, "Why?\nAnd why here?")).toBeVisible();
 

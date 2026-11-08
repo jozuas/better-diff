@@ -29,6 +29,8 @@ interface PageMouseEvent {
 }
 
 export interface PageKeyboardEvent extends KeyEvent {
+  readonly isComposing: boolean;
+  readonly keyCode: number;
   preventDefault: () => void;
   stopPropagation: () => void;
 }
@@ -140,7 +142,7 @@ export function usePageMenu(id: string): void {
 // does.
 export function useKeys(
   id: string,
-  listener: (event: KeyEvent, own: boolean) => boolean,
+  listener: (event: PageKeyboardEvent, own: boolean) => boolean,
   capture = false,
 ): void {
   useListener(

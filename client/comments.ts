@@ -180,15 +180,20 @@ export function threadAt(
     : { comments, editing: written };
 }
 
-// What the key pressed while a comment is written does, as in Paseo's own diff: Enter with Cmd or
-// Ctrl, but not Shift, saves it. Enter otherwise starts a new line.
-export function editorKey({
-  key,
-  shiftKey,
-  ctrlKey,
-  metaKey,
-}: Omit<Keys, "code">): "save" | undefined {
-  return key === "Enter" && !shiftKey && (ctrlKey || metaKey) ? "save" : undefined;
+// A key pressed in a text box, and whether an input method is composing text with it.
+export interface TypedKey extends Pick<Keys, "key" | "shiftKey"> {
+  // Whether an input method, as for Japanese, is composing text, which Enter then picks.
+  isComposing: boolean;
+  // 229 for a key an input method takes, which some browsers give once it's done composing.
+  keyCode: number;
+}
+
+// What the key pressed while a comment or the review's message is written does, as in Paseo's
+// message box with its default send shortcut, which plugins can't read: Enter, with Cmd or Ctrl or
+// without, saves the comment or sends the review, and with Shift starts a new line. Enter that picks
+// what an input method composes only picks it.
+export function editorKey({ key, shiftKey, isComposing, keyCode }: TypedKey): "save" | undefined {
+  return key === "Enter" && !shiftKey && !isComposing && keyCode !== 229 ? "save" : undefined;
 }
 
 // What the key released while a comment is written does: Escape cancels it, as in Paseo's own
