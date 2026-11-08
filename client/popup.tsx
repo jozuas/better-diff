@@ -7,8 +7,8 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "r
 import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import { useCommands, useContextMenu } from "./keyboard";
-import { itemLook, menuPosition, menuStep } from "./menu";
-import type { Point, Size } from "./menu";
+import { itemLook, itemName, menuPosition, menuStep } from "./menu";
+import type { Point, Position, Size } from "./menu";
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -37,7 +37,15 @@ function useStyles(theme: PluginTheme) {
           paddingHorizontal: 12,
           paddingVertical: 4,
         },
-        label: { fontSize: fonts.text },
+        // The SVG would shrink with the label, where it's cut short. A View doesn't.
+        iconBox: { width: fonts.fileIcon, height: fonts.fileIcon },
+        label: { flexShrink: 1, fontSize: fonts.text },
+        detail: {
+          marginLeft: "auto",
+          paddingLeft: 12,
+          fontSize: fonts.small,
+          color: theme.colors.foregroundMuted,
+        },
         separator: { height: 1, marginVertical: 4, backgroundColor: theme.colors.border },
       }),
       // An item's background, and its label's colour, by how it looks.
@@ -68,18 +76,24 @@ interface PopupProps {
   label: string;
   // Where it was opened.
   point: Point;
+  // Where it goes from there, by its size.
+  place: (point: Point, popup: Size, window: Size) => Position;
+  // How wide it can be, if it can't be as wide as what's in it.
+  maxWidth?: number | undefined;
   onClose: () => void;
   theme: PluginTheme;
   children: ReactNode;
 }
 
-// At the point, over the whole page, until it's closed: with Escape, or a click or a right click
+// From the point, over the whole page, until it's closed: with Escape, or a click or a right click
 // outside it.
 export function Popup({
   id,
   role,
   label,
   point,
+  place,
+  maxWidth,
   onClose,
   theme,
   children,
@@ -99,7 +113,8 @@ export function Popup({
         accessibilityLabel={label}
         style={[
           styles.popup,
-          menuPosition(point, size ?? { width: 0, height: 0 }, window),
+          { maxWidth },
+          place(point, size ?? { width: 0, height: 0 }, window),
           size === undefined && styles.unmeasured,
         ]}
         onLayout={(event) => {
@@ -122,6 +137,8 @@ export function Popup({
 
 interface MenuItem {
   label: string;
+  // What it says after its label, dimmed, if anything, which stays as the label's cut short.
+  detail?: string | undefined;
   // A Lucide icon's name.
   icon: string;
   onPress: () => void;
@@ -137,6 +154,7 @@ interface MenuItemProps extends MenuItem {
 
 function Item({
   label,
+  detail,
   icon,
   onPress,
   disabled,
@@ -148,7 +166,7 @@ function Item({
     <Hoverable
       ref={itemRef}
       accessibilityRole="menuitem"
-      accessibilityLabel={label}
+      accessibilityLabel={itemName(label, detail)}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -159,10 +177,17 @@ function Item({
 
         return (
           <View style={[styles.item, styles.boxes[look]]}>
-            <Icon name={icon} size={styles.icon.size} color={styles.icon.color} />
-            <Text selectable={false} style={[styles.label, styles.labels[look]]}>
+            <View style={styles.iconBox}>
+              <Icon name={icon} size={styles.icon.size} color={styles.icon.color} />
+            </View>
+            <Text selectable={false} numberOfLines={1} style={[styles.label, styles.labels[look]]}>
               {label}
             </Text>
+            {detail === undefined ? null : (
+              <Text selectable={false} style={styles.detail}>
+                {detail}
+              </Text>
+            )}
           </View>
         );
       }}
@@ -174,16 +199,28 @@ interface MenuProps {
   // Its accessible name.
   label: string;
   point: Point;
+  // Where it goes from there, by its size, if not as a right-click menu goes.
+  place?: (point: Point, menu: Size, window: Size) => Position;
+  // How wide it can be, its items' labels cut short to fit, if it can't be as wide as they are.
+  maxWidth?: number;
   // Its items, in sections with a line between each. An empty section is left out.
   sections: readonly (readonly MenuItem[])[];
   onClose: () => void;
   theme: PluginTheme;
 }
 
-// A right-click menu, at the point, which closes once an item is chosen, before the item runs. ↓
-// and ↑ move focus from one item to the next or the one before, round from the last to the first
-// and back.
-export function Menu({ label, point, sections, onClose, theme }: MenuProps): ReactElement {
+// A menu, at the point as a right-click menu is unless it's placed otherwise, which closes once an
+// item is chosen, before the item runs. ↓ and ↑ move focus from one item to the next or the one
+// before, round from the last to the first and back.
+export function Menu({
+  label,
+  point,
+  place = menuPosition,
+  maxWidth,
+  sections,
+  onClose,
+  theme,
+}: MenuProps): ReactElement {
   const styles = useStyles(theme);
   const id = useId();
   const shown = sections.filter((section) => section.length > 0);
@@ -203,9 +240,18 @@ export function Menu({ label, point, sections, onClose, theme }: MenuProps): Rea
   const starts = shown.map((_, index) => shown.slice(0, index).flat().length);
 
   return (
-    <Popup id={id} role="menu" label={label} point={point} onClose={onClose} theme={theme}>
+    <Popup
+      id={id}
+      role="menu"
+      label={label}
+      point={point}
+      place={place}
+      maxWidth={maxWidth}
+      onClose={onClose}
+      theme={theme}
+    >
       {shown.map((section, index) => (
-        <Fragment key={section.map((item) => item.label).join("\n")}>
+        <Fragment key={starts[index]}>
           {index === 0 ? null : <View style={styles.separator} />}
           {section.map((item, position) => {
             const at = (starts[index] ?? 0) + position;

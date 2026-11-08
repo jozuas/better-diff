@@ -11,18 +11,26 @@ import type {
 // The environment variable that names the file an agent notes what it's sent in.
 export const promptsVariable = "BETTER_DIFF_PROMPTS";
 
+// What an agent's asked to take a turn that doesn't end, as an agent at work is taking, rather than
+// one that ends at once.
+export const workPrompt = "Work";
+
 type Emit = (event: ProviderEvent) => void;
 
 type Input<Type extends ProviderInput["type"]> = Extract<ProviderInput, { type: Type }>;
 
-// Where each open session notes what it's sent, by the session's ID.
-type Notes = Map<string, string | undefined>;
+// What's known of each open session, by its ID: where it notes what it's sent, and the turn it's
+// taking while it's at work.
+interface Sessions {
+  notes: Map<string, string | undefined>;
+  working: Map<string, string>;
+}
 
 const capabilities = ["prompt.message", "prompt.steer"];
 
 let turns = 0;
 
-function open(input: Input<"session.open">, emit: Emit, notes: Notes): void {
+function open(input: Input<"session.open">, emit: Emit, { notes }: Sessions): void {
   notes.set(input.sessionId, input.config.env[promptsVariable]);
   emit({
     type: "session.opened",
@@ -35,14 +43,51 @@ function open(input: Input<"session.open">, emit: Emit, notes: Notes): void {
   emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
 }
 
-// Notes what the prompt says, as a line of JSON, and ends its turn at once.
-function prompt({ sessionId, prompt: sent }: Input<"session.prompt">, emit: Emit, notes: Notes) {
-  const turnId = `turn ${String((turns += 1))}`;
+// Whether the prompt asks for a turn that doesn't end.
+function asksToWork({ input }: Input<"session.prompt">["prompt"]): boolean {
+  return (
+    input.type === "message" &&
+    input.content.some((part) => part.type === "text" && part.text === workPrompt)
+  );
+}
+
+// Notes what the prompt says, as a line of JSON, in the session's file, if it has one.
+function note({ sessionId, prompt: sent }: Input<"session.prompt">, { notes }: Sessions): void {
   const file = notes.get(sessionId);
 
   if (file !== undefined) {
     appendFileSync(file, `${JSON.stringify(sent.input)}\n`);
   }
+}
+
+// The turn the session's at work on, if the prompt's steered into it.
+function steeredInto(
+  { sessionId, prompt: sent }: Input<"session.prompt">,
+  { working }: Sessions,
+): string | undefined {
+  return sent.delivery === "steer" ? working.get(sessionId) : undefined;
+}
+
+// Notes what the prompt says. Takes it into the turn the session's at work on, if it's steered
+// there, and else ends its turn at once, unless it asks for one that doesn't end.
+function prompt(input: Input<"session.prompt">, emit: Emit, sessions: Sessions) {
+  const { sessionId, prompt: sent } = input;
+  const steered = steeredInto(input, sessions);
+
+  note(input, sessions);
+
+  if (steered !== undefined) {
+    emit({
+      type: "session.prompt_result",
+      sessionId,
+      clientMessageId: sent.clientMessageId,
+      result: { type: "steer", turnId: steered },
+    });
+
+    return;
+  }
+
+  const turnId = `turn ${String((turns += 1))}`;
 
   emit({
     type: "session.prompt_result",
@@ -51,6 +96,13 @@ function prompt({ sessionId, prompt: sent }: Input<"session.prompt">, emit: Emit
     result: { type: "turn", turnId },
   });
   emit({ type: "session.turn", sessionId, turnId, state: "started" });
+
+  if (asksToWork(sent)) {
+    sessions.working.set(sessionId, turnId);
+
+    return;
+  }
+
   emit({
     type: "timeline.item",
     sessionId,
@@ -80,11 +132,11 @@ function reply(input: ProviderInput, emit: Emit): void {
   }
 }
 
-function answer(input: ProviderInput, emit: Emit, notes: Notes): void {
+function answer(input: ProviderInput, emit: Emit, sessions: Sessions): void {
   if (input.type === "session.open") {
-    open(input, emit, notes);
+    open(input, emit, sessions);
   } else if (input.type === "session.prompt") {
-    prompt(input, emit, notes);
+    prompt(input, emit, sessions);
   } else {
     reply(input, emit);
   }
@@ -92,7 +144,7 @@ function answer(input: ProviderInput, emit: Emit, notes: Notes): void {
 
 function connect(): ProviderConnection {
   const listeners = new Set<Emit>();
-  const notes: Notes = new Map();
+  const sessions: Sessions = { notes: new Map(), working: new Map() };
 
   function emit(event: ProviderEvent): void {
     for (const listener of listeners) {
@@ -105,7 +157,7 @@ function connect(): ProviderConnection {
     capabilities,
     send: async (input) => {
       await Promise.resolve();
-      answer(input, emit, notes);
+      answer(input, emit, sessions);
     },
     onEvent: (listener) => {
       listeners.add(listener);

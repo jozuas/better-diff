@@ -1,7 +1,7 @@
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { button, line, openFile, row } from "./panel";
-import { comment, expectBetween, openReview, prompt, sendButton } from "./review";
+import { comment, expectBetween, openReview, prompt, sendTo } from "./review";
 
 test("a comment stays on its line as its file's hunks are staged, and shows under it in whichever of the file's diffs has it", async ({
   agents,
@@ -39,7 +39,7 @@ test("a comment stays on its line as its file's hunks are staged, and shows unde
 
   const reviewer = await agents.start("Reviewer");
 
-  await sendButton(await openReview(page, 1)).click();
+  await sendTo(page, await openReview(page, 1), "Reviewer");
 
   await expect.poll(reviewer.sent).toMatchObject([
     [

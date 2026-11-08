@@ -8,13 +8,14 @@ import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
 import type { ListedAgent, ReviewComment } from "./comments";
 import {
+  agentSections,
+  agentState,
   agentsIn,
   agentsNotice,
   agentsPage,
   discardLabel,
   feedbackTo,
   messageAfter,
-  recipientOf,
   reviewLabel,
   sendLabel,
 } from "./feedback";
@@ -104,7 +105,9 @@ function asking(): Asked {
 }
 
 function agentIn(workspace: string, id: string): ListedAgent {
-  return { agent: { id, provider: "claude", title: `Agent ${id}`, workspaceId: workspace } };
+  return {
+    agent: { id, provider: "claude", title: `Agent ${id}`, workspaceId: workspace, status: "idle" },
+  };
 }
 
 // Pages of agents, each with an ID of its own, in the workspace "w", or another.
@@ -153,7 +156,7 @@ const comment: ReviewComment = {
   body: "Why?",
 };
 
-const reviewer = { id: "a", label: "Reviewer" };
+const reviewer = { id: "a", label: "Reviewer", working: false };
 
 test("the workspace's agents are listed a page at a time, in order, until a page says it's the last", async () => {
   await fc.assert(
@@ -165,7 +168,7 @@ test("the workspace's agents are listed a page at a time, in order, until a page
         pages
           .flat()
           .filter(({ agent }) => agent.workspaceId === "w")
-          .map(({ agent }) => ({ id: agent.id, label: agent.title })),
+          .map(({ agent }) => ({ id: agent.id, label: agent.title, working: false })),
       );
       expect(asked.pages).toStrictEqual([
         undefined,
@@ -175,12 +178,33 @@ test("the workspace's agents are listed a page at a time, in order, until a page
   );
 });
 
-test("feedback goes to the agent chosen while it's in the workspace, or else to the first", () => {
-  const second = { id: "b", label: "Second" };
+// Agents feedback can be sent to, each with an ID of its own, at work or not.
+const recipients = fc.uniqueArray(
+  fc.record({
+    id: fc.string({ unit: "binary" }),
+    label: fc.string({ unit: "binary" }),
+    working: fc.boolean(),
+  }),
+  { selector: ({ id }) => id },
+);
 
-  expect(recipientOf([reviewer, second], "b")).toBe(second);
-  expect(recipientOf([reviewer, second], "gone")).toBe(reviewer);
-  expect(recipientOf([], "b")).toBeUndefined();
+test("the menu of agents has those not at work first, and then those at work, each in the order listed", () => {
+  fc.assert(
+    fc.property(recipients, (listed) => {
+      const [idle, working] = agentSections(listed);
+
+      expect([...idle, ...working]).toStrictEqual(
+        listed.toSorted((one, other) => Number(one.working) - Number(other.working)),
+      );
+      expect(idle.some((agent) => agent.working)).toBe(false);
+      expect(working.every((agent) => agent.working)).toBe(true);
+    }),
+  );
+});
+
+test("the menu of agents says an agent's working while it's taking a turn", () => {
+  expect(agentState({ ...reviewer, working: true })).toBe("Working");
+  expect(agentState(reviewer)).toBeUndefined();
 });
 
 // What sending the review says, but how: the comments sent, if any, which no longer pend.

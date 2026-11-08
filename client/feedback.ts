@@ -51,13 +51,18 @@ export async function agentsIn(server: FeedbackServer, workspace: string): Promi
   return recipientsOf(listed, workspace);
 }
 
-// The agent feedback goes to, of those it can: the one chosen, while it's one of them, or else the
-// first. None while there are none.
-export function recipientOf(
-  recipients: readonly Recipient[],
-  chosen: string | undefined,
-): Recipient | undefined {
-  return recipients.find(({ id }) => id === chosen) ?? recipients[0];
+// The menu of the agents feedback can be sent to, in sections: those not at work first, and then
+// those taking a turn, which it would go to the middle of, each in the order listed.
+export function agentSections(recipients: readonly Recipient[]): [Recipient[], Recipient[]] {
+  return [
+    recipients.filter(({ working }) => !working),
+    recipients.filter(({ working }) => working),
+  ];
+}
+
+// What the menu of agents says of one after what it's called: that it's at work, while it is.
+export function agentState({ working }: Recipient): string | undefined {
+  return working ? "Working" : undefined;
 }
 
 // Sends an agent the comments the review sends, by the diffs of their files as read now, with the

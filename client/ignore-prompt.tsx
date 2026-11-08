@@ -18,6 +18,7 @@ import {
   shownPatterns,
 } from "./ignore";
 import type { IgnorePlace, Place } from "./ignore";
+import { menuPosition } from "./menu";
 import type { Point } from "./menu";
 import { Popup } from "./popup";
 import { Queried } from "./queried";
@@ -290,7 +291,14 @@ export function IgnorePrompt({
   );
 
   return (
-    <Popup role="dialog" label={`Ignore ${path}`} point={point} onClose={onClose} theme={theme}>
+    <Popup
+      role="dialog"
+      label={`Ignore ${path}`}
+      point={point}
+      place={menuPosition}
+      onClose={onClose}
+      theme={theme}
+    >
       {picked === undefined ? (
         <DirectoryChoice
           path={path}

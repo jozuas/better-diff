@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 
 import { z } from "zod";
 
-import { promptsVariable } from "./agent/index.server";
+import { promptsVariable, workPrompt } from "./agent/index.server";
 import { paseoUi, testAgent } from "./paseo";
 import type { Daemon } from "./paseo";
 
@@ -16,6 +16,8 @@ export interface Agents {
   // Starts an agent with the title, once the panel's open, as starting it before would show it
   // rather than the panel.
   start: (title: string) => Promise<Agent>;
+  // Starts one, as start does, that's taking a turn until the test ends, as an agent at work is.
+  startWorking: (title: string) => Promise<Agent>;
 }
 
 // A message the page sends an agent.
@@ -34,15 +36,10 @@ function sentSince(file: string): unknown[] {
   return lines.slice(1).map((each) => noted.parse(JSON.parse(each)).content);
 }
 
-// Starts a test agent with the title in the workspace on the daemon, which notes what it's sent in
-// the file.
-export async function startAgent(
-  daemon: Daemon,
-  workspace: string,
-  title: string,
-  notes: string,
-): Promise<Agent> {
-  await paseoUi(daemon, [
+// The arguments that start a test agent with the title in the workspace, which notes what it's sent
+// in the file.
+function runArguments(workspace: string, title: string, notes: string): string[] {
+  return [
     "paseo",
     "run",
     "--provider",
@@ -54,8 +51,39 @@ export async function startAgent(
     "--env",
     `${promptsVariable}=${notes}`,
     "--json",
-    "Start",
+  ];
+}
+
+// Starts a test agent with the title in the workspace on the daemon, which notes what it's sent in
+// the file, once its first turn has ended.
+export async function startAgent(
+  daemon: Daemon,
+  workspace: string,
+  title: string,
+  notes: string,
+): Promise<Agent> {
+  await paseoUi(daemon, [...runArguments(workspace, title, notes), "Start"]);
+
+  return { sent: () => sentSince(notes) };
+}
+
+// What paseo run says of an agent it doesn't wait for: that it's running its first turn.
+const running = z.object({ status: z.literal("running") });
+
+// Starts a test agent as startAgent does, whose first turn doesn't end.
+export async function startWorkingAgent(
+  daemon: Daemon,
+  workspace: string,
+  title: string,
+  notes: string,
+): Promise<Agent> {
+  const started = await paseoUi(daemon, [
+    ...runArguments(workspace, title, notes),
+    "--no-wait",
+    workPrompt,
   ]);
+
+  running.parse(JSON.parse(started));
 
   return { sent: () => sentSince(notes) };
 }

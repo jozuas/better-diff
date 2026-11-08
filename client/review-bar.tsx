@@ -10,17 +10,12 @@ import { ReviewPanel } from "./review-panel";
 import type { ReviewPanelProps } from "./review-panel";
 import { TextButton } from "./text-button";
 
-type BarProps = Omit<
-  ReviewPanelProps,
-  "anchor" | "onClose" | "chosen" | "onChoose" | "sending" | "onSending"
->;
+type BarProps = Omit<ReviewPanelProps, "anchor" | "onClose" | "sending" | "onSending">;
 
 interface OpenPanelProps extends BarProps {
   // The button it's opened from, while it's open.
   anchor: Rect | undefined;
   onClose: () => void;
-  chosen: string | undefined;
-  onChoose: (agent: string) => void;
   sending: boolean;
   onSending: (send: () => Promise<void>) => Promise<void>;
 }
@@ -29,14 +24,12 @@ function OpenPanel({ anchor, ...panel }: OpenPanelProps): ReactElement | null {
   return anchor === undefined ? null : <ReviewPanel anchor={anchor} {...panel} />;
 }
 
-// The bar's button, and the review it opens, above it, until it's closed. The agent chosen in it
-// stays chosen while the bar shows, and the review is sent once at a time, though it's closed and
-// opened again while it's sent.
+// The bar's button, and the review it opens, above it, until it's closed. The review is sent once at
+// a time, though it's closed and opened again while it's sent.
 function Bar(props: BarProps): ReactElement {
   const { comments, theme } = props;
   const button = useRef<View>(null);
   const [anchor, setAnchor] = useState<Rect>();
-  const [chosen, setChosen] = useState<string>();
   const [sending, setSending] = useState(false);
   const sends = useMemo(() => oneAtATime(setSending), []);
 
@@ -76,8 +69,6 @@ function Bar(props: BarProps): ReactElement {
         onClose={() => {
           setAnchor(undefined);
         }}
-        chosen={chosen}
-        onChoose={setChosen}
         sending={sending}
         onSending={sends.run}
         {...props}

@@ -60,6 +60,18 @@ export function sendButton(scope: Locator): Locator {
   return scope.getByRole("button", { name: "Send feedback", exact: true });
 }
 
+// The menu of agents to send the review to, which Send feedback opens.
+export function agentMenu(page: Page): Locator {
+  return page.getByRole("menu", { name: "Choose an agent", exact: true });
+}
+
+// Sends the review to the agent with the name, chosen from the menu Send feedback opens, once the
+// review has found the workspace's agents.
+export async function sendTo(page: Page, opened: Locator, agent: string): Promise<void> {
+  await sendButton(opened).click();
+  await agentMenu(page).getByRole("menuitem", { name: agent, exact: true }).click();
+}
+
 export function messageBox(scope: Locator): Locator {
   return scope.getByRole("textbox", { name: "Message for the agent", exact: true });
 }

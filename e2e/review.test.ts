@@ -1,7 +1,8 @@
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, line, openFile } from "./panel";
+import { box, button, line, openFile } from "./panel";
 import {
+  agentMenu,
   changeA,
   comment,
   messageBox,
@@ -10,9 +11,10 @@ import {
   prompt,
   review,
   sendButton,
+  sendTo,
 } from "./review";
 
-test("sending the review sends the pending comments to the workspace's agent, as Paseo's own diff sends them, and they're pending no longer", async ({
+test("sending the review sends the pending comments to the agent chosen, as Paseo's own diff sends them, and they're pending no longer", async ({
   agents,
   app,
   page,
@@ -28,9 +30,7 @@ test("sending the review sends the pending comments to the workspace's agent, as
   const reviewer = await agents.start("Reviewer");
   const opened = await openReview(page, 2);
 
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
-
-  await sendButton(opened).click();
+  await sendTo(page, opened, "Reviewer");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect(review(page)).toBeHidden();
@@ -79,7 +79,7 @@ test("sending the review sends the pending comments to the workspace's agent, as
   ]);
 });
 
-test("with several agents in the workspace, the review goes to the one chosen, the one active most recently at first", async ({
+test("Send feedback asks which agent to send the review to, from a menu of the workspace's agents, those active most recently first, which Escape leaves for the review, and sends it to none but the one chosen", async ({
   agents,
   app,
   page,
@@ -95,18 +95,64 @@ test("with several agents in the workspace, the review goes to the one chosen, t
   const second = await agents.start("Second");
   const opened = await openReview(page, 1);
 
-  await opened.getByRole("button", { name: "Agent: Second", exact: true }).click();
-
-  const menu = page.getByRole("menu", { name: "Choose an agent" });
-
-  await expect(menu.getByRole("menuitem")).toHaveText(["Second", "Reviewer"]);
-
-  await menu.getByRole("menuitem", { name: "Reviewer", exact: true }).click();
   await sendButton(opened).click();
+
+  await expect(agentMenu(page).getByRole("menuitem")).toHaveText(["Second", "Reviewer"]);
+
+  await page.keyboard.press("Escape");
+
+  await expect(agentMenu(page)).toBeHidden();
+  await expect(pending(opened, "Not needed")).toBeVisible();
+
+  await sendTo(page, opened, "Reviewer");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect.poll(reviewer.sent).toHaveLength(1);
   expect(second.sent()).toStrictEqual([]);
+});
+
+test("the menu of agents lists those at work after the others, as they are when it opens, marked Working, however long their titles", async ({
+  agents,
+  app,
+  page,
+  repository,
+}) => {
+  const title =
+    "Busy with a title too long for the menu, as an agent titled after its first prompt has, which goes on and on";
+
+  changeA(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await comment(page, "delta", "Not needed");
+  await agents.start("Reviewer");
+
+  const opened = await openReview(page, 1);
+
+  await expect(sendButton(opened)).toBeEnabled();
+
+  const busy = await agents.startWorking(title);
+
+  await sendButton(opened).click();
+
+  const working = agentMenu(page).getByRole("menuitem", { name: `${title}, Working`, exact: true });
+
+  await expect(agentMenu(page).getByRole("menuitem")).toHaveText(["Reviewer", /^Busy/u]);
+  await expect(working.getByText("Working", { exact: true })).toBeVisible();
+
+  const menu = await box(agentMenu(page));
+  const shown = await box(working.getByText("Working", { exact: true }));
+  const panel = await box(opened);
+  const send = await box(sendButton(opened));
+
+  expect(shown.x + shown.width).toBeLessThanOrEqual(menu.x + menu.width);
+  expect(menu.width).toBeLessThanOrEqual(400);
+  expect(send.x + send.width).toBeLessThanOrEqual(panel.x + panel.width);
+
+  await working.click();
+
+  await expect(page.getByText(`Feedback sent to ${title}.`, { exact: true })).toBeVisible();
+  await expect.poll(busy.sent).toHaveLength(1);
 });
 
 test("without an agent in the workspace, the review says to start one, and can't be sent", async ({
@@ -128,7 +174,7 @@ test("without an agent in the workspace, the review says to start one, and can't
   await expect(sendButton(opened)).toBeDisabled();
 });
 
-test("the review is sent with the message written for the agent, with Enter, Shift+Enter starting a new line in it, and the message is empty again after", async ({
+test("the review is sent with the message written for the agent, Enter in it asking which agent to send it to as Send feedback does, Shift+Enter starting a new line in it, and the message is empty again after", async ({
   agents,
   app,
   page,
@@ -143,13 +189,19 @@ test("the review is sent with the message written for the agent, with Enter, Shi
   const reviewer = await agents.start("Reviewer");
   const opened = await openReview(page, 1);
 
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
+  await expect(sendButton(opened)).toBeEnabled();
 
   await messageBox(opened).fill("  Fix these,");
   await messageBox(opened).press("Shift+Enter");
   await messageBox(opened).pressSequentially("then run the tests.");
   await messageBox(opened).press("Shift+Enter");
   await messageBox(opened).press("Enter");
+
+  await expect(
+    agentMenu(page).getByRole("menuitem", { name: "Reviewer", exact: true }),
+  ).toBeFocused();
+
+  await page.keyboard.press("Enter");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect
@@ -185,7 +237,7 @@ test("comments on lines their file's diffs no longer have stay pending, listed a
   await expect(pending(opened, "Not needed")).toContainText("No longer in its diffs");
   await expect(opened.getByRole("button", { name: "Show line 5 of a.txt" })).toBeDisabled();
 
-  await sendButton(opened).click();
+  await sendTo(page, opened, "Reviewer");
 
   await expect(
     page.getByText(
@@ -199,7 +251,7 @@ test("comments on lines their file's diffs no longer have stay pending, listed a
     .poll(reviewer.sent)
     .toMatchObject([[prompt, { comments: [{ body: "Why uppercase?" }] }]]);
 
-  await sendButton(opened).click();
+  await sendTo(page, opened, "Reviewer");
 
   await expect(
     page.getByText("Nothing was sent. 1 comment wasn't, as its line is no longer in its diffs.", {
@@ -226,15 +278,24 @@ test("the review is sent once at a time: while it's sent, Send feedback is disab
   const reviewer = await agents.start("Reviewer");
   const opened = await openReview(page, 1);
 
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
+  await expect(sendButton(opened)).toBeEnabled();
 
   await messageBox(opened).fill("Fix this.");
   await messageBox(opened).press("Enter");
+
+  await expect(
+    agentMenu(page).getByRole("menuitem", { name: "Reviewer", exact: true }),
+  ).toBeFocused();
+
+  await page.keyboard.press("Enter");
 
   await expect.poll(sends.held).toBe(1);
 
   await messageBox(opened).press("Enter");
   await messageBox(opened).fill("Fix this, and test it.");
+
+  await expect(agentMenu(page)).toBeHidden();
+
   await page.keyboard.press("Escape");
 
   const reopened = await openReview(page, 1);
@@ -281,9 +342,7 @@ test("comments on a partly staged file are sent with their lines' numbers in HEA
   const reviewer = await agents.start("Reviewer");
   const opened = await openReview(page, 2);
 
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
-
-  await sendButton(opened).click();
+  await sendTo(page, opened, "Reviewer");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect.poll(reviewer.sent).toMatchObject([

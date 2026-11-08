@@ -214,25 +214,38 @@ export function unsent(
   return comments.filter((comment) => !sent.includes(comment));
 }
 
-// An agent comments can be sent to, and what it's called.
+// An agent comments can be sent to, what it's called, and whether it's taking a turn, which they'd
+// go to the middle of.
 export interface Recipient {
   id: string;
   label: string;
+  working: boolean;
 }
 
-// An agent as listed, with what tells whether comments can be sent to it, and what it's called.
+// An agent as listed, with what tells whether comments can be sent to it, what it's called, and
+// what it's doing.
 export interface ListedAgent {
-  agent: Pick<Agent, "id" | "provider" | "title" | "workspaceId" | "archivedAt" | "internal">;
+  agent: Pick<
+    Agent,
+    "id" | "provider" | "title" | "workspaceId" | "archivedAt" | "internal" | "status"
+  >;
 }
 
 // The agents in the workspace that comments can be sent to, of those listed, as listed: those not
-// archived, nor Paseo's own, by their titles, or their providers while they have none.
+// archived, nor Paseo's own, by their titles, or their providers while they have none, and whether
+// each is running a turn.
 export function recipientsOf(entries: readonly ListedAgent[], workspace: string): Recipient[] {
   return entries.flatMap(({ agent }) =>
     agent.workspaceId === workspace &&
     (agent.archivedAt ?? null) === null &&
     agent.internal !== true
-      ? [{ id: agent.id, label: agent.title ?? agent.provider }]
+      ? [
+          {
+            id: agent.id,
+            label: agent.title ?? agent.provider,
+            working: agent.status === "running",
+          },
+        ]
       : [],
   );
 }

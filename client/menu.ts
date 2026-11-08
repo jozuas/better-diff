@@ -12,7 +12,7 @@ export interface Size {
 }
 
 // Where a menu goes, by its top left corner.
-interface Position {
+export interface Position {
   left: number;
   top: number;
 }
@@ -26,6 +26,12 @@ export function menuPosition(point: Point, menu: Size, window: Size): Position {
   };
 }
 
+// Where a menu that ends at the point goes, as one opened from a button above it does: above the
+// point and to its left, but never past the window's top or left edge.
+export function menuEndingAt(point: Point, menu: Size): Position {
+  return { left: Math.max(0, point.x - menu.width), top: Math.max(0, point.y - menu.height) };
+}
+
 // How a menu's item looks: dimmed while it's disabled, whatever the pointer does, and else
 // highlighted while the pointer is over it.
 export function itemLook(hovered: boolean, disabled: boolean): "plain" | "hovered" | "disabled" {
@@ -34,6 +40,11 @@ export function itemLook(hovered: boolean, disabled: boolean): "plain" | "hovere
   }
 
   return hovered ? "hovered" : "plain";
+}
+
+// What a menu's item is called: its label, and what it says after it, if anything.
+export function itemName(label: string, detail?: string): string {
+  return detail === undefined ? label : `${label}, ${detail}`;
 }
 
 // How far each command moves focus through a menu's items.

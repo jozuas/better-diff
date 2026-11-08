@@ -10,7 +10,7 @@ import {
   openReview,
   pending,
   prompt,
-  sendButton,
+  sendTo,
   startComment,
 } from "./review";
 
@@ -194,11 +194,8 @@ test("in a group's view, each file's lines are commented on, and sent with their
   await comment(page, "TWO", "In b");
 
   const reviewer = await agents.start("Reviewer");
-  const opened = await openReview(page, 2);
 
-  await expect(opened.getByRole("button", { name: "Agent: Reviewer", exact: true })).toBeVisible();
-
-  await sendButton(opened).click();
+  await sendTo(page, await openReview(page, 2), "Reviewer");
 
   await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
   await expect.poll(reviewer.sent).toMatchObject([
@@ -241,13 +238,8 @@ test.describe("side by side", () => {
     expect(oldSide.y).toBe(newSide.y);
 
     const reviewer = await agents.start("Reviewer");
-    const opened = await openReview(page, 2);
 
-    await expect(
-      opened.getByRole("button", { name: "Agent: Reviewer", exact: true }),
-    ).toBeVisible();
-
-    await sendButton(opened).click();
+    await sendTo(page, await openReview(page, 2), "Reviewer");
 
     await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
     await expect.poll(reviewer.sent).toMatchObject([

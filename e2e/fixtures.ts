@@ -5,7 +5,7 @@ import { expect, test as base } from "@playwright/test";
 import { z } from "zod";
 
 import { inRepository } from "../test/repository";
-import { sendRequest, startAgent } from "./agents";
+import { sendRequest, startAgent, startWorkingAgent } from "./agents";
 import type { Agents } from "./agents";
 import { hold, read } from "./messages";
 import type { Held } from "./messages";
@@ -294,6 +294,16 @@ export const test = base.extend<Fixtures>({
     await provide({
       start: async (title) => {
         const agent = await startAgent(
+          daemon,
+          workspace,
+          title,
+          testInfo.outputPath(`${title}.jsonl`),
+        );
+
+        return agent;
+      },
+      startWorking: async (title) => {
+        const agent = await startWorkingAgent(
           daemon,
           workspace,
           title,

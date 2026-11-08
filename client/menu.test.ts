@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { itemLook, menuPosition, menuStep, panelPosition } from "./menu";
+import { itemLook, itemName, menuEndingAt, menuPosition, menuStep, panelPosition } from "./menu";
 
 const length = fc.integer({ min: 0, max: 2000 });
 
@@ -82,11 +82,62 @@ test("opens a menu that just fits below and to the right of the point there", ()
   ).toStrictEqual({ left: 10, top: 20 });
 });
 
+// A point, and a menu that fits above it and to its left.
+const endingFitting = fc.record({ x: length, y: length }).chain((point) =>
+  fc.record({
+    point: fc.constant(point),
+    menu: fc.record({
+      width: fc.integer({ min: 0, max: point.x }),
+      height: fc.integer({ min: 0, max: point.y }),
+    }),
+  }),
+);
+
+test("a menu that ends at a point goes above it and to its left, its bottom right corner at the point, where there's room", () => {
+  fc.assert(
+    fc.property(endingFitting, ({ point, menu }) => {
+      const { left, top } = menuEndingAt(point, menu);
+
+      expect(left + menu.width).toBe(point.x);
+      expect(top + menu.height).toBe(point.y);
+    }),
+  );
+});
+
+test("a menu that ends at a point never goes past the window's top or left edge, nor past the point", () => {
+  fc.assert(
+    fc.property(
+      fc.record({ x: length, y: length }),
+      fc.record({ width: length, height: length }),
+      (point, menu) => {
+        const { left, top } = menuEndingAt(point, menu);
+
+        expect(left).toBeGreaterThanOrEqual(0);
+        expect(top).toBeGreaterThanOrEqual(0);
+        expect(left).toBeLessThanOrEqual(point.x);
+        expect(top).toBeLessThanOrEqual(point.y);
+      },
+    ),
+  );
+});
+
+test("a menu too wide and tall to end at a point goes to the window's top left corner", () => {
+  expect(menuEndingAt({ x: 30, y: 20 }, { width: 100, height: 50 })).toStrictEqual({
+    left: 0,
+    top: 0,
+  });
+});
+
 test("a menu's item is highlighted while the pointer is over it, unless it's disabled, which dims it", () => {
   expect(itemLook(false, false)).toBe("plain");
   expect(itemLook(true, false)).toBe("hovered");
   expect(itemLook(false, true)).toBe("disabled");
   expect(itemLook(true, true)).toBe("disabled");
+});
+
+test("a menu's item is called by its label, and what it says after it, if anything", () => {
+  expect(itemName("Reviewer")).toBe("Reviewer");
+  expect(itemName("Reviewer", "Working")).toBe("Reviewer, Working");
 });
 
 test("↓ and ↑ move focus to a menu's next item or the one before, round from the last to the first and back", () => {
