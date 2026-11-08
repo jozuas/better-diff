@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { changes, groupName, modified, nothingHidden } from "../test/changes";
+import { changes, groupName, listedAndThree, modified, nothingHidden } from "../test/changes";
 import { filePath } from "../test/file-names";
 import {
   isGroupOpen,
@@ -118,13 +118,6 @@ test("shift+↓ and shift+↑ select from the file with focus while nothing in i
 test("the file a selection reaches is the open file, or the last selected", () => {
   expect(reachedFile({ group: "modified", path: "b" })).toBe("b");
   expect(reachedFile({ group: "modified", paths: ["c", "b", "a"] })).toBe("a");
-});
-
-// A group's files, and three of them, which may be the same.
-const listedAndThree = fc.uniqueArray(filePath, { minLength: 1 }).chain((paths) => {
-  const one = fc.constantFrom(...paths);
-
-  return fc.tuple(fc.constant(paths), one, one, one);
 });
 
 // How far each of the paths is down the list from the one before it.

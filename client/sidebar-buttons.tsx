@@ -11,6 +11,7 @@ import type { Target } from "./apply";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 import type { Place } from "./keymap";
+import { showsButtons } from "./reveal";
 import type { Look } from "./reveal";
 import { ShortcutTip } from "./shortcut-tip";
 import { shortcutOf, shortcutText } from "./shortcuts";
@@ -156,9 +157,9 @@ interface SidebarButtonsProps {
   path?: string;
   // Called just before one of the actions runs.
   onRun: (() => void) | undefined;
-  // Plain hides them.
+  // Plain and selected hide them.
   look: Look;
-  // The row's background, which they cover the end of the row with.
+  // The row's background, which they cover the end of the row with while they show.
   background: StyleProp<ViewStyle>;
   controls: Controls;
   reveal: RevealHandlers;
@@ -181,14 +182,14 @@ export function SidebarButtons({
   theme,
 }: SidebarButtonsProps): ReactElement {
   const styles = useStyles(theme);
-  const hidden = look === "plain";
+  const hidden = !showsButtons(look);
   const id = useId();
 
   return (
     <View
       nativeID={overlayId(id)}
       pointerEvents={hidden ? "none" : "auto"}
-      style={[styles.buttons, background]}
+      style={[styles.buttons, !hidden && background]}
     >
       {actions.map((action) => (
         <SidebarButton

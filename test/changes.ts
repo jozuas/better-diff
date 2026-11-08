@@ -21,3 +21,10 @@ export const nothingHidden: Hidden = { filter: "", collapsed: [] };
 export function modified(...paths: string[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
   return { modified: paths, untracked: [], staged: [] };
 }
+
+// A group's files, and three of them, which may be the same.
+export const listedAndThree = fc.uniqueArray(filePath, { minLength: 1 }).chain((paths) => {
+  const one = fc.constantFrom(...paths);
+
+  return fc.tuple(fc.constant(paths), one, one, one);
+});

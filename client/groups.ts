@@ -135,6 +135,12 @@ export function isOpen(open: Open | undefined, group: GroupName, path: string): 
   return open?.group === group && openPaths(open).includes(path);
 }
 
+// Whether the file the group lists is open, or the one the files selected reach, whose row shows its
+// actions always.
+export function isReached(open: Open | undefined, group: GroupName, path: string): boolean {
+  return open?.group === group && openPaths(open).at(-1) === path;
+}
+
 export function isGroupOpen(open: Open | undefined, group: GroupName): boolean {
   return open?.group === group && openPaths(open).length === 0;
 }

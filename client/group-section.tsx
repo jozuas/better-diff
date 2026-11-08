@@ -8,7 +8,7 @@ import { groupActions, rowActions } from "./actions";
 import type { Controls } from "./actions";
 import { FileLabel } from "./file-label";
 import { KeyboardFocusContext } from "./focus";
-import { isGroupOpen, groups as kinds, isOpen, rowOpen } from "./groups";
+import { isGroupOpen, groups as kinds, isOpen, isReached, rowOpen } from "./groups";
 import type { GroupName, Open, OpenFile, SidebarGroup } from "./groups";
 import { Hoverable } from "./hoverable";
 import { useCommands, useContextMenu } from "./keyboard";
@@ -113,7 +113,7 @@ function RowOfFile({
   const file = useMemo(() => ({ group, path }), [group, path]);
   const { revealed, focused, reveal } = useReveal();
   const opened = isOpen(open, group, path);
-  const look = lookOf(opened, revealed);
+  const look = lookOf(opened, isReached(open, group, path), revealed);
   const id = useId();
   const focus = useContext(KeyboardFocusContext);
   const actions = rowActions(open, file);
@@ -211,7 +211,7 @@ function GroupHeading({
   theme,
 }: GroupHeadingProps): ReactElement {
   const { revealed, focused, reveal } = useReveal();
-  const look = lookOf(open, revealed);
+  const look = lookOf(open, true, revealed);
   const id = useId();
   const focus = useContext(KeyboardFocusContext);
 

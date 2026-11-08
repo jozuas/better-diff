@@ -182,12 +182,12 @@ As in Paseo's own diff, lines are commented on, and the comments sent to an agen
   They're left out while the filter hides some of the group's files, or it has none, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
 - Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. A selection stays within one group: shift-clicking a file in another group opens just that file.
-- The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows show their actions always, acting on all of them as a group's actions act on all its files:
+- The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows' actions act on all of them, as a group's actions act on all its files:
   - MODIFIED: Discard Selected, Stage Selected
   - UNTRACKED: Delete Selected, Stage Selected
   - STAGED: Unstage Selected
 
-  An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
+  As in VS Code's Source Control view, they show always only on the row of the file the selection reaches, the one shift-clicked or reached with Shift+↓ or Shift+↑, and on another selected file's row while the pointer is over it or focus is in it. An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
 
 - "Filter files..." input to quickly find a file: it lists only the files whose paths have what's typed in them, whatever its case, and a × button clears it.
 - Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its rows and headings, with room for the buttons beside them.

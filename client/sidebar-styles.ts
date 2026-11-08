@@ -48,6 +48,7 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
     plain: {},
     revealed: { backgroundColor: theme.colors.surface1 },
     open: { backgroundColor: theme.colors.surface2 },
+    selected: { backgroundColor: theme.colors.surface2 },
   });
 }
 

@@ -1,13 +1,40 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { hunkKeyed, hunkMark, hunkRevealed, lookOf, markedHunk, pressedBar } from "./reveal";
+import {
+  hunkKeyed,
+  hunkMark,
+  hunkRevealed,
+  lookOf,
+  markedHunk,
+  pressedBar,
+  showsButtons,
+} from "./reveal";
+import type { Look } from "./reveal";
 
-test("the open file's row looks open, whether or not it's revealed, and another revealed or plain", () => {
-  expect(lookOf(true, false)).toBe("open");
-  expect(lookOf(true, true)).toBe("open");
-  expect(lookOf(false, true)).toBe("revealed");
-  expect(lookOf(false, false)).toBe("plain");
+test.each<[boolean, boolean, boolean, Look]>([
+  [true, true, false, "open"],
+  [true, true, true, "open"],
+  [true, false, true, "open"],
+  [true, false, false, "selected"],
+  [false, false, true, "revealed"],
+  [false, true, true, "revealed"],
+  [false, false, false, "plain"],
+  [false, true, false, "plain"],
+])(
+  "a row open %s, with its buttons always %s, and revealed %s looks %s",
+  (open, always, revealed, look) => {
+    expect(lookOf(open, always, revealed)).toBe(look);
+  },
+);
+
+test.each<[Look, boolean]>([
+  ["open", true],
+  ["revealed", true],
+  ["selected", false],
+  ["plain", false],
+])("a row that looks %s shows its buttons: %s", (look, shown) => {
+  expect(showsButtons(look)).toBe(shown);
 });
 
 test.each<[number | undefined, boolean, number | undefined, boolean]>([

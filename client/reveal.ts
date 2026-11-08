@@ -1,16 +1,24 @@
 import type { BarAt } from "./focus";
 import type { LineRange } from "./selection";
 
-// How a row of the sidebar looks: the open file's, one under the pointer or with focus in it, or
-// neither. The first two show the row's buttons.
-export type Look = "open" | "revealed" | "plain";
+// How a row of the sidebar looks: open, as the open file's, the open group's or a selected file's;
+// selected, as an open row whose buttons hide; under the pointer or with focus in it; or none of
+// these. Open and revealed rows show their buttons.
+export type Look = "open" | "selected" | "revealed" | "plain";
 
-export function lookOf(open: boolean, revealed: boolean): Look {
+// `always` is whether the row shows its buttons while it's open even if it isn't revealed: the open
+// file's and the open group's do, and of the files selected, as in VS Code's Source Control view,
+// only the row of the one they reach.
+export function lookOf(open: boolean, always: boolean, revealed: boolean): Look {
   if (open) {
-    return "open";
+    return always || revealed ? "open" : "selected";
   }
 
   return revealed ? "revealed" : "plain";
+}
+
+export function showsButtons(look: Look): boolean {
+  return look === "open" || look === "revealed";
 }
 
 // Whether a hunk's actions show: while the pointer is over the hunk, focus is in its bar, or lines

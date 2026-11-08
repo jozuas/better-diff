@@ -114,7 +114,40 @@ test("the selected files' diffs show in one view, as a group's do, whatever the 
   expect(status(repository)).toBe(allModified);
 });
 
-test("the selected files' rows show their actions always, and Stage Selected stages all of them, and Unstage Selected unstages them", async ({
+function stageSelected(page: Page, path: string): Locator {
+  return row(page, "MODIFIED FILES (5)", path).getByRole("button", { name: "Stage Selected" });
+}
+
+test("the selected files' actions show always only on the row of the file the selection reaches, and on another selected file's row while the pointer is over it or focus is in it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeFive(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (5)", "b.txt");
+  await shiftClick(page, "MODIFIED FILES (5)", "d.txt");
+  await line(page, "changed b.txt").click();
+  await page.mouse.move(0, 0);
+
+  await expect(stageSelected(page, "d.txt")).toHaveCSS("opacity", "1");
+  await expect(stageSelected(page, "b.txt")).toHaveCSS("opacity", "0");
+  await expect(stageSelected(page, "c.txt")).toHaveCSS("opacity", "0");
+
+  await row(page, "MODIFIED FILES (5)", "c.txt").hover();
+
+  await expect(stageSelected(page, "c.txt")).toHaveCSS("opacity", "1");
+
+  await button(page, "b.txt").focus();
+  await page.mouse.move(0, 0);
+
+  await expect(stageSelected(page, "b.txt")).toHaveCSS("opacity", "1");
+  await expect(stageSelected(page, "c.txt")).toHaveCSS("opacity", "0");
+  expect(status(repository)).toBe(allModified);
+});
+
+test("Stage Selected stages all the selected files, from any of their rows, and Unstage Selected unstages them", async ({
   app,
   page,
   repository,
@@ -124,15 +157,8 @@ test("the selected files' rows show their actions always, and Stage Selected sta
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (5)", "b.txt");
   await shiftClick(page, "MODIFIED FILES (5)", "c.txt");
-  await page.mouse.move(0, 0);
-
-  const stage = row(page, "MODIFIED FILES (5)", "b.txt").getByRole("button", {
-    name: "Stage Selected",
-  });
-
-  await expect(stage).toHaveCSS("opacity", "1");
-  await expect(button(page, "Stage a.txt")).toHaveCSS("opacity", "0");
-  await stage.click();
+  await row(page, "MODIFIED FILES (5)", "b.txt").hover();
+  await stageSelected(page, "b.txt").click();
   await expect(group(page, "STAGED FILES (2)")).toHaveText(["b.txt", "c.txt"]);
 
   expect(status(repository)).toBe(" M a.txt\nM  b.txt\nM  c.txt\n M d.txt\n M e.txt\n");
@@ -159,7 +185,7 @@ test('Discard Selected asks "Confirm discard?" first, then discards all the sele
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (5)", "d.txt");
   await shiftClick(page, "MODIFIED FILES (5)", "e.txt");
-  await row(page, "MODIFIED FILES (5)", "d.txt")
+  await row(page, "MODIFIED FILES (5)", "e.txt")
     .getByRole("button", { name: "Discard Selected" })
     .click();
   await expect(button(page, "Confirm discard?")).toBeVisible();

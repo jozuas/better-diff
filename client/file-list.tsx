@@ -146,12 +146,13 @@ function useListedFiles(list: ListState): void {
 
 // The changed files, in their groups, under the filter they're listed by. Each file and group has
 // its actions at the end of its row, shown while the pointer is over it or focus is in it, and
-// always for the open file or group, or the files selected. A file's row opens its file, or if
-// shift-clicked selects the files from the open one to it, and opens its menu when right-clicked.
-// Keys move focus through the sidebar's headings and rows, opening each file they reach, or while
-// one is held down, the file they stop at, once it's let go, and from a row into its file's diff.
-// Shift+↑/↓ selects one more file or one fewer, and moves focus to the file the selection reaches.
-// A place picked in an untracked file's menu asks for the rule ignoring it, where the menu was.
+// always for the open file or group, or the file the selection reaches. A file's row opens its
+// file, or if shift-clicked selects the files from the open one to it, and opens its menu when
+// right-clicked. Keys move focus through the sidebar's headings and rows, opening each file they
+// reach, or while one is held down, the file they stop at, once it's let go, and from a row into
+// its file's diff. Shift+↑/↓ selects one more file or one fewer, and moves focus to the file the
+// selection reaches. A place picked in an untracked file's menu asks for the rule ignoring it,
+// where the menu was.
 export function FileList({
   groups,
   open,

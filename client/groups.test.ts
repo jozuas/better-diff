@@ -11,6 +11,7 @@ import {
   groups,
   isGroupOpen,
   isOpen,
+  isReached,
   isShown,
   listedFiles,
   openAfter,
@@ -151,6 +152,7 @@ test("a file's row shows what's open as it is: whether its file is open, and wha
       const shown = rowOpen(open, group, path);
 
       expect(isOpen(shown, group, path)).toBe(isOpen(open, group, path));
+      expect(isReached(shown, group, path)).toBe(isReached(open, group, path));
       expect(rowActions(shown, { group, path })).toStrictEqual(rowActions(open, { group, path }));
     }),
   );
