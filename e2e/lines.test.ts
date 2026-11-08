@@ -1,3 +1,5 @@
+import type { Locator, Page } from "@playwright/test";
+
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { button, line, openFile, selectLines, selectUpTo } from "./panel";
@@ -37,6 +39,63 @@ test("selecting lines shows their actions only while they're selected, and the t
   await line(page, "kept").click();
 
   await expect(button(page, "Stage Lines")).toBeHidden();
+});
+
+// An element on the page, which the tests typecheck without the DOM library to describe.
+interface Styled {
+  ownerDocument: {
+    defaultView: {
+      getComputedStyle: (
+        element: Styled,
+        pseudoElement: string | null,
+      ) => { color: string; backgroundColor: string };
+    };
+  };
+}
+
+// The element's text and background colours, or its pseudo-element's.
+async function colorsOf(
+  locator: Locator,
+  pseudoElement: string | null = null,
+): Promise<{ color: string; background: string }> {
+  const colors = await locator.evaluate((element: Styled, pseudo) => {
+    const { color, backgroundColor } = element.ownerDocument.defaultView.getComputedStyle(
+      element,
+      pseudo,
+    );
+
+    return { color, background: backgroundColor };
+  }, pseudoElement);
+
+  return colors;
+}
+
+// A line's number, in the row of the line with the text.
+function numberOf(page: Page, text: string, number: string): Locator {
+  return line(page, text).locator("..").getByText(number, { exact: true });
+}
+
+test("selected text is highlighted in a faint tint of the theme's text colour, and so are the selected lines' numbers, in the theme's text colour", async ({
+  app,
+  page,
+  repository,
+}) => {
+  addThree(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await selectLines(page, "bravo", "charlie");
+
+  await expect(button(page, "Stage Lines")).toBeVisible();
+
+  const { color } = await colorsOf(line(page, "bravo"));
+  const tint = color.replace(/^rgb\((?<channels>.*)\)$/u, "rgba($<channels>, 0.12)");
+
+  expect(tint).not.toBe(color);
+  expect(await colorsOf(line(page, "bravo"), "::selection")).toMatchObject({ background: tint });
+  await expect(numberOf(page, "bravo", "3")).toHaveCSS("background-color", tint);
+  await expect(numberOf(page, "bravo", "3")).toHaveCSS("color", color);
+  await expect(numberOf(page, "alpha", "2")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 });
 
 test("a selection of lines is cleared once their diff changes, since it can cover other lines then", async ({

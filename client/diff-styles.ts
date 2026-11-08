@@ -22,6 +22,14 @@ export const TabSizeContext = createContext(viewSettings.schema.parse({}).tabSiz
 const monospace =
   "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
 
+// What a diff's selection is highlighted in, behind both its text and its lines' numbers: a faint
+// tint of the theme's text colour, which reads over the lines' red and green tints in every theme,
+// as the accent doesn't. Any stronger, and it lifts a dark theme's background to the grey of its
+// comments, which then vanish.
+export function selectionColorOf(theme: PluginTheme): string | undefined {
+  return tintOf(processColor(theme.colors.foreground), 0.12);
+}
+
 function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
   return StyleSheet.create({
     line: { flexDirection: "row" },
@@ -54,7 +62,7 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
       lineHeight: fonts.codeLine,
       color: theme.colors.foregroundMuted,
     },
-    selected: { color: theme.colors.surface0, backgroundColor: theme.colors.foregroundMuted },
+    selected: { color: theme.colors.foreground, backgroundColor: selectionColorOf(theme) },
     text: {
       flex: 1,
       paddingHorizontal: textPadding,

@@ -360,7 +360,7 @@ export function GroupDiff({ query, layout, theme, ...files }: GroupDiffProps): R
   const view = useId();
 
   return (
-    <DiffLayout layout={layout} view={view}>
+    <DiffLayout layout={layout} view={view} theme={theme}>
       {(sideBySide) => (
         <Queried query={read} theme={theme}>
           {(data) => (

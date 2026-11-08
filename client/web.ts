@@ -42,8 +42,15 @@ interface PageElement {
   scrollIntoView: (options: { block: "center" }) => void;
 }
 
+interface PageStyleElement {
+  textContent: string | null;
+  remove: () => void;
+}
+
 declare const document: {
   querySelector: (selectors: string) => PageElement | null;
+  createElement: (tagName: "style") => PageStyleElement;
+  readonly head: { append: (element: PageStyleElement) => void };
   readonly body: PageElement;
   readonly activeElement: PageElement | null;
   addEventListener: (
@@ -230,6 +237,26 @@ export function useInsetFocusRing(id: string): void {
       element.style.outlineOffset = "-2px";
     }
   }, [id]);
+}
+
+// Has the text selected in the element with the id highlighted in the colour, rather than in the
+// browser's own, which suits no theme in particular. React Native's styles have no ::selection.
+// Nothing while the colour is undefined.
+export function useSelectionColor(id: string, color: string | undefined): void {
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || color === undefined) {
+      return () => {};
+    }
+
+    const style = document.createElement("style");
+
+    style.textContent = `#${CSS.escape(id)} ::selection { background-color: ${color}; }`;
+    document.head.append(style);
+
+    return () => {
+      style.remove();
+    };
+  }, [id, color]);
 }
 
 // Has the element with the id show the cursor for resizing what's either side of it.

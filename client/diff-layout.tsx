@@ -1,13 +1,15 @@
+import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
 import { useContext, useMemo, useState } from "react";
 import { View } from "react-native";
 
 import { showsSideBySide } from "./diff-style";
 import type { Layout } from "./diff-style";
+import { selectionColorOf } from "./diff-styles";
 import { FontSizesContext } from "./fonts";
 import { keptPlace } from "./place";
 import { whileShown } from "./shown";
-import { afterRender, KeptPlaceContext, useScrolled, viewPage } from "./web";
+import { afterRender, KeptPlaceContext, useScrolled, useSelectionColor, viewPage } from "./web";
 
 interface DiffLayoutProps {
   layout: Layout;
@@ -15,17 +17,19 @@ interface DiffLayoutProps {
   view: string;
   // The diffs, side by side or inline.
   children: (sideBySide: boolean) => ReactElement;
+  theme: PluginTheme;
 }
 
 // The diffs, side by side or inline as the layout says for how wide this is at the lines' font size,
 // once it's measured, in a view that keeps what's at its top in place, as a change of width that
-// switches between them does.
-export function DiffLayout({ layout, view, children }: DiffLayoutProps): ReactElement {
+// switches between them does, with what's selected in it highlighted in the theme's colours.
+export function DiffLayout({ layout, view, children, theme }: DiffLayoutProps): ReactElement {
   const [width, setWidth] = useState<number>();
   const fonts = useContext(FontSizesContext);
   const kept = useMemo(() => keptPlace(viewPage(view), afterRender), [view]);
 
   useScrolled(view, kept.scrolled);
+  useSelectionColor(view, selectionColorOf(theme));
 
   const sideBySide = width === undefined ? undefined : showsSideBySide(layout, width, fonts);
 

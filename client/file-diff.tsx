@@ -104,7 +104,7 @@ function DiffOfFile({ query, file, layout, controls, theme }: FileDiffProps): Re
         controls={controls}
         theme={theme}
       />
-      <DiffLayout layout={layout} view={view}>
+      <DiffLayout layout={layout} view={view} theme={theme}>
         {(sideBySide) => (
           <>
             <Queried query={diff} theme={theme}>
