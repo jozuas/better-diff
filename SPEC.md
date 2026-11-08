@@ -2,20 +2,22 @@
 
 Desktop only: the mobile app isn't supported for now.
 
+Better Diff is a workspace panel, with Lucide's git-compare-arrows as its icon.
+
 ### Diff view
 
 Replicates Sublime Merge as much as possible:
 
-- Syntax highlighted, by Paseo's own highlighter, so in the languages it knows, by the file's extension. Removed lines are highlighted as part of the old version of the file, and added and unchanged ones as part of the new, so a line inside a comment that starts lines above is a comment. Colours are those of Paseo's default syntax theme, One: One Light in a light Paseo theme, One Dark in a dark one, since plugins can't read the syntax theme chosen in Paseo's settings. A version of more than 768 KiB characters isn't highlighted, as in Paseo's own diff. A version Paseo's highlighter fails on, as its Nix grammar fails on a file ending in a backslash, shows without highlighting rather than not at all.
+- Syntax highlighted, by Paseo's own highlighter, so in the languages it knows, by the file's extension. Removed lines are highlighted as part of the old version of the file, by the extension of the path it was renamed from if it was, and added and unchanged ones as part of the new, so a line inside a comment that starts lines above is a comment. Colours are those of Paseo's default syntax theme, One: One Light in a light Paseo theme, One Dark in a dark one, since plugins can't read the syntax theme chosen in Paseo's settings. A version of more than 768 × 1,024 characters isn't highlighted, as in Paseo's own diff. A version Paseo's highlighter fails on, as its Nix grammar fails on a file ending in a backslash, shows without highlighting rather than not at all.
 - In a monospace font, as Paseo's own diff, though Paseo gives plugins' text its UI font.
 - A tab reaches the next tab stop, as in a terminal: every 8 columns, unless the tab size in Better Diff's settings is changed, to a whole number from 1 to 16. One chosen is saved at once, for every client of the host.
-- Diffs come from git itself (`git diff --no-ext-diff`), honouring the user's `diff.algorithm`.
-- Changed words within a line are highlighted, as in Sublime Merge, in a stronger tint of the line's red or green, as [delta](https://github.com/dandavison/delta) highlights them. In each run of changes, each removed line in turn is paired with the first added line, after the last one paired, that's similar enough to it, and only paired lines have words highlighted: a line rewritten has none, as its tint says it all changed. Two lines are aligned word by word, a word being a run of letters, digits and underscores, and any other character being one on its own, as is an emoji with its modifiers and the emoji joined to it, with what changed grouped together where that costs no more. They're similar enough if at most 60% of their text changed, counting the text they keep twice, once in each, and measuring text as a terminal shows it, without whitespace at either end of each changed or kept piece. Whitespace both lines keep right after text both changed counts as changed too. A run stops pairing its lines once the tables aligning them would have more than a million cells together, which would take too long.
-- The spaces and tabs an added line ends with are marked in the theme's red, as Magit marks trailing whitespace by default. Removed and unchanged lines' aren't, nor is a carriage return a Windows line ending leaves at the end of a line.
-- Inline and side-by-side diffs, as the diff style in Better Diff's settings says: Auto, the default, shows a diff side by side where each side has room beside its line numbers for a line of the line length set there, 80 characters unless it's changed, and inline where it hasn't. Set it to the length the code wraps at. The room is in characters of the diff font size, beside line numbers as wide as it makes them, so a larger font needs a wider diff. A line length is a whole number from 20 to 400, and anything else says so and isn't saved. One typed is saved once typing pauses, or at once on leaving the page, for every client of the host: like Paseo's own settings, the page has no Save button. In side-by-side, removals and additions are separate texts. A removed line paired with an added line, as for changed words, is level with it, as delta lines them up, and every other removed or added line has a row of its own, the removed ones before the added ones up to the next pair.
-- Diff is shown file by file instead of as one continuously scrollable diff.
+- Diffs come from git itself (`git diff --no-ext-diff --no-textconv`), honouring the user's `diff.algorithm`, with three lines of context around each hunk whatever `diff.context` says.
+- Changed words within a line are highlighted, as in Sublime Merge, in a stronger tint of the line's red or green, as [delta](https://github.com/dandavison/delta) highlights them. In each run of changes, each removed line in turn is paired with the first added line, after the last one paired, that's similar enough to it, and only paired lines have words highlighted: a line rewritten has none, as its tint says it all changed. Two lines are aligned word by word, a word being a run of letters, digits, combining marks and connector punctuation such as underscores, and any other character being one on its own, as is an emoji with its modifiers and the emoji joined to it, with what changed grouped together where that costs no more. They're similar enough if at most 60% of their text changed, counting the text they keep twice, once in each, and measuring text as a terminal shows it, but for a tab, which counts as one column, without whitespace at either end of each changed or kept piece. Whitespace both lines keep right after text both changed counts as changed too. A run stops pairing its lines once the tables aligning them would have more than a million cells together, which would take too long.
+- The spaces and tabs an added line ends with are marked in the theme's red, as Magit marks trailing whitespace by default. Removed and unchanged lines' aren't, nor is a carriage return a Windows line ending leaves at the end of a line, nor are the spaces and tabs before it.
+- Inline and side-by-side diffs, as the diff style in Better Diff's settings says: Auto, the default, shows a diff side by side where each side has room beside its line numbers for a line of the line length set there, 80 characters unless it's changed, and inline where it hasn't. Set it to the length the code wraps at. The room is in characters of the diff font size, beside line numbers as wide as it makes them, so a larger font needs a wider diff. A line length is a whole number from 20 to 400, and anything else says so and isn't saved. One typed is saved once typing pauses, or at once on leaving the page, for every client of the host: like Paseo's own settings, the page has no Save button. A style chosen is saved at once. A change of the panel's width that switches between inline and side by side keeps the line at the top of the view in place. In side-by-side, removals are on the left and additions on the right, as separate texts, each side numbering its lines in its own version. A removed line paired with an added line, as for changed words, is level with it, as delta lines them up, and every other removed or added line has a row of its own, the removed ones before the added ones up to the next pair.
+- Diff is shown file by file instead of as one continuously scrollable diff, but in a group's or the selected files' view, which shows all their diffs (see File sidebar).
 - The very top of a file's diff is a horizontal bar in the theme's greys (Sublime Merge's is deep blue, but some Paseo themes' accent colour is the green or red of added and removed lines). It shows the file's status (MODIFIED, UNTRACKED, STAGED), its full path, how many lines the diff adds and removes, as GitHub shows them after the path (+12 −3), even while it's collapsed, and the file actions on the right. A file shown without lines, such as a binary file, has no counts.
-- Each hunk is delimited by a horizontal bar, as tall as the file's and fainter (Sublime Merge uses blue), with the hunk actions on the right. As in Sublime Merge, they show only while the pointer is over the hunk, its bar or its lines, focus is in its bar, or lines in it are selected. On hover, its left side shows a "Show entire file" / "Show only modified hunks" toggle, as Sublime Merge's icons: triangles pointing out from a line in a dotted frame, and pointing in to it in a solid one. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
+- Each hunk is delimited by a horizontal bar, as tall as the file's and fainter (Sublime Merge uses blue), with the hunk actions on the right. As in Sublime Merge, they show only while the pointer is over the hunk, its bar or its lines, focus is in its bar, or lines in it are selected. While they show, its left side shows a "Show entire file" / "Show only modified hunks" toggle, as Sublime Merge's icons: triangles pointing out from a line in a dotted frame, and pointing in to it in a solid one. Every file opens showing only modified hunks: the toggle doesn't carry over to the next file.
 
 ### Actions
 
@@ -32,6 +34,7 @@ Replicates Sublime Merge as much as possible:
 - After a hunk action the view moves to the next hunk; after a file action, to the next file.
 - While a file is open, the diff of the file a file action would move the view to is read too, so it shows at once after one.
 - One action runs at a time: while one runs, the buttons that run actions are disabled, and a key that runs one does nothing.
+- Once an action runs, the selection of lines is cleared, even if the action changed nothing.
 
 ### Selecting lines
 
@@ -43,7 +46,7 @@ Replicates Sublime Merge as much as possible:
 
 ### Keyboard
 
-The panel works from the keyboard as it does with the pointer, in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl but the find bar's ⌘F and ⌘G, or Ctrl+F elsewhere, which Paseo leaves free and other apps find with (see Find in diff), and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
+The panel works from the keyboard as it does with the pointer, in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl but the find bar's ⌘F and ⌘G, or Ctrl+F elsewhere, which Paseo leaves free and other apps find with (see Find in diff), and Cmd+Enter or Ctrl+Enter in a comment or the review's message, as in Paseo's own diff (see Review comments), and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
 
 Tab reaches nothing in the panel: every action has a key of its own, and Tab moves focus on out of the panel.
 
@@ -56,14 +59,14 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 #### Moving
 
 - ↓ and ↑ move focus to the next place or the one before in the pane it's in: in the sidebar from one group to the next, and in the diff from one file to the next. Alt+↓ and Alt+↑ take bigger steps: to the next group's heading or the one before, or to the next file's bar or the one before.
-- Focus reaching a file's row opens the file. Focus reaching a group's heading opens nothing: Enter opens the group.
+- ↓ or ↑ moving focus to a file's row opens the file. Focus reaching a group's heading opens nothing: Enter opens the group.
 - Holding ↓ or ↑ in the sidebar moves focus on without opening each file it passes: the file of the row focus stops at opens once the key is let go.
 - Shift+↓ and Shift+↑ in a file's row select one more file or one fewer, and focus moves along with them. Escape in a selected file's row opens just that file.
 - Focus reaching a bar shows it from its start: the view scrolls to the top of its hunk's lines, or of its file's diff.
-- In one file's view, ↓ on the file's last bar opens the next file the sidebar lists, with focus on its file bar, and ↑ on the file bar opens the file before, with focus on its last bar. Alt+↓ and Alt+↑ open the next file or the one before, with focus on its file bar.
-- → moves focus from a file's row into its diff, to its first hunk, or its file bar if it has none, opening the file first if the view doesn't show it, and ← from anywhere in a file's diff back to its row.
+- In one file's view, ↓ on the file's last bar opens the next file the sidebar lists, with focus on its file bar, and ↑ on the file bar opens the file before, with focus on its last bar. Alt+↓, and Alt+↑ on the file bar, open the next file or the one before, with focus on its file bar.
+- → moves focus from a file's row into its diff, to its first hunk, or its file bar if it has none, opening the file first if the view doesn't show it, and ← from any of a file's bars back to its row, leaving a group's or the selected files' view open.
 - On a group's heading, ← collapses the group and → expands it again. → on an expanded heading opens the group, with focus on its first file's first hunk, or that file's bar if it has none, once the group's view shows.
-- ↑ on the first heading moves focus to the filter, and `/` does from anywhere in the panel. In the filter, ↓ and Enter move focus to the first file it lists, opening it, and Escape clears it, or once it's empty moves focus to the open file's row.
+- ↑ on the first heading moves focus to the filter, and `/` does from anywhere in the panel but a text field, where it's typed. In the filter, ↓ and Enter move focus to the first file it lists, opening it, and Escape clears it, or once it's empty moves focus to the open file's row, or the open group's heading.
 
 #### Acting
 
@@ -91,10 +94,10 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 
 #### Getting there, and learning the keys
 
-- Better Diff in Paseo's command center opens the panel with focus in the open file's row, and so does opening the panel some other way, unless focus is in a text field then, as in a message being written, or already in the panel.
-- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter or Backspace under a hunk's, a mode change's or the selected lines' buttons, Shift+Enter or Shift+Backspace under a file's or a group's, and E under the hunk's toggle. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
-- Once focus rests on a bar for a second, Enter and Backspace show under the buttons they press from there: a hunk's, a mode change's or a file's own, or the selected lines' while the hunk has any.
-- Better Diff's settings page lists all the keys.
+- Better Diff in Paseo's command center opens the panel with focus in the open file's row, or the open group's heading, and so does opening the panel some other way, unless focus is in a text field then, as in a message being written, or already in the panel.
+- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter under a hunk's, a mode change's or the selected lines' Stage or Unstage, and Backspace under their Discard, Shift+Enter or Shift+Backspace likewise under a file's or a group's, and E under the hunk's toggle and a collapsed diff's Show diff. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
+- Once focus rests on a bar for a second, Enter shows under the Stage or Unstage button it presses from there, and Backspace under the Discard or Delete one: a hunk's, a mode change's or a file's own, or the selected lines' while the hunk has any.
+- Better Diff's settings page lists the keys, but Enter in a row or a heading and Enter and Escape in a file's menu, which work as they do on any button and menu, and a comment's and the review's keys.
 
 ### Find in diff
 
@@ -106,7 +109,7 @@ Paseo's desktop app has no find of its own, and a browser's would search the who
 - Each match is highlighted in the theme's warning colour, and the current one more strongly. The bar shows which match is current, of how many: "3 of 17", or "No results".
 - Typing makes the current match the first at or after the one that was, or with none, the first at or after the line at the top of the view.
 - Enter and Shift+Enter in the find bar, its ↓ and ↑ buttons, and ⌘G and ⇧⌘G on a Mac, F3 and Shift+F3 elsewhere, with focus anywhere in the panel while the find bar is open, move to the next match or the one before, from the last round to the first. A match that becomes current scrolls to the middle of the view, unless it's shown already, and the file shows more of its entire file first if it has to.
-- Escape in the find bar, or its × button, closes it and clears the highlights, and focus goes back where it was before it opened.
+- Escape in the find bar, or its × button, closes it and clears the highlights, and focus goes back where it was before it opened. What's typed stays: opened again, the bar shows it selected, and the current match is the first at or after the line at the top of the view.
 - Keys in the find bar only find: Enter doesn't stage there, nor Backspace discard. Its buttons' keys show under them once the pointer rests on them, as other buttons' do, and Better Diff's settings page lists them with the others.
 - As the diff changes, its highlights follow, and the current match is the first at or after where it was, without scrolling the view. Once another file or group opens, its first match is current.
 
@@ -114,19 +117,19 @@ Paseo's desktop app has no find of its own, and a browser's would search the who
 
 As in Paseo's own diff, lines are commented on, and the comments sent to an agent in the workspace. Like a GitHub review's, a comment is pending until the review is sent, and the review is looked over, as GitHub's "Finish your review" does, before it is.
 
-- While the pointer is over a hunk's line, a + button at the start of its numbers starts a comment on it, clear of its text, where a selection starts. The comment is on the line as the review the agent reads numbers it (see below): in HEAD for a removed line, and in the worktree for any other, or side by side, in HEAD on the old side and in the worktree on the new one. Inline, an unchanged line the worktree hasn't, as one staged and then removed, is commented on in HEAD. A line only the index has, staged and then changed in the worktree, has no + button, and nor has a side of a line, side by side, that the review's version of that side hasn't: the agent couldn't find it. The comment is written in a box under the line, and saved with Comment, or Cmd+Enter (Ctrl+Enter), unless it's only whitespace, or left with Cancel or Escape. One comment is written at a time. What's written of it stays as its file changes, under the line that then has its number.
+- While the pointer is over a hunk's line, a + button at the start of its numbers starts a comment on it, clear of its text, where a selection starts. The comment is on the line as the review the agent reads numbers it (see below): in HEAD for a removed line, and in the worktree for any other, or side by side, in HEAD on the old side and in the worktree on the new one. Inline, an unchanged line the worktree hasn't, as one staged and then removed, is commented on in HEAD. A line only the index has, staged and then changed in the worktree, has no + button, and nor has a side of a line, side by side, that the review's version of that side hasn't: the agent couldn't find it. The comment is written in a box under the line, and saved with Comment, or Cmd+Enter or Ctrl+Enter, unless it's only whitespace, or left with Cancel or Escape. One comment is written at a time. What's written of it stays as its file changes, under the line that then has its number.
 - A press in a comment, or under a line among its comments, is theirs rather than the lines': focus stays in a box a comment is written in, rather than moving to the hunk's bar, and a right click opens the page's own menu, which pastes, rather than the lines' menu.
 - A comment saved is pending: it shows under its line, marked Pending, with buttons that edit it and delete it. A line can have several. Inline, an unchanged line shows the comments made on either of its sides side by side.
 - Staging and unstaging change neither HEAD nor the worktree, so a comment stays on its line as its file's hunks are staged and unstaged, by Better Diff or anything else, and shows under it in whichever of the file's diffs has it: MODIFIED's or STAGED's, or both.
 - Each file's row in the sidebar says how many comments are pending on the file, after its path, in MODIFIED and STAGED alike for a partly staged file.
 - Pending comments, and the review's message, are kept in the tab, as what it shows is once Paseo reloads, and while any comments are, the tab shows it has unsaved work, and asks before it's closed.
 - While comments are pending, a bar under the diff has Review, with how many are pending, as "Review (3)", which opens the review above it, until it's closed, with Escape or a click outside it. Escape in a comment being edited in it leaves the comment, and the review stays open. In it:
-  - A message for the agent, empty at first, which the review asks the agent instead of "Please address this code review.", as Paseo's own diff asks it, while it says anything. Cmd+Enter (Ctrl+Enter) in it sends the review.
-  - The comments pending, under the files they're on, each by path, and each file's in the order of their lines in its unstaged diff and then in its staged one, as they are now: where both have a line, the one that changes it. Each shows its line's number there, marked as removed or added, and as staged if it's the staged diff, and the line, or that neither diff has it now, and what the comment says, with buttons that edit it there and delete it. A comment whose line a diff has, of a file a group lists, opens that diff when pressed, which scrolls to show it, and it stands out for a moment.
-  - The agent it goes to: the workspace's, or of several, the one chosen from a menu, those active most recently first, which is the one active most recently until another is chosen. The workspace's agents are those not archived: plugins can't tell which have tabs open, as Paseo's own diff does. Without an agent in the workspace, it says to start one, and can't be sent.
-  - Send feedback, which sends the review as Paseo's own diff sends it: the message with a review attachment, of each comment with its file, side, line number and the lines of its hunk up to three either side, from the diffs as they are then. An agent at work gets it without being interrupted. While it's being sent, Send feedback is disabled, and Cmd+Enter does nothing, though the review is closed and opened again.
+  - A message for the agent, empty at first, which the review asks the agent instead of "Please address this code review.", as Paseo's own diff asks it, while it says anything. Cmd+Enter or Ctrl+Enter in it sends the review.
+  - The comments pending, under the files they're on, each by path, and each file's in the order of their lines in its unstaged diff and then in its staged one, as they are now: where both have a line, the one that changes it, and last those whose line neither has now. Each shows its line's number there, marked as removed or added, and as staged if it's the staged diff, and the line, or that neither diff has it now, and what the comment says, with buttons that edit it there and delete it. A comment whose line a diff has, of a file a group lists, closes the review and opens that diff when pressed, which scrolls to show it, and it stands out for a moment.
+  - The agent it goes to: the workspace's, or of several, the one chosen from a menu, those active most recently first, which is the one active most recently until another is chosen, or no comments are pending. The workspace's agents are those not archived, other than Paseo's own internal ones: plugins can't tell which have tabs open, as Paseo's own diff does. Without an agent in the workspace, it says to start one, and can't be sent.
+  - Send feedback, which sends the review as Paseo's own diff sends it: the message with a review attachment, of each comment with its file, side, line number and the lines of its hunk up to three either side, from the diffs as they are then. An agent at work gets it without being interrupted. While it's being sent, Send feedback reads "Sending feedback", it and Discard review are disabled, and Cmd+Enter does nothing, though the review is closed and opened again.
   - Discard review, which deletes the comments pending, and the message, and asks for confirmation as discarding changes does.
-- The review sent is of the worktree's uncommitted changes, as Paseo's own diff's is, from HEAD to the worktree, so its lines are numbered as HEAD and the worktree number them, not as the index does. A partly staged file's staged diff goes to the index and its unstaged diff from it, so a line there is numbered as its other diff has it in HEAD or the worktree, and so is its hunk's header. A comment's line is sent with the lines around it in the diff that changes it, where both diffs have it.
+- The review sent is of the worktree's uncommitted changes, as Paseo's own diff's is, from HEAD to the worktree, so its lines are numbered as HEAD and the worktree number them, not as the index does. While Hide whitespace is on, the diffs the review lists and sends hide whitespace changes too, as the panel's do. A partly staged file's staged diff goes to the index and its unstaged diff from it, so a line there is numbered as its other diff has it in HEAD or the worktree, and so is its hunk's header. A comment's line is sent with the lines around it in the diff that changes it, where both diffs have it.
 - Comments sent are no longer pending, and the message is empty again, unless it was changed while they were sent. One edited while it was sent stays pending, as what it says now wasn't sent, and so does one made then.
 - A comment isn't sent, and stays pending, whose line neither of its file's diffs has now, or whose file's diffs can't be read. The message that says who the others were sent to says how many weren't, and why. Without one to send, nothing is sent, and it says so, and why.
 
@@ -135,14 +138,14 @@ As in Paseo's own diff, lines are commented on, and the comments sent to an agen
 - A "Hide whitespace" switch in Better Diff's settings hides changes only to whitespace, as `git diff --ignore-all-space` hides them, and as lazygit does: a line whose only change is to whitespace shows unchanged, as the new version has it, and a hunk with no other changes doesn't show. The counts on the file bar are of the lines shown.
 - It's off by default. Switched, it's saved at once, for every client of the host, and Better Diff panels already open follow it, keeping the line at the top of the view where it was, or the next line the diff still shows.
 - Hunk and line actions act only on the changes shown, as in lazygit and Magit: changes only to whitespace stay as they are. File actions, and actions on a group or on the selected files, act on all of each file's changes, as they include a mode change.
-- Where hiding whitespace changes lines the versions up differently from git's full diff, so that acting on the selected lines would make other changes than the ones shown, the action changes nothing, and says to turn off Hide whitespace in Better Diff's settings to act on those lines.
+- Where hiding whitespace changes lines the versions up differently from git's full diff, so that acting on a hunk or the selected lines would make other changes than the ones shown, the action changes nothing, and says to turn off Hide whitespace in Better Diff's settings to act on those lines.
 - A file whose only changes are to whitespace shows "Only whitespace changes" instead of its diff, and its file actions stage, unstage or discard them.
 
 ### Refreshing
 
-- The view refreshes as the worktree and the index change, as an agent changes them, within a second or so, whether or not Paseo's window has focus.
-- A change nothing tells of, as to a file outside the worktree that git reads, such as `core.excludesFile`, shows once Paseo's window regains focus, or within half a minute.
-- Once the open file leaves its group, the view moves on to the next file in it.
+- The view refreshes as the worktree and the index change, as an agent changes them, within a second or so, whether or not Paseo's window has focus. While changes keep coming, `git status` runs a tenth of the time at most, so where it's slow, the view refreshes less often.
+- A change nothing tells of, as to a file outside the worktree that git reads, such as `core.excludesFile`, shows once Paseo's window regains focus, or within half a minute, or where `git status` is slow, within a minute.
+- Once the open file leaves its group, the view moves on to the next file in it, or once it was the last, to the one before it.
 - As an agent's change adds or removes lines above the line at the top of the view, in its file's diff or, in a group's view, in the diffs and files above it, that line stays in place. Once that line is gone, the line that takes its place is there instead: as many lines into those that replace the lines around it, or else the next line. A change of more than 1,000 lines added and removed at once isn't followed.
 - A selection of lines is cleared once their diff changes, since it can cover other lines then. In a group's view, a change to another file's diff leaves it.
 - An action on a diff that changed since it was shown changes nothing, says so, and reloads the diff.
@@ -151,18 +154,19 @@ As in Paseo's own diff, lines are commented on, and the comments sent to an agen
 ### Special file states
 
 - No changes: show "No changes".
-- Binary file, symlink: show "Binary file" or "Symlink" instead of the diff.
+- Binary file, symlink, or a file that's become a symlink or stopped being one: show "Binary file" or "Symlink" instead of the diff.
 - Mode change (e.g. `chmod +x`): handled as Magit handles it. A bar like a hunk's, under the file bar, shows the old and new mode, with its own actions: Discard Mode Change and Stage Mode Change, or Unstage Mode Change. Hunk and line actions leave the mode change alone, as in Magit and lazygit, and file actions include it. A file whose only change is its mode shows just that bar.
-- Renamed file: the file bar shows the path it was renamed from, and the diff shows its other changes, or "Renamed" if it has none. Its lines can be staged, unstaged and discarded like any file's; staging one stages the rename too. Unstaging the file unstages only the new file, and leaves the old one's deletion staged.
+- Renamed file: the file bar shows the path it was renamed from, and the diff shows its other changes, or "Renamed" if it has none. Its lines can be staged, unstaged and discarded like any file's; staging one, or its mode change, stages the rename too. Unstaging the file unstages only the new file, and leaves the old one's deletion staged, while Unstage All and Unstage Selected unstage both.
 - A file moved without git (a plain `mv`) is a renamed file in MODIFIED, as `git status` shows it once the new file is added with `--intent-to-add`, not a deleted file plus an untracked one. Discarding it deletes the new file and restores the old one.
 - A file added with `git add --intent-to-add` is in MODIFIED. Discarding it deletes it, as deleting an untracked file does, and restores the file it was renamed from, if any.
 - Deleted file: show the whole old file as removed lines.
-- A file in a directory that's become a symlink is a deleted file, as `git status` shows it: git never looks beyond a symlink. It can be staged and unstaged, whole or in part. Discarding it puts the directory back in place of the symlink, as `git restore` does. Discarding a hunk or lines changes nothing, and says why: git won't write a file beyond a symlink, so `git restore -p` and Magit refuse to as well.
+- New or deleted empty file: show "Empty file".
+- A file in a directory that's become a symlink is a deleted file, as `git status` shows it: git never looks beyond a symlink. The symlink in the directory's place is an untracked file until it's staged. It can be staged and unstaged, whole or in part. Discarding it puts the directory back in place of the symlink, as `git restore` does. Discarding a hunk or lines changes nothing, and says why: git won't write a file beyond a symlink, so `git restore -p` and Magit refuse to as well.
 - Generated file, and a diff of more than 1,000 changed lines: collapsed, as GitHub collapses them, to "Generated file" or "Large diff" and a "Show diff" button. Its file actions work while it's collapsed. A file is generated if its `linguist-generated` attribute is set, as on GitHub, or, where the attribute isn't specified, if it's a lockfile such as `package-lock.json` or `mix.lock`.
 
 ### File sidebar (left)
 
-- Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets.
+- Changed files grouped as "MODIFIED FILES (17)", "UNTRACKED FILES (11)", "STAGED FILES (0)", with the number of files in each group in brackets, and while the filter hides some of a group's files, how many it lists of them: "MODIFIED FILES (2 of 17)". A group without files shows "No changes" when it's opened.
 - Opening Better Diff opens the first file the sidebar lists, without a click: the first modified file, or else the first untracked one, or else the first staged one. With no changes it opens none, and a file changed after that waits for a click.
 - Once Paseo reloads, each Better Diff tab shows what it showed: the open file or group, or the selected files as far as their group still lists them, or else the first file, as on opening Better Diff; the groups collapsed; the filter; and the file list's width.
 - Group headings are in the theme's text colour, and files' paths dimmed from it as Paseo's Changes tab dims its file names, except on the open file's row, the selected files' rows, and one under the pointer or with focus in it.
@@ -171,23 +175,23 @@ As in Paseo's own diff, lines are commented on, and the comments sent to an agen
 - Each file's row starts with the icon Paseo's Changes tab shows the file with in its tree: Material Icon Theme's icon for its extension, in colours as muted as Paseo's, and a plain file icon for an extension Paseo has none for.
 - Each file's row has its file bar's actions as icons at its end (Stage +, Unstage −, Discard ↺, Delete 🗑), over the end of its path. They show while the pointer is over the row or focus is in it, and always on the open file's row, whose actions act on the diff shown.
 - Each group's heading has the actions on all its files the same way:
-  - MODIFIED: Stage All, Discard All
-  - UNTRACKED: Stage All, Delete All
+  - MODIFIED: Discard All, Stage All
+  - UNTRACKED: Delete All, Stage All
   - STAGED: Unstage All
 
-  They're left out while the filter hides some of the group's files, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
+  They're left out while the filter hides some of the group's files, or it has none, and an action on a group changes nothing, and says so, if a file has joined or left the group since it was listed.
 
 - Shift-clicking a file selects the files from the open one to it, as in Sublime Merge, and shift-clicking another selects from the same file again. A selection stays within one group: shift-clicking a file in another group opens just that file.
 - The selected files' diffs show in one view, as a group's do, whatever the filter. Their rows show their actions always, acting on all of them as a group's actions act on all its files:
-  - MODIFIED: Stage Selected, Discard Selected
-  - UNTRACKED: Stage Selected, Delete Selected
+  - MODIFIED: Discard Selected, Stage Selected
+  - UNTRACKED: Delete Selected, Stage Selected
   - STAGED: Unstage Selected
 
   An action on them changes nothing, and says so, if one has left the group since they were selected. Once some leave the group, as after staging one from its file bar, the rest stay selected.
 
-- "Filter files..." input to quickly find a file.
-- Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its paths.
-- Right-clicking a file's row opens its menu, which closes with Escape or a click outside it:
+- "Filter files..." input to quickly find a file: it lists only the files whose paths have what's typed in them, whatever its case, and a × button clears it.
+- Dragging the separator between the file list and the diff resizes the file list, no narrower than 160 pixels, and leaving the diff no narrower than 240, and double-clicking it fits the list to its rows and headings, with room for the buttons beside them.
+- Right-clicking a file's row opens its menu, which closes with Escape or a click outside it. Each item has an icon before it, and a line parts the copy items from the ignore items:
   - Copy full path
   - Copy relative path: from the repository's root, as git status lists it.
   - Copy filename
@@ -206,22 +210,22 @@ As in Magit's gitignore menu (`i`), an untracked file's menu has the places a ru
 
 Picking one asks for the file or pattern to ignore, as Magit does. Enter or the Ignore button adds the rule, and Escape, Cancel or a click outside closes it without adding one:
 
-- Under the field are the candidates Magit offers, from the rule's directory, sorted: each untracked file under it as `/path`, each directory under it git status lists as untracked, which has no tracked files, as `/dir/`, and for each file with an extension, `*.ext`, and `/dir/*.ext` for one in a subdirectory. Typing shows only those with what's typed in them. Clicking one adds it.
-- With nothing typed, Enter adds the default: the file, as `/path`.
+- Under the field are the candidates Magit offers, from the rule's directory, sorted: each untracked file under it as `/path`, each directory under it git status lists as untracked, which has no tracked files, as `/dir/`, and for each file with an extension, `*.ext`, and `/dir/*.ext` for one in a subdirectory. Typing shows only those with what's typed in them. At most 100 show, and then how many more there are. Clicking one adds it.
+- With nothing typed, Enter adds the default, which the field shows as its placeholder: the file, as `/path`.
 - A candidate escapes what a pattern would read as more than the name, as `*`, `?`, `[`, `\`, and spaces at its end, so it ignores the name it shows, and only that. A newline or carriage return, which a rule can't have, is `?`. What's typed goes in as it is. (Magit adds paths as they are, and doubles the backslashes in a rule.)
 - The rule goes on a line of its own at the end of the file, which is made, with its directories, if it isn't there. A `.gitignore` is then staged, as Magit stages it, unless it's ignored itself, which git won't stage.
 - The view refreshes at once.
 
 ### Confirmation
 
-These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard selected, discard all, and deleting untracked files. Stage and unstage never ask, since nothing is lost.
+These ask for confirmation: discard hunk, discard lines, discard mode change, discard file, discard selected, discard all, deleting untracked files, and discard review. Stage and unstage never ask, since nothing is lost.
 
-Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it. A key that runs the action asks the same way: its button turns into the question, and the key pressed again runs it. A key held down runs its action once, so holding Backspace doesn't confirm a discard.
+Confirming takes no mouse movement: the clicked button turns into "Confirm discard?" (or "Confirm delete?") for about three seconds, and a second click runs it. A key that runs the action asks the same way: its button turns into the question, and the key pressed again runs it. A key held down runs its action once, so holding Backspace doesn't confirm a discard. Pressing another action's button in the diff or the sidebar takes the question back.
 
 ### Pointer
 
-- A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A sidebar button's icon brightens too.
-- A button that asks for confirmation shows the danger colour while the pointer is over it.
+- A button is tinted in the colour of its text or icon while the pointer is over it, and more while it's pressed. A button with text in the theme's own text colour is tinted faintly even while the pointer isn't over it, as Paseo fills its buttons. An icon button's icon brightens too.
+- A button that asks for confirmation shows the danger colour while the pointer is over it, and is filled with it while it asks.
 - A group's triangle brightens while the pointer is over it.
 - The separator between the file list and the diff shows its line in the accent colour while the pointer is over it, as it does while it's dragged.
 
@@ -240,10 +244,10 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 
 ### Out of scope
 
-- Merge conflicts.
+- Merge conflicts: a file with them shows "Merge conflicts" instead of its diff.
 - Submodules.
 
 ### Open questions
 
-- Syntax highlighting: which languages must work? Elixir and HEEx at least. Highlight the full old and new files, so hunks inside multi-line `~H"""` blocks are coloured correctly.
+- HEEx: Paseo's highlighter knows Elixir (`.ex`, `.exs`) but not HEEx, so a `.heex` file shows without highlighting.
 - Commit, history, branches, stash and push: confirm they're out of scope? (Paseo already has commit built in.)
