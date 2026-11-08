@@ -6,6 +6,7 @@ import { showsSideBySide } from "./diff-style";
 import type { Layout } from "./diff-style";
 import { FontSizesContext } from "./fonts";
 import { keptPlace } from "./place";
+import { whileShown } from "./shown";
 import { afterRender, KeptPlaceContext, useScrolled, viewPage } from "./web";
 
 interface DiffLayoutProps {
@@ -31,9 +32,9 @@ export function DiffLayout({ layout, view, children }: DiffLayoutProps): ReactEl
   return (
     <View
       style={{ flex: 1 }}
-      onLayout={(event) => {
-        setWidth(event.nativeEvent.layout.width);
-      }}
+      onLayout={whileShown((size) => {
+        setWidth(size.width);
+      })}
     >
       <KeptPlaceContext value={kept}>
         {sideBySide === undefined ? null : children(sideBySide)}

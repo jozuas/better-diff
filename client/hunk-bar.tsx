@@ -29,6 +29,7 @@ import type { PointedHunk } from "./pointed";
 import { hunkKeyed, hunkRevealed } from "./reveal";
 import { fileId, lineId } from "./selection";
 import type { LineRange } from "./selection";
+import { whileShown } from "./shown";
 import type { Focus } from "./side-by-side";
 import { clearSelection, nearestLevel, selectedNow, selectLines } from "./text-selection";
 import { afterRender, onMac, useInsetFocusRing, useLatest, useStuckAt } from "./web";
@@ -303,9 +304,9 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
       style={styles.bar}
       onLayout={
         index === 0
-          ? (event) => {
-              onHeight(event.nativeEvent.layout.height);
-            }
+          ? whileShown(({ height }) => {
+              onHeight(height);
+            })
           : undefined
       }
       {...handlers}

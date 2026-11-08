@@ -14,6 +14,7 @@ import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { useBarFocus, useCommands } from "./keyboard";
 import type { Bar } from "./shortcuts";
+import { whileShown } from "./shown";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { useInsetFocusRing, useLatest } from "./web";
 
@@ -232,9 +233,9 @@ export function FileBar({
         accessibilityRole="header"
         accessibilityLabel={label}
         style={styles.barContent}
-        onLayout={(event) => {
-          onHeight?.(event.nativeEvent.layout.height);
-        }}
+        onLayout={whileShown(({ height }) => {
+          onHeight?.(height);
+        })}
       >
         <Text style={styles.status}>{groups[file.group].status}</Text>
         <BarPath file={file} diff={diff} styles={styles} />

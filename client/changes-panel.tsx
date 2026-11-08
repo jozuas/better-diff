@@ -26,6 +26,7 @@ import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { requests } from "./requests";
 import { ReviewProvider } from "./review";
 import { pendingCounts } from "./review-list";
+import { whileShown } from "./shown";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
 import { Sidebar } from "./sidebar";
 import type { SidebarState } from "./sidebar";
@@ -312,9 +313,9 @@ export function Changes({
       nativeID={id}
       tabIndex={-1}
       style={styles.panel}
-      onLayout={(event) => {
-        setPanelWidth(event.nativeEvent.layout.width);
-      }}
+      onLayout={whileShown(({ width }) => {
+        setPanelWidth(width);
+      })}
     >
       <KeyboardFocusContext value={focus}>
         <Sidebar

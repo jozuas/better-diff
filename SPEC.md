@@ -4,6 +4,8 @@ Desktop only: the mobile app isn't supported for now.
 
 Better Diff is a workspace panel, with Lucide's git-compare-arrows as its icon.
 
+Switching back to its tab from another, as from an agent's chat, shows it as it was at once, not for a moment with the file list narrower, the diff inline where it was side by side, or a group's hunk bar out of place under its file bar.
+
 ### Diff view
 
 Replicates Sublime Merge as much as possible:
