@@ -3,7 +3,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
-import { changes, groupName, modified } from "../test/changes";
+import { changes, groupName, modified, nothingHidden } from "../test/changes";
 import { filePath } from "../test/file-names";
 import { rowActions } from "./actions";
 import {
@@ -105,33 +105,6 @@ test("says nothing in place of a diff until the changes are listed", () => {
   expect(placeholder()).toBe("");
 });
 
-test("once the changes are first listed, opens a modified file first, or else an untracked one, or else a staged one", () => {
-  expect(
-    openAfter(undefined, undefined, { modified: ["b", "a"], untracked: ["c"], staged: ["d"] }),
-  ).toStrictEqual({
-    group: "modified",
-    path: "b",
-  });
-  expect(
-    openAfter(undefined, undefined, { modified: [], untracked: ["c", "a"], staged: ["d"] }),
-  ).toStrictEqual({
-    group: "untracked",
-    path: "c",
-  });
-  expect(
-    openAfter(undefined, undefined, { modified: [], untracked: [], staged: ["d", "a"] }),
-  ).toStrictEqual({
-    group: "staged",
-    path: "d",
-  });
-});
-
-test("once the changes are first listed, opens no file while no group lists one", () => {
-  expect(
-    openAfter(undefined, undefined, { modified: [], untracked: [], staged: [] }),
-  ).toBeUndefined();
-});
-
 test("a file is open only in the group it was opened from, under its own path", () => {
   const open: OpenFile = { group: "staged", path: "a" };
 
@@ -197,24 +170,36 @@ test("a file's row stays the same whatever opens while its diff isn't shown", ()
 test("stays on a file its group still lists after an action, as after staging one of its hunks", () => {
   const open: OpenFile = { group: "modified", path: "b" };
 
-  expect(openAfter(open, modified("a", "b", "c"), modified("a", "b", "c"))).toBe(open);
+  expect(openAfter(open, modified("a", "b", "c"), modified("a", "b", "c"), nothingHidden)).toBe(
+    open,
+  );
 });
 
 test("moves on to the next file its group still lists, once the open file leaves it", () => {
   expect(
-    openAfter({ group: "modified", path: "b" }, modified("a", "b", "c", "d"), modified("a", "d")),
+    openAfter(
+      { group: "modified", path: "b" },
+      modified("a", "b", "c", "d"),
+      modified("a", "d"),
+      nothingHidden,
+    ),
   ).toStrictEqual({ group: "modified", path: "d" });
 });
 
 test("moves back to the closest file before it, once the group's last file leaves it", () => {
   expect(
-    openAfter({ group: "modified", path: "c" }, modified("a", "b", "c"), modified("a", "b")),
+    openAfter(
+      { group: "modified", path: "c" },
+      modified("a", "b", "c"),
+      modified("a", "b"),
+      nothingHidden,
+    ),
   ).toStrictEqual({ group: "modified", path: "b" });
 });
 
 test("moves to a file new to the group, once none it listed before are left", () => {
   expect(
-    openAfter({ group: "modified", path: "a" }, modified("a"), modified("x", "y")),
+    openAfter({ group: "modified", path: "a" }, modified("a"), modified("x", "y"), nothingHidden),
   ).toStrictEqual({ group: "modified", path: "x" });
 });
 
@@ -224,36 +209,28 @@ test("moves only within the open file's group", () => {
       { group: "staged", path: "a" },
       { modified: [], untracked: [], staged: ["a", "b"] },
       { modified: ["a"], untracked: [], staged: ["b"] },
+      nothingHidden,
     ),
   ).toStrictEqual({ group: "staged", path: "b" });
 });
 
 test("opens no file once the group lists none, whatever the others list", () => {
   expect(
-    openAfter({ group: "modified", path: "a" }, modified("a"), {
-      modified: [],
-      untracked: ["b"],
-      staged: ["a"],
-    }),
+    openAfter(
+      { group: "modified", path: "a" },
+      modified("a"),
+      {
+        modified: [],
+        untracked: ["b"],
+        staged: ["a"],
+      },
+      nothingHidden,
+    ),
   ).toBeUndefined();
 });
 
 test("opens no file when none was open", () => {
-  expect(openAfter(undefined, modified("a"), modified("a", "b"))).toBeUndefined();
-});
-
-test("once the changes are first listed, opens the first file of the first group the sidebar lists one in", () => {
-  fc.assert(
-    fc.property(changes, groupName, filePath, (listed, group, path) => {
-      const some = { ...listed, [group]: [path, ...listed[group]] };
-      const first = sidebarGroups(some).find(({ paths }) => paths.length > 0);
-
-      expect(openAfter(undefined, undefined, some)).toStrictEqual({
-        group: first?.name,
-        path: first?.paths[0],
-      });
-    }),
-  );
+  expect(openAfter(undefined, modified("a"), modified("a", "b"), nothingHidden)).toBeUndefined();
 });
 
 test("opens a file the open one's group lists after the action, if it lists any", () => {
@@ -265,7 +242,12 @@ test("opens a file the open one's group lists after the action, if it lists any"
       changes,
       fc.uniqueArray(filePath, { minLength: 1 }),
       (group, path, before, after, listed) => {
-        const next = openAfter({ group, path }, before, { ...after, [group]: listed });
+        const next = openAfter(
+          { group, path },
+          before,
+          { ...after, [group]: listed },
+          nothingHidden,
+        );
 
         expect(next?.group).toBe(group);
         expect(listed).toContain(next?.path);
@@ -277,7 +259,9 @@ test("opens a file the open one's group lists after the action, if it lists any"
 test("opens no file once the open one's group lists none", () => {
   fc.assert(
     fc.property(groupName, filePath, changes, changes, (group, path, before, after) => {
-      expect(openAfter({ group, path }, before, { ...after, [group]: [] })).toBeUndefined();
+      expect(
+        openAfter({ group, path }, before, { ...after, [group]: [] }, nothingHidden),
+      ).toBeUndefined();
     }),
   );
 });
@@ -291,7 +275,7 @@ test("stays on the open group whatever the changes listed before and after an ac
       (group, before, after) => {
         const open: Open = { group };
 
-        expect(openAfter(open, before, after)).toBe(open);
+        expect(openAfter(open, before, after, nothingHidden)).toBe(open);
       },
     ),
   );

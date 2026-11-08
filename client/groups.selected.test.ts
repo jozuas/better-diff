@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { changes, groupName, modified } from "../test/changes";
+import { changes, groupName, modified, nothingHidden } from "../test/changes";
 import { filePath } from "../test/file-names";
 import {
   isGroupOpen,
@@ -225,7 +225,9 @@ test("shift+↓ then shift+↑, or shift+↑ then shift+↓, selects what was, s
 test("keeps the files selected their group still lists after an action, as after staging a hunk of one", () => {
   const open: OpenFiles = { group: "modified", paths: ["c", "b"] };
 
-  expect(openAfter(open, modified("a", "b", "c"), modified("a", "b", "c", "d"))).toBe(open);
+  expect(
+    openAfter(open, modified("a", "b", "c"), modified("a", "b", "c", "d"), nothingHidden),
+  ).toBe(open);
 });
 
 test("keeps those of the files selected their group still lists, once others leave it", () => {
@@ -234,6 +236,7 @@ test("keeps those of the files selected their group still lists, once others lea
       { group: "modified", paths: ["d", "c", "b"] },
       modified("a", "b", "c", "d"),
       modified("a", "b", "d"),
+      nothingHidden,
     ),
   ).toStrictEqual({ group: "modified", paths: ["d", "b"] });
   expect(
@@ -241,6 +244,7 @@ test("keeps those of the files selected their group still lists, once others lea
       { group: "modified", paths: ["b", "c"] },
       modified("a", "b", "c"),
       modified("a", "c"),
+      nothingHidden,
     ),
   ).toStrictEqual({ group: "modified", path: "c" });
 });
@@ -251,10 +255,16 @@ test("moves on from the files selected, once they all leave the group, to the ne
       { group: "modified", paths: ["c", "b"] },
       modified("a", "b", "c", "d"),
       modified("a", "d"),
+      nothingHidden,
     ),
   ).toStrictEqual({ group: "modified", path: "d" });
   expect(
-    openAfter({ group: "modified", paths: ["b", "c"] }, modified("a", "b", "c"), modified("a")),
+    openAfter(
+      { group: "modified", paths: ["b", "c"] },
+      modified("a", "b", "c"),
+      modified("a"),
+      nothingHidden,
+    ),
   ).toStrictEqual({ group: "modified", path: "a" });
 });
 
@@ -264,6 +274,7 @@ test("moves on past a file the filter hid between the files selected, once they 
       { group: "modified", paths: ["d", "b"] },
       modified("a", "b", "c", "d", "e"),
       modified("a", "c", "e"),
+      nothingHidden,
     ),
   ).toStrictEqual({ group: "modified", path: "e" });
 });
@@ -287,7 +298,12 @@ test("keeps those of the files selected their group lists after the action, in t
 
         fc.pre(kept.length > 0);
 
-        const next = openAfter({ group, paths }, before, { ...after, [group]: listed });
+        const next = openAfter(
+          { group, paths },
+          before,
+          { ...after, [group]: listed },
+          nothingHidden,
+        );
 
         expect(next?.group).toBe(group);
         expect(pathsOf(next)).toStrictEqual(kept);
@@ -307,7 +323,12 @@ test("opens a file the group lists after the action, once it lists none of the f
         fc.pre(listed.length > 0);
         fc.pre(!paths.some((path) => listed.includes(path)));
 
-        const next = openAfter({ group, paths }, before, { ...after, [group]: listed });
+        const next = openAfter(
+          { group, paths },
+          before,
+          { ...after, [group]: listed },
+          nothingHidden,
+        );
 
         expect(next?.group).toBe(group);
         expect(listed).toContain(next?.path);

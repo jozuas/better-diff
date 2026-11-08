@@ -102,9 +102,21 @@ export interface OpenFiles {
 
 export type Open = OpenFile | OpenGroup | OpenFiles;
 
-// The file the sidebar lists first, which opens once the changes are first listed, if any are.
-function firstFile(changes: Changes): OpenFile | undefined {
-  const [first] = order.flatMap((group) => changes[group].map((path) => ({ group, path })));
+// What the sidebar hides: the files whose paths don't have the filter in them, and those of the
+// groups collapsed.
+export interface Hidden {
+  filter: string;
+  collapsed: readonly GroupName[];
+}
+
+// The file the sidebar lists first, with what it hides hidden, which opens once the changes are
+// first listed, if it lists any.
+function firstFile(changes: Changes, { filter, collapsed }: Hidden): OpenFile | undefined {
+  const [first] = order.flatMap((group) =>
+    collapsed.includes(group)
+      ? []
+      : changes[group].flatMap((path) => (matches(path, filter) ? [{ group, path }] : [])),
+  );
 
   return first;
 }
@@ -261,23 +273,28 @@ function stillOpen(open: Open, listed: readonly string[]): Open | undefined {
 }
 
 // What opens once the changes are first listed, from what the tab showed before Paseo reloaded:
-// what's still open of it, or else the first file listed, as when nothing was shown.
-function reopened(shown: Open | undefined, changes: Changes): Open | undefined {
+// what's still open of it, or else the first file the sidebar lists, as when nothing was shown.
+function reopened(shown: Open | undefined, changes: Changes, hidden: Hidden): Open | undefined {
   return (
-    (shown === undefined ? undefined : stillOpen(shown, changes[shown.group])) ?? firstFile(changes)
+    (shown === undefined ? undefined : stillOpen(shown, changes[shown.group])) ??
+    firstFile(changes, hidden)
   );
 }
 
 // The file of the group that opens once the files at the paths leave it, from its list before and
-// after: the next file in the list before that it still lists, after the last of them, or else the
-// closest one before it, or else the first one it lists now. None if it lists none.
+// after, of those the sidebar lists under the filter: the next file in the list before that it still
+// lists, after the last of them, or else the closest one before it, or else the first one it lists
+// now. None if it lists none. A group collapsed is moved on in all the same, as it hides its files
+// only to tidy the sidebar, while the filter picks the files worked on.
 function movedOn(
   group: GroupName,
   paths: readonly string[],
   previous: readonly string[],
-  listed: readonly string[],
+  after: readonly string[],
+  filter: string,
 ): OpenFile | undefined {
   const last = Math.max(...paths.map((path) => previous.indexOf(path)));
+  const listed = after.filter((path) => matches(path, filter));
 
   // Searched after the files that follow the last one, which are gone by then, the reversed list
   // finds the closest one before it.
@@ -290,18 +307,19 @@ function movedOn(
 
 // What to show once the changes are listed, from what was open and the lists before, if they were
 // listed before, and after. Once they're first listed, what's still open of what the tab showed
-// before Paseo reloaded, or else the first file listed. After that, as after an action, the open
-// group, or the open file or those of the files selected that its group still lists. Otherwise the
-// next file in the group's list before that it still lists, after the last of them, or else the
-// closest one before it, or else the first one it lists now. None if it lists none, or nothing was
-// open.
+// before Paseo reloaded, or else the first file the sidebar lists, with what it hides hidden. After
+// that, as after an action, the open group, or the open file or those of the files selected that
+// its group still lists. Otherwise the next file in the group's list before that it still lists
+// under the filter, after the last of them, or else the closest one before it, or else the first
+// one it lists now. None if it lists none, or nothing was open.
 export function openAfter(
   open: Open | undefined,
   before: Changes | undefined,
   after: Changes,
+  hidden: Hidden,
 ): Open | undefined {
   if (before === undefined) {
-    return reopened(open, after);
+    return reopened(open, after, hidden);
   }
 
   if (open === undefined) {
@@ -315,13 +333,17 @@ export function openAfter(
     return kept;
   }
 
-  return movedOn(open.group, openPaths(open), before[open.group], listed);
+  return movedOn(open.group, openPaths(open), before[open.group], listed, hidden.filter);
 }
 
 // The file that opens once the open file leaves its group, as after an action on it, whose diff is
 // worth reading before then. None unless a file is open, not a group or files selected, and its
-// group lists another.
-export function fileAfter(open: Open | undefined, changes?: Changes): OpenFile | undefined {
+// group lists another under the filter.
+export function fileAfter(
+  open: Open | undefined,
+  filter: string,
+  changes?: Changes,
+): OpenFile | undefined {
   if (open?.path === undefined || changes === undefined) {
     return undefined;
   }
@@ -334,5 +356,6 @@ export function fileAfter(open: Open | undefined, changes?: Changes): OpenFile |
     [path],
     listed,
     listed.filter((other) => other !== path),
+    filter,
   );
 }

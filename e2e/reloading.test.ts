@@ -97,3 +97,31 @@ test("once Paseo reloads, a tab whose open file has left its group opens the fir
   await expect(line(page, "changed a.txt")).toBeVisible();
   expect(status(repository)).toBe(" M a.txt\nA  d.txt\n?? c.txt\n");
 });
+
+test("once Paseo reloads, a tab whose open file has left its group opens the first file the sidebar lists, under the filter it kept and but for the groups it kept collapsed", async ({
+  app,
+  page,
+  repository,
+}) => {
+  change(repository, ["a.txt"]);
+  writeFile(repository, "c.txt", "c\n");
+  writeFile(repository, "d.md", "d\n");
+  writeFile(repository, "e.md", "e\n");
+
+  await app.holdWaits();
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (3)", "e.md");
+  await expect(line(page, "e")).toBeVisible();
+  await page.getByRole("textbox", { name: "Filter files" }).fill("md");
+  await button(page, "UNTRACKED FILES").click();
+  await expect(
+    page.getByRole("button", { name: "UNTRACKED FILES", expanded: false }),
+  ).toBeVisible();
+
+  runGit(repository, ["add", "e.md"]);
+  await page.reload();
+
+  await expect(page.getByRole("heading", { name: "STAGED e.md" })).toBeVisible();
+  await expect(line(page, "e")).toBeVisible();
+  expect(status(repository)).toBe(" M a.txt\nA  e.md\n?? c.txt\n?? d.md\n");
+});

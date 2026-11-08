@@ -20,7 +20,7 @@ import { DiffWithFind } from "./find-bar";
 import { usePanelFind } from "./find-page";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { fileAfter, openAfter, placeholder, toggled } from "./groups";
-import type { Open } from "./groups";
+import type { Hidden, Open } from "./groups";
 import { useFocusOnOpen, usePanelKeys } from "./keyboard";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { requests } from "./requests";
@@ -148,16 +148,16 @@ function useRefreshOnChanges(
 }
 
 // What's open, from what the tab kept: once the changes are first listed, what's still open of it,
-// or else the first file listed, and after that, moved on from the open file whenever the changes
-// are listed again and its group no longer lists it, as after an action on it or an agent's change:
-// past a hunk acted on, the next one is where it was.
-function useOpen(kept: Open | undefined, changes: Listed | undefined) {
+// or else the first file the sidebar lists, with what it hides hidden, and after that, moved on from
+// the open file whenever the changes are listed again and its group no longer lists it, as after an
+// action on it or an agent's change: past a hunk acted on, the next one is where it was.
+function useOpen(kept: Open | undefined, changes: Listed | undefined, hidden: Hidden) {
   const [open, setOpen] = useState(kept);
   const [listed, setListed] = useState<Listed>();
 
   if (changes !== undefined && changes !== listed) {
     setListed(changes);
-    setOpen(openAfter(open, listed, changes));
+    setOpen(openAfter(open, listed, changes, hidden));
   }
 
   return [open, setOpen] as const;
@@ -168,9 +168,9 @@ function useOpen(kept: Open | undefined, changes: Listed | undefined) {
 // tab whenever they change, so that the tab shows them again once Paseo reloads.
 function useKeptState(tab: PluginTab, changes: Listed | undefined) {
   const [kept, keep] = useTabState(tab, tabState, startingTab);
-  const [open, setOpen] = useOpen(kept.open ?? undefined, changes);
   const [filter, setFilter] = useState(kept.filter);
   const [collapsed, setCollapsed] = useState(kept.collapsed);
+  const [open, setOpen] = useOpen(kept.open ?? undefined, changes, { filter, collapsed });
   const [width, setWidth] = useState(kept.fileListWidth);
   const [comments, setComments] = useState<readonly ReviewComment[]>(kept.comments);
   const [message, setMessage] = useState(kept.message);
@@ -240,7 +240,12 @@ export function Changes({
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
   const focus = useMemo(() => keyboardFocus(), []);
   const where = { directory, hideWhitespace };
-  const next = useMemo(() => fileAfter(sidebar.open, changes.data), [sidebar.open, changes.data]);
+
+  const next = useMemo(
+    () => fileAfter(sidebar.open, sidebar.filter, changes.data),
+    [sidebar.open, sidebar.filter, changes.data],
+  );
+
   const readVersion = useRpc(versionRpc);
   const refresh = useMemo(() => refreshOf(queryClient, directory), [queryClient, directory]);
 

@@ -1,6 +1,6 @@
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, group } from "./panel";
+import { button, group, line, openFile } from "./panel";
 
 // Two modified files, one in src, an untracked one in src, and a staged one.
 function changeFour(repository: string): void {
@@ -67,4 +67,30 @@ test("deleting the filter's letters shows every file again", async ({ app, page,
 
   await expect(group(page, "MODIFIED FILES (2)")).toHaveText(["docs/readme.md", "src/app.ts"]);
   await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["src/new.ts"]);
+});
+
+test("once the open file leaves its group, the view moves on to the next file in it the filter shows", async ({
+  app,
+  page,
+  repository,
+}) => {
+  for (const path of ["a.md", "b.txt", "c.md"]) {
+    writeFile(repository, path, "one\n");
+  }
+
+  commitAll(repository);
+
+  for (const path of ["a.md", "b.txt", "c.md"]) {
+    writeFile(repository, path, `${path} two\n`);
+  }
+
+  await app.openPanel();
+  await page.getByRole("textbox", { name: "Filter files" }).fill("md");
+  await openFile(page, "MODIFIED FILES (2 of 3)", "a.md");
+  await expect(line(page, "a.md two")).toBeVisible();
+  await button(page, "Stage").click();
+
+  await expect(page.getByRole("heading", { name: "MODIFIED c.md" })).toBeVisible();
+  await expect(line(page, "c.md two")).toBeVisible();
+  expect(runGit(repository, ["status", "--porcelain"])).toBe("M  a.md\n M b.txt\n M c.md\n");
 });

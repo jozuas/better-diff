@@ -1,7 +1,7 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
-import type { GroupName } from "../client/groups";
+import type { GroupName, Hidden } from "../client/groups";
 import type { changesRpc } from "../shared/changes";
 import { filePath } from "./file-names";
 
@@ -13,6 +13,9 @@ export const changes = fc.record({
 });
 
 export const groupName = fc.constantFrom<GroupName>("modified", "untracked", "staged");
+
+// What a sidebar hides that has nothing in its filter and no group collapsed: nothing.
+export const nothingHidden: Hidden = { filter: "", collapsed: [] };
 
 // The changes of only modified files, at the paths.
 export function modified(...paths: string[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
