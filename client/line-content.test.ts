@@ -163,9 +163,18 @@ const othersButForOnePart: LineContent[] = [
   { ...aLine, onComment: starts[1] },
 ];
 
-const butForOnePart = othersButForOnePart.map((other): [[LineContent, LineContent]] => [
-  [aLine, other],
-]);
+// Lines like aLine but for one part each, and aLine with every part of it made anew, which renders
+// as before: with as many parts as a line has, one made anew without any of them changing is rarely
+// generated.
+const butForOnePart = [
+  ...othersButForOnePart,
+  {
+    ...aLine,
+    line: structuredClone(aLine.line),
+    changes: structuredClone(aLine.changes),
+    found: structuredClone(aLine.found),
+  },
+].map((other): [[LineContent, LineContent]] => [[aLine, other]]);
 
 // The parts of a line its text's pieces render from, in a form that's equal for lines whose pieces
 // render the same.
