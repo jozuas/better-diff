@@ -116,6 +116,7 @@ export function DiscardReview({ onDiscard, disabled, theme }: DiscardReviewProps
       label={discardLabel(armed)}
       accessibilityLabel={discardLabel(armed)}
       look={armed ? "armed" : "plain"}
+      confirms
       disabled={disabled}
       onPress={() => {
         confirm.press("discard", true, async () => {

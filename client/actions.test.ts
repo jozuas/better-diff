@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import type { Action, ButtonLook } from "./actions";
+import type { Action, ButtonLook, TextLook } from "./actions";
 import {
   buttonLook,
   buttonOf,
@@ -14,6 +14,7 @@ import {
   modeActions,
   rowActions,
   sidebarButtonName,
+  textButtonLook,
 } from "./actions";
 import type { GroupName, OpenFiles } from "./groups";
 
@@ -226,6 +227,20 @@ test.each<[Action, boolean, boolean, ButtonLook]>([
   "%j's button, armed %s, with the pointer over it %s, looks %s",
   (action, armed, hovered, look) => {
     expect(buttonLook(action, armed, hovered)).toBe(look);
+  },
+);
+
+test.each<[TextLook, boolean, boolean, ReturnType<typeof textButtonLook>]>([
+  ["plain", true, true, "warning"],
+  ["plain", true, false, "plain"],
+  ["plain", false, true, "plain"],
+  ["armed", true, true, "armed"],
+  ["armed", true, false, "armed"],
+  ["primary", false, true, "primary"],
+])(
+  "a %s text button that asks for confirmation %s, with the pointer over it %s, looks %s",
+  (look, confirms, hovered, shown) => {
+    expect(textButtonLook(look, confirms, hovered)).toBe(shown);
   },
 );
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { box, button, group, line, openFile, row } from "./panel";
+import { comment, openReview } from "./review";
 
 // Commits `a.txt` and `b.txt`, then changes both.
 function changeTwo(repository: string): void {
@@ -105,6 +106,15 @@ test("a button that asks for confirmation shows the danger colour while the poin
   expect(await computedOf(page, '[aria-label="Confirm discard?"]', "background-color")()).toBe(
     warning,
   );
+
+  await comment(page, "changed a", "Why?");
+  await openReview(page, 1);
+  const discardReview = computedOf(page, '[aria-label="Discard review"] [dir="auto"]', "color");
+
+  expect(await discardReview()).toBe(plain);
+
+  await button(page, "Discard review").hover();
+  await expect.poll(discardReview).toBe(warning);
 });
 
 test("a group's triangle brightens while the pointer is over it", async ({

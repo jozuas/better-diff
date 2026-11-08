@@ -184,6 +184,21 @@ export function buttonLook(action: Action, armed: boolean, hovered: boolean): Bu
   return action.confirmation === undefined ? "hovered" : "warning";
 }
 
+// How a text button looks: plain, filled with a tint of its label's colour; primary, in the accent
+// colour, as the one that does what what it's in is for; or armed, in the danger colour, as one
+// that asks to be pressed again.
+export type TextLook = "plain" | "primary" | "armed";
+
+// How a text button looks, as it's given, but for a plain one that asks for confirmation: in the
+// danger colour while the pointer is over it, as an action's button that loses work is.
+export function textButtonLook(
+  look: TextLook,
+  confirms: boolean,
+  hovered: boolean,
+): TextLook | "warning" {
+  return confirms && hovered && look === "plain" ? "warning" : look;
+}
+
 // A sidebar button's name: what it does to the file at the path, if it acts on one, until it's
 // armed.
 export function sidebarButtonName(action: Action, armed: boolean, path?: string): string {
