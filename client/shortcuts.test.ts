@@ -7,8 +7,8 @@ import type { Action } from "./actions";
 import type { Target } from "./apply";
 import type { GroupName } from "./groups";
 import type { Place } from "./keymap";
-import { buttonKeys, runShortcut, shortcutOf, shortcutText, tipOf } from "./shortcuts";
-import type { ActionCommand, Bar, ButtonKeys, Level } from "./shortcuts";
+import { buttonShortcut, runShortcut, shortcutOf, shortcutText } from "./shortcuts";
+import type { ActionCommand, Bar, Level } from "./shortcuts";
 
 function onPartRun(): void {}
 
@@ -228,50 +228,12 @@ test("once the pointer rests on a button, it teaches the key that runs its actio
       fc.constantFrom<Level>("part", "file"),
       fc.constantFrom(...places),
       fc.boolean(),
-      fc.boolean(),
-      (operation, level, place, keyed, mac) => {
-        expect(buttonKeys({ operation }, { level, place, keyed }, mac).pointed).toBe(
+      (operation, level, place, mac) => {
+        expect(buttonShortcut({ operation }, level, place, mac)).toBe(
           writtenIn(operation, level, place, mac),
         );
-        expect(
-          buttonKeys({ operation }, { level: undefined, place, keyed }, mac).pointed,
-        ).toBeUndefined();
+        expect(buttonShortcut({ operation }, undefined, place, mac)).toBeUndefined();
       },
     ),
   );
 });
-
-test("while focus is on a button's bar itself, it teaches Enter or Backspace, which press it from there, whatever its level, and nothing while focus is elsewhere", () => {
-  fc.assert(
-    fc.property(
-      operations,
-      fc.option(fc.constantFrom<Level>("part", "file"), { nil: undefined }),
-      fc.constantFrom(...places),
-      fc.boolean(),
-      (operation, level, place, mac) => {
-        expect(buttonKeys({ operation }, { level, place, keyed: true }, mac).keyed).toBe(
-          writtenIn(operation, "part", place, mac),
-        );
-        expect(
-          buttonKeys({ operation }, { level, place, keyed: false }, mac).keyed,
-        ).toBeUndefined();
-      },
-    ),
-  );
-});
-
-test.each<[ButtonKeys, boolean, ReturnType<typeof tipOf>]>([
-  [{ pointed: "⇧↩", keyed: "↩" }, true, { shortcut: "⇧↩", resting: true }],
-  [{ pointed: "⇧↩", keyed: undefined }, true, { shortcut: "⇧↩", resting: true }],
-  [{ pointed: undefined, keyed: "↩" }, true, { shortcut: "↩", resting: true }],
-  [{ pointed: undefined, keyed: undefined }, true, { shortcut: undefined, resting: true }],
-  [{ pointed: "⇧↩", keyed: "↩" }, false, { shortcut: "↩", resting: true }],
-  [{ pointed: undefined, keyed: "↩" }, false, { shortcut: "↩", resting: true }],
-  [{ pointed: "⇧↩", keyed: undefined }, false, { shortcut: undefined, resting: false }],
-  [{ pointed: undefined, keyed: undefined }, false, { shortcut: undefined, resting: false }],
-])(
-  "a button with the keys %o, with the pointer resting on it: %s, shows %o",
-  (keys, pointer, tip) => {
-    expect(tipOf(keys, pointer)).toStrictEqual(tip);
-  },
-);

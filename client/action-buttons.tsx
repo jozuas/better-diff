@@ -10,8 +10,8 @@ import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 import type { Place } from "./keymap";
 import { ShortcutTip } from "./shortcut-tip";
-import { buttonKeys, tipOf } from "./shortcuts";
-import type { ButtonKeys, Level } from "./shortcuts";
+import { buttonShortcut } from "./shortcuts";
+import type { Level } from "./shortcuts";
 import { onMac } from "./web";
 
 function useStyles(theme: PluginTheme, color: string) {
@@ -46,8 +46,8 @@ type Styles = ReturnType<typeof useStyles>;
 
 interface ActionButtonProps {
   action: Action;
-  // How its keys are written.
-  keys: ButtonKeys;
+  // How its shortcut is written, if it has one.
+  shortcut: string | undefined;
   // Tells it apart from the panel's other buttons.
   button: string;
   controls: Controls;
@@ -59,7 +59,7 @@ interface ActionButtonProps {
 
 function ActionButton({
   action,
-  keys,
+  shortcut,
   button,
   controls,
   hidden,
@@ -97,7 +97,7 @@ function ActionButton({
                 {text}
               </Text>
             </View>
-            <ShortcutTip {...tipOf(keys, hovered && !pressed)} theme={theme} />
+            <ShortcutTip shortcut={shortcut} resting={hovered && !pressed} theme={theme} />
           </>
         );
       }}
@@ -115,9 +115,6 @@ interface ActionButtonsProps {
   level?: Level;
   // Where focus is while their keys press them.
   place: Place;
-  // Whether focus is on their bar itself, where Enter and Backspace press them, which shows those
-  // under them once it rests there.
-  keyed: boolean;
   controls: Controls;
   // Called just before one of the actions runs.
   onRun?: (() => void) | undefined;
@@ -134,7 +131,6 @@ export function ActionButtons({
   target,
   level,
   place,
-  keyed,
   controls,
   onRun,
   hidden = false,
@@ -150,7 +146,7 @@ export function ActionButtons({
         <ActionButton
           key={action.operation}
           action={action}
-          keys={buttonKeys(action, { level, place, keyed }, mac)}
+          shortcut={buttonShortcut(action, level, place, mac)}
           button={buttonOf(bar, action)}
           controls={controls}
           hidden={hidden}

@@ -159,19 +159,16 @@ function BarPath({ file, diff, styles }: BarPathProps): ReactElement {
 interface FileActionsProps {
   // Undefined until the file's diff is read.
   bar: Bar | undefined;
-  // Whether focus is on the file's bar itself, where Enter and Backspace press them.
-  keyed: boolean;
   controls: Controls;
   theme: PluginTheme;
 }
 
-function FileActions({ bar, keyed, controls, theme }: FileActionsProps): ReactElement | null {
+function FileActions({ bar, controls, theme }: FileActionsProps): ReactElement | null {
   return bar === undefined ? null : (
     <ActionButtons
       {...bar}
       level="file"
       place="bar"
-      keyed={keyed}
       controls={controls}
       color={theme.colors.foreground}
       theme={theme}
@@ -200,7 +197,7 @@ export function FileBar({
   const id = useId();
   const header = useRef<View>(null);
   const focus = useContext(KeyboardFocusContext);
-  const { focused, onBar, handlers } = useBarFocus();
+  const { focused, handlers } = useBarFocus();
 
   const bar = fileBarActions(file, diff, () => {
     if (focused) {
@@ -241,7 +238,7 @@ export function FileBar({
         <BarPath file={file} diff={diff} styles={styles} />
         <LineCounts diff={diff} styles={styles} />
         <View style={styles.controls}>
-          <FileActions bar={bar} keyed={onBar} controls={controls} theme={theme} />
+          <FileActions bar={bar} controls={controls} theme={theme} />
         </View>
       </View>
     </View>

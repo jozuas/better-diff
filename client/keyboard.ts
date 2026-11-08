@@ -1,7 +1,6 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
 import { useEffect, useState } from "react";
 import { Platform } from "react-native";
-import type { NativeSyntheticEvent, TargetedEvent } from "react-native";
 
 import type { Controls } from "./actions";
 import type { KeyboardFocus } from "./focus";
@@ -283,29 +282,27 @@ export function useFocusOnOpen(
   }, [requests, workspace, panel, focus, latest, listed]);
 }
 
-// Whether focus is in a bar, and on the bar itself, where Enter and Backspace press its buttons,
-// rather than on one of them, and what the bar hears focus come and go with.
+// Whether focus is in a bar, on the bar itself or on one of its buttons, and what the bar hears
+// focus come and go with.
 interface BarFocus {
   focused: boolean;
-  onBar: boolean;
   handlers: {
-    onFocus: (event: NativeSyntheticEvent<TargetedEvent>) => void;
+    onFocus: () => void;
     onBlur: () => void;
   };
 }
 
 export function useBarFocus(): BarFocus {
-  const [focus, setFocus] = useState<"none" | "bar" | "button">("none");
+  const [focused, setFocused] = useState(false);
 
   return {
-    focused: focus !== "none",
-    onBar: focus === "bar",
+    focused,
     handlers: {
-      onFocus: (event) => {
-        setFocus(event.target === event.currentTarget ? "bar" : "button");
+      onFocus: () => {
+        setFocused(true);
       },
       onBlur: () => {
-        setFocus("none");
+        setFocused(false);
       },
     },
   };

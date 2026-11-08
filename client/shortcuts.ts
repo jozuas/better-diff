@@ -109,34 +109,13 @@ export function shortcutText(shortcut: Chord | undefined, mac: boolean): string 
   return shortcut === undefined ? undefined : chordText(shortcut, mac);
 }
 
-// How a button's keys are written: the shortcut that runs its action at the level, with focus in
-// the place, which shows once the pointer rests on it, and while focus is on its bar itself, the
-// key that presses it from there.
-export interface ButtonKeys {
-  pointed: string | undefined;
-  keyed: string | undefined;
-}
-
-export function buttonKeys(
+// How the shortcut that runs a button's action at the level, with focus in the place, is written,
+// which shows once the pointer rests on the button. None without a level.
+export function buttonShortcut(
   action: Pick<Action, "operation">,
-  { level, place, keyed }: { level: Level | undefined; place: Place; keyed: boolean },
+  level: Level | undefined,
+  place: Place,
   mac: boolean,
-): ButtonKeys {
-  return {
-    pointed:
-      level === undefined ? undefined : shortcutText(shortcutOf(action, level, place, mac), mac),
-    keyed: keyed ? shortcutText(shortcutOf(action, "part", place, mac), mac) : undefined,
-  };
-}
-
-// The key that shows under a button, and whether what shows it rests there: the pointer's shortcut
-// while the pointer rests on the button, or else, while focus rests on its bar, the key that presses
-// it from there.
-export function tipOf(
-  { pointed, keyed }: ButtonKeys,
-  pointer: boolean,
-): { shortcut: string | undefined; resting: boolean } {
-  return pointer
-    ? { shortcut: pointed ?? keyed, resting: true }
-    : { shortcut: keyed, resting: keyed !== undefined };
+): string | undefined {
+  return level === undefined ? undefined : shortcutText(shortcutOf(action, level, place, mac), mac);
 }

@@ -98,8 +98,7 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 #### Getting there, and learning the keys
 
 - Better Diff in Paseo's command center opens the panel with focus in the open file's row, or the open group's heading, and so does opening the panel some other way, unless focus is in a text field then, as in a message being written, or already in the panel.
-- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter under a hunk's, a mode change's or the selected lines' Stage or Unstage, and Backspace under their Discard, Shift+Enter or Shift+Backspace likewise under a file's or a group's, and E under the hunk's toggle and a collapsed diff's Show diff. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫.
-- Once focus rests on a bar for a second, Enter shows under the Stage or Unstage button it presses from there, and Backspace under the Discard or Delete one: a hunk's, a mode change's or a file's own, or the selected lines' while the hunk has any.
+- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter under a hunk's, a mode change's or the selected lines' Stage or Unstage, and Backspace under their Discard, Shift+Enter or Shift+Backspace likewise under a file's or a group's, and E under the hunk's toggle and a collapsed diff's Show diff. On a Mac, in its symbols: ↩, ⌫, ⇧↩ and ⇧⌫. Only the pointer shows them, not focus resting on a bar.
 - Better Diff's settings page lists the keys, but Enter in a row or a heading and Enter and Escape in a file's menu, which work as they do on any button and menu, and a comment's and the review's keys.
 
 ### Find in diff

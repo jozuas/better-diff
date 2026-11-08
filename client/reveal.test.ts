@@ -1,15 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import {
-  hunkKeyed,
-  hunkMark,
-  hunkRevealed,
-  lookOf,
-  markedHunk,
-  pressedBar,
-  showsButtons,
-} from "./reveal";
+import { hunkMark, hunkRevealed, lookOf, markedHunk, pressedBar, showsButtons } from "./reveal";
 import type { Look } from "./reveal";
 
 test.each<[boolean, boolean, boolean, Look]>([
@@ -74,17 +66,5 @@ test.each([undefined, "", "1", "1:", ":2", "1:2:3", "a:2", "1:-2", " 1:2"])(
   "%j marks no hunk",
   (mark) => {
     expect(markedHunk(mark)).toBeUndefined();
-  },
-);
-
-test.each<[boolean, boolean, boolean]>([
-  [true, false, true],
-  [true, true, false],
-  [false, false, false],
-  [false, true, false],
-])(
-  "with focus on a hunk's bar itself: %s, and lines in it selected: %s, Enter and Backspace press its buttons: %s",
-  (onBar, linesSelected, keyed) => {
-    expect(hunkKeyed(onBar, linesSelected)).toBe(keyed);
   },
 );

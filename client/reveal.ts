@@ -55,9 +55,3 @@ export function markedHunk(mark: string | undefined): BarAt | undefined {
 
   return groups === undefined ? undefined : [Number(groups["file"]), Number(groups["hunk"])];
 }
-
-// Whether Enter and Backspace press a hunk's own buttons from its bar: while focus is on the bar
-// itself, and no lines in it are selected, whose buttons they press then.
-export function hunkKeyed(onBar: boolean, linesSelected: boolean): boolean {
-  return onBar && !linesSelected;
-}

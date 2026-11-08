@@ -26,7 +26,7 @@ import type { Cursor } from "./line-cursor";
 import { enteredAt, selectCursor } from "./line-keys";
 import type { LinePage } from "./line-keys";
 import type { PointedHunk } from "./pointed";
-import { hunkKeyed, hunkRevealed } from "./reveal";
+import { hunkRevealed } from "./reveal";
 import { fileId, lineId } from "./selection";
 import type { LineRange } from "./selection";
 import { whileShown } from "./shown";
@@ -206,7 +206,7 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
   } = props;
 
   const styles = useStyles(theme);
-  const { focused, onBar, handlers } = useBarFocus();
+  const { focused, handlers } = useBarFocus();
   const revealed = hunkRevealed(index, usePointedAt(pointed, index), focused, selection?.hunk);
   const id = useId();
   const bar = useRef<View>(null);
@@ -314,12 +314,11 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
     >
       <EntireFileToggle entire={entire} onPress={toggleEntire} hidden={!revealed} theme={theme} />
       <View style={styles.buttons}>
-        <LineButtons bar={lineBar} keyed={onBar} controls={controls} theme={theme} />
+        <LineButtons bar={lineBar} controls={controls} theme={theme} />
         <ActionButtons
           {...hunkBar}
           level="part"
           place="bar"
-          keyed={hunkKeyed(onBar, lineBar !== undefined)}
           controls={controls}
           hidden={!revealed}
           color={theme.colors.foreground}

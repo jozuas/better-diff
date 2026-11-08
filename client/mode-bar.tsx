@@ -75,7 +75,7 @@ export function ModeBar({
   const id = useId();
   const bar = useRef<View>(null);
   const focus = useContext(KeyboardFocusContext);
-  const { focused, onBar, handlers } = useBarFocus();
+  const { focused, handlers } = useBarFocus();
   const show = useLatest(onShow);
   const { group, path } = file;
 
@@ -140,7 +140,6 @@ export function ModeBar({
         {...bars.part}
         level="part"
         place="bar"
-        keyed={onBar}
         controls={controls}
         color={theme.colors.foreground}
         theme={theme}

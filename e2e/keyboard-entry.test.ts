@@ -125,7 +125,9 @@ test("Better Diff's settings page lists all the keys, by where focus is", async 
   await expect(page.getByText(/^Menu {2}(?:⇧F10|Shift\+F10)$/u)).toBeVisible();
 });
 
-test("once focus rests on a bar for a second, Enter and Backspace show under the buttons they press from there", async ({
+// Each bar has focus before the pointer comes to one of its buttons, so a key that focus showed
+// would show by the time the pointer's does.
+test("only the pointer shows a button's key, not focus resting on a bar", async ({
   app,
   page,
   repository,
@@ -135,27 +137,25 @@ test("once focus rests on a bar for a second, Enter and Backspace show under the
   writeFile(repository, "a.txt", "1\nx\n3\n");
 
   const tips = page.getByRole("tooltip");
-  const enter = /^(?:↩|Enter)$/u;
-  const backspace = /^(?:⌫|Backspace)$/u;
 
   await app.openPanel();
   await hunkBar(page, "a.txt").focus();
+  await button(page, "Discard Hunk").hover();
+  await expectKeyUnder(page, "Discard Hunk", /^(?:⌫|Backspace)$/u);
 
-  await expect(tips).toHaveCount(2);
-  await expectKeyUnder(page, "Stage Hunk", enter);
-  await expectKeyUnder(page, "Discard Hunk", backspace);
+  await expect(tips).toHaveCount(1);
 
   await page.keyboard.press("ArrowRight");
+  await button(page, "Stage Lines").hover();
+  await expectKeyUnder(page, "Stage Lines", /^(?:↩|Enter)$/u);
 
-  await expectKeyUnder(page, "Stage Lines", enter);
-  await expectKeyUnder(page, "Discard Lines", backspace);
-  await expect(tips).toHaveCount(2);
+  await expect(tips).toHaveCount(1);
 
   await page.keyboard.press("Escape");
   await page.keyboard.press("ArrowUp");
-
   await expect(fileBar(page, "MODIFIED a.txt")).toBeFocused();
-  await expectKeyUnder(page, "Stage", enter);
-  await expectKeyUnder(page, "Discard", backspace);
-  await expect(tips).toHaveCount(2);
+  await button(page, "Stage").hover();
+  await expectKeyUnder(page, "Stage", /^(?:⇧↩|Shift\+Enter)$/u);
+
+  await expect(tips).toHaveCount(1);
 });

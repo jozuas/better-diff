@@ -48,25 +48,17 @@ export function EntireFileToggle({
 interface LineButtonsProps {
   // The selected lines' actions, while the hunk has any.
   bar: Bar | undefined;
-  // Whether focus is on the hunk's bar itself, where Enter and Backspace press them.
-  keyed: boolean;
   controls: Controls;
   theme: PluginTheme;
 }
 
 // The actions on the hunk's selected lines, while it has any.
-export function LineButtons({
-  bar,
-  keyed,
-  controls,
-  theme,
-}: LineButtonsProps): ReactElement | null {
+export function LineButtons({ bar, controls, theme }: LineButtonsProps): ReactElement | null {
   return bar === undefined ? null : (
     <ActionButtons
       {...bar}
       level="part"
       place="lines"
-      keyed={keyed}
       controls={controls}
       color={theme.colors.foreground}
       theme={theme}
