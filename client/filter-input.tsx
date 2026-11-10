@@ -46,6 +46,7 @@ export function FilterInput({ filter, onFilter, onKey, theme }: FilterInputProps
         box: {
           flexDirection: "row",
           alignItems: "center",
+          minHeight: fonts.row,
           margin: 8,
           marginBottom: 0,
           paddingLeft: 8,
@@ -66,7 +67,16 @@ export function FilterInput({ filter, onFilter, onKey, theme }: FilterInputProps
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
-        clear: { marginHorizontal: 5, padding: 3, borderRadius: 4, overflow: "hidden" },
+        // As far in from the box's end as from its top and bottom.
+        clear: {
+          width: fonts.row - 8,
+          height: fonts.row - 8,
+          alignItems: "center",
+          justifyContent: "center",
+          marginHorizontal: 3,
+          borderRadius: 4,
+          overflow: "hidden",
+        },
       }),
     [theme, fonts],
   );
@@ -107,7 +117,7 @@ export function FilterInput({ filter, onFilter, onKey, theme }: FilterInputProps
               <TintLayer color={theme.colors.foreground} hovered={hovered} pressed={pressed} />
               <Icon
                 name="X"
-                size={14}
+                size={fonts.buttonIcon}
                 color={hovered ? theme.colors.foreground : theme.colors.foregroundMuted}
               />
             </>

@@ -18,6 +18,15 @@ function path(page: Page, name: string): Locator {
   return button(page, name).getByText(name, { exact: true });
 }
 
+// The element's size on the page, for expect.poll.
+function sizeOf(locator: Locator): () => Promise<{ width: number; height: number }> {
+  return async () => {
+    const { width, height } = await box(locator);
+
+    return { width, height };
+  };
+}
+
 // The sizes are the host's, so each test puts back the defaults it may have changed.
 const test = base.extend<Record<"defaultSizes", void>>({
   defaultSizes: [
@@ -113,6 +122,29 @@ test("the panel font size sets the size of the rest of the panel, its smaller te
     })
     .toMatchObject({ width: 21, height: 21 });
   await expect(line(page, "alpha")).toHaveCSS("font-size", "13px");
+});
+
+test("buttons, the sidebar's rows and menus' items scale with the panel font size, roomier than Paseo's own, as Linear sizes its", async ({
+  app,
+  page,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "alpha\n");
+
+  await app.openSettings();
+  await choose(page, "Panel font size", 18);
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
+  await expect.poll(sizeOf(button(page, "Stage"))).toMatchObject({ height: 36 });
+  await expect.poll(sizeOf(button(page, "Stage a.txt"))).toStrictEqual({ width: 36, height: 36 });
+  await expect.poll(sizeOf(button(page, "a.txt"))).toMatchObject({ height: 41 });
+
+  await button(page, "a.txt").click({ button: "right" });
+
+  await expect
+    .poll(sizeOf(page.getByRole("menuitem", { name: "Copy full path" })))
+    .toMatchObject({ height: 41 });
 });
 
 test("a size chosen on one client of the host shows at once in a Better Diff panel open on another", async ({

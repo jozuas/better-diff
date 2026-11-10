@@ -14,6 +14,15 @@ export interface FontSizes {
   // Paseo's interface size.
   fileIcon: number;
   fileIconGap: number;
+  // A button's height, and an icon button's width: over twice its label's size, as Linear sizes its
+  // buttons, rather than as tight as Paseo's, so they're easy to hit and read. Then the room either
+  // side of a button's label, and the size of a button's icon.
+  button: number;
+  buttonPadding: number;
+  buttonIcon: number;
+  // The height of a row with a button in it, with room around the button: a file's or a group's in
+  // the sidebar, a menu's item and a text box.
+  row: number;
   // The diff's lines, their numbers and the note of a missing final newline.
   code: number;
   // The height of a diff's line.
@@ -26,9 +35,9 @@ export interface FontSizes {
 // The room either side of a diff line's text.
 export const textPadding = 8;
 
-// The sizes of the panel's text, its smaller text and files' icons scaled from the panel font size as
-// Paseo scales its own text from its interface size, and its lines spaced as Paseo's diff spaces
-// them.
+// The sizes of the panel's text, its smaller text, files' icons, buttons and rows scaled from the
+// panel font size as Paseo scales its own text from its interface size, and its lines spaced as
+// Paseo's diff spaces them.
 export function fontSizes({
   panelFontSize,
   diffFontSize,
@@ -41,6 +50,10 @@ export function fontSizes({
     label: Math.round(11 * scale),
     fileIcon: Math.round(16 * scale),
     fileIconGap: Math.round(8 * scale),
+    button: Math.round(28 * scale),
+    buttonPadding: Math.round(12 * scale),
+    buttonIcon: Math.round(16 * scale),
+    row: Math.round(32 * scale),
     code: diffFontSize,
     codeLine: Math.round(1.5 * diffFontSize),
     number: Math.ceil(5 * 0.61 * diffFontSize) + 8,

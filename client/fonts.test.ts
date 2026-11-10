@@ -13,6 +13,10 @@ test("at Paseo's default font sizes, the panel's text is Paseo's sizes, and its 
     label: 11,
     fileIcon: 16,
     fileIconGap: 8,
+    button: 28,
+    buttonPadding: 12,
+    buttonIcon: 16,
+    row: 32,
     code: 12,
     codeLine: 18,
     number: 45,
@@ -40,6 +44,33 @@ test.each([
     expect(fontSizes({ panelFontSize: size, diffFontSize: 12 })).toMatchObject(sizes);
   },
 );
+
+test.each([
+  [10, { button: 20, buttonPadding: 9, buttonIcon: 11, row: 23 }],
+  [13, { button: 26, buttonPadding: 11, buttonIcon: 15, row: 30 }],
+  [18, { button: 36, buttonPadding: 15, buttonIcon: 21, row: 41 }],
+  [21, { button: 42, buttonPadding: 18, buttonIcon: 24, row: 48 }],
+])(
+  "at a panel font size of %i, buttons and rows scale with it, as Linear's are sized at 14",
+  (size, sizes) => {
+    expect(fontSizes({ panelFontSize: size, diffFontSize: 12 })).toMatchObject(sizes);
+  },
+);
+
+test("a button is over twice as tall as its label, its icon smaller than it, and a row is taller than a button", () => {
+  fc.assert(
+    fc.property(panelFontSize, diffFontSize, (panel, diff) => {
+      const { small, button, buttonIcon, row } = fontSizes({
+        panelFontSize: panel,
+        diffFontSize: diff,
+      });
+
+      expect(button).toBeGreaterThan(2 * small);
+      expect(buttonIcon).toBeLessThan(button);
+      expect(row).toBeGreaterThan(button);
+    }),
+  );
+});
 
 test.each([
   [9, { code: 9, codeLine: 14, number: 36 }],
@@ -70,22 +101,17 @@ test("the panel font size sizes only the panel's text, and the diff font size on
       diffFontSize,
       diffFontSize,
       (panel, otherPanel, diff, otherDiff) => {
-        const { text, small, label, fileIcon, fileIconGap } = fontSizes({
+        const { code, codeLine, number, ...panelSizes } = fontSizes({
           panelFontSize: panel,
           diffFontSize: diff,
         });
 
-        const { codeLine, number } = fontSizes({ panelFontSize: otherPanel, diffFontSize: diff });
-
-        expect(fontSizes({ panelFontSize: panel, diffFontSize: otherDiff })).toMatchObject({
-          text,
-          small,
-          label,
-          fileIcon,
-          fileIconGap,
-        });
-        expect(fontSizes({ panelFontSize: panel, diffFontSize: diff })).toMatchObject({
-          code: diff,
+        expect(code).toBe(diff);
+        expect(fontSizes({ panelFontSize: panel, diffFontSize: otherDiff })).toMatchObject(
+          panelSizes,
+        );
+        expect(fontSizes({ panelFontSize: otherPanel, diffFontSize: diff })).toMatchObject({
+          code,
           codeLine,
           number,
         });
@@ -117,6 +143,20 @@ test("a larger panel font size makes no file's icon, or its distance from its pa
 
       expect(larger.fileIcon).toBeGreaterThanOrEqual(sizes.fileIcon);
       expect(larger.fileIconGap).toBeGreaterThanOrEqual(sizes.fileIconGap);
+    }),
+  );
+});
+
+test("a larger panel font size makes no button, its label's room or its icon, or row smaller", () => {
+  fc.assert(
+    fc.property(panelFontSize, fc.integer({ min: 0, max: 11 }), (panel, more) => {
+      const sizes = fontSizes({ panelFontSize: panel, diffFontSize: 12 });
+      const larger = fontSizes({ panelFontSize: Math.min(panel + more, 21), diffFontSize: 12 });
+
+      expect(larger.button).toBeGreaterThanOrEqual(sizes.button);
+      expect(larger.buttonPadding).toBeGreaterThanOrEqual(sizes.buttonPadding);
+      expect(larger.buttonIcon).toBeGreaterThanOrEqual(sizes.buttonIcon);
+      expect(larger.row).toBeGreaterThanOrEqual(sizes.row);
     }),
   );
 });

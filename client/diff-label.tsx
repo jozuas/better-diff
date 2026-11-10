@@ -22,11 +22,12 @@ function useStyles(theme: PluginTheme) {
         labelRow: { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
         label: { fontSize: fonts.text, color: theme.colors.foregroundMuted },
         // Rounded as its box is, for its focus ring.
-        expand: { borderRadius: 4 },
+        expand: { borderRadius: 6 },
         expandBox: {
-          paddingHorizontal: 9,
-          paddingVertical: 3,
-          borderRadius: 4,
+          height: fonts.button,
+          justifyContent: "center",
+          paddingHorizontal: fonts.buttonPadding,
+          borderRadius: 6,
           overflow: "hidden",
         },
         expandText: { fontSize: fonts.small, color: theme.colors.foreground },

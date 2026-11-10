@@ -23,19 +23,22 @@ function useStyles(theme: PluginTheme) {
           minWidth: 180,
           paddingVertical: 4,
           borderWidth: 1,
-          borderRadius: 6,
+          borderRadius: 8,
           borderColor: theme.colors.border,
           backgroundColor: theme.colors.surface1,
           boxShadow: "0 4px 12px rgba(0, 0, 0, 0.25)",
         },
         // Until it's measured, and so can be placed.
         unmeasured: { opacity: 0 },
+        // Highlighted short of the menu's edges, as Linear's are.
         item: {
           flexDirection: "row",
           alignItems: "center",
           gap: fonts.fileIconGap,
-          paddingHorizontal: 12,
-          paddingVertical: 4,
+          minHeight: fonts.row,
+          marginHorizontal: 4,
+          paddingHorizontal: 8,
+          borderRadius: 6,
         },
         // The SVG would shrink with the label, where it's cut short. A View doesn't.
         iconBox: { width: fonts.fileIcon, height: fonts.fileIcon },

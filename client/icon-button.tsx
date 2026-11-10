@@ -1,18 +1,37 @@
 import type { PluginSerializableIcon, PluginTheme } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
+import { useContext, useMemo } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, View } from "react-native";
 
+import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 import { NameTip, ShortcutTip } from "./shortcut-tip";
 
-const styles = StyleSheet.create({
-  // Rounded as its face is, for its focus ring.
-  button: { alignSelf: "center", borderRadius: 4 },
-  face: { padding: 2, borderRadius: 4, overflow: "hidden" },
-  hidden: { opacity: 0 },
-});
+function useStyles() {
+  const fonts = useContext(FontSizesContext);
+
+  return useMemo(
+    () => ({
+      ...StyleSheet.create({
+        // Rounded as its face is, for its focus ring.
+        button: { alignSelf: "center", borderRadius: 6 },
+        face: {
+          width: fonts.button,
+          height: fonts.button,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          overflow: "hidden",
+        },
+        hidden: { opacity: 0 },
+      }),
+      iconSize: fonts.buttonIcon,
+    }),
+    [fonts],
+  );
+}
 
 interface IconButtonProps {
   // What pressing it does.
@@ -41,6 +60,8 @@ export function IconButton({
   style,
   theme,
 }: IconButtonProps): ReactElement {
+  const styles = useStyles();
+
   return (
     <Hoverable
       accessibilityRole="button"
@@ -56,7 +77,7 @@ export function IconButton({
           <>
             <View style={styles.face}>
               <TintLayer color={color} hovered={hovered} pressed={pressed} />
-              <Icon icon={icon} size={15} color={color} />
+              <Icon icon={icon} size={styles.iconSize} color={color} />
             </View>
             <ShortcutTip shortcut={shortcut} resting={resting} theme={theme} />
             <NameTip name={name} resting={resting} theme={theme} />

@@ -1,6 +1,6 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
-import { useId, useMemo, useSyncExternalStore } from "react";
+import { useContext, useId, useMemo, useSyncExternalStore } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, View } from "react-native";
 
@@ -8,6 +8,7 @@ import { ActionFace } from "./action-face";
 import { buttonLook, sidebarButtonName } from "./actions";
 import type { Controls, IconAction } from "./actions";
 import type { Target } from "./apply";
+import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import type { Place } from "./keymap";
 import { showsButtons } from "./reveal";
@@ -20,6 +21,8 @@ import { onMac, overlayId } from "./web";
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
 
 function useStyles(theme: PluginTheme) {
+  const fonts = useContext(FontSizesContext);
+
   return useMemo(
     () =>
       StyleSheet.create({
@@ -34,17 +37,25 @@ function useStyles(theme: PluginTheme) {
           gap: 2,
           paddingHorizontal: 6,
         },
-        icon: { padding: 3, borderRadius: 4, overflow: "hidden" },
+        icon: {
+          width: fonts.button,
+          height: fonts.button,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          overflow: "hidden",
+        },
         armed: {
-          paddingHorizontal: 6,
-          paddingVertical: 1,
-          borderRadius: 4,
+          height: fonts.button,
+          justifyContent: "center",
+          paddingHorizontal: fonts.buttonPadding,
+          borderRadius: 6,
           overflow: "hidden",
           backgroundColor: theme.colors.statusDanger,
         },
         hidden: { opacity: 0 },
       }),
-    [theme],
+    [theme, fonts],
   );
 }
 
@@ -83,6 +94,7 @@ function SidebarButton({
   // Only arming it or disarming it, or an action starting or ending, renders it again.
   const armed = useSyncExternalStore(controls.subscribe, () => controls.state().armed === button);
   const busy = useSyncExternalStore(controls.subscribe, () => controls.state().busy);
+  const fonts = useContext(FontSizesContext);
 
   return (
     <Hoverable
@@ -106,7 +118,7 @@ function SidebarButton({
               look={look}
               hovered={hovered}
               pressed={pressed}
-              size={14}
+              size={fonts.buttonIcon}
               theme={theme}
             />
             <ShortcutTip

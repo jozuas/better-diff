@@ -38,6 +38,7 @@ function useStyles(theme: PluginTheme) {
           alignItems: "center",
           width: 280,
           flexShrink: 1,
+          minHeight: fonts.row,
           paddingLeft: 8,
           paddingRight: 3,
           borderWidth: 1,
@@ -55,9 +56,11 @@ function useStyles(theme: PluginTheme) {
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
+        // As far in from the box's end as from its top and bottom.
         toggle: {
-          paddingHorizontal: 4,
-          paddingVertical: 1,
+          height: fonts.row - 8,
+          justifyContent: "center",
+          paddingHorizontal: 6,
           borderWidth: 1,
           borderRadius: 4,
           borderColor: "transparent",

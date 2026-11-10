@@ -22,8 +22,14 @@ function useStyles(theme: PluginTheme) {
     return {
       ...StyleSheet.create({
         // Rounded as its box is, for its focus ring.
-        button: { borderRadius: 4 },
-        box: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
+        button: { borderRadius: 6 },
+        box: {
+          height: fonts.button,
+          justifyContent: "center",
+          paddingHorizontal: fonts.buttonPadding,
+          borderRadius: 6,
+          overflow: "hidden",
+        },
         plain: {},
         warning: {},
         primary: { backgroundColor: theme.colors.accent },

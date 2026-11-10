@@ -42,13 +42,21 @@ function useStyles(theme: PluginTheme) {
         // Until it's measured, and so can be placed.
         unmeasured: { opacity: 0 },
         // Rounded as its face is, for its focus ring.
-        button: { borderRadius: 4 },
+        button: { borderRadius: 6 },
         // As an icon button's face is, which clips its tint to its corners.
-        icon: { padding: 2, borderRadius: 4, overflow: "hidden" },
+        icon: {
+          width: fonts.button,
+          height: fonts.button,
+          alignItems: "center",
+          justifyContent: "center",
+          borderRadius: 6,
+          overflow: "hidden",
+        },
         armed: {
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
+          height: fonts.button,
+          justifyContent: "center",
+          paddingHorizontal: fonts.buttonPadding,
+          borderRadius: 6,
           overflow: "hidden",
           backgroundColor: theme.colors.statusDanger,
         },
@@ -58,6 +66,7 @@ function useStyles(theme: PluginTheme) {
       // How far it is from the point it shows from, which is in a line: past the half of the line on
       // its side, and a little more.
       gap: fonts.codeLine / 2 + 4,
+      iconSize: fonts.buttonIcon,
     }),
     [theme, fonts],
   );
@@ -104,7 +113,7 @@ function LineAction({ action, lines, controls, styles, theme }: LineActionProps)
                 look={look}
                 hovered={hovered}
                 pressed={pressed}
-                size={15}
+                size={styles.iconSize}
                 theme={theme}
               />
             </View>

@@ -14,8 +14,8 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
     headingRow: {
       flexDirection: "row",
       alignItems: "center",
+      minHeight: fonts.row,
       paddingRight: 12,
-      paddingVertical: 4,
       cursor: "auto",
     },
     // In the gutter left of the heading, which lines the heading up with the files under it.
@@ -39,7 +39,7 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes) {
       letterSpacing: 0.5,
       color: theme.colors.foreground,
     },
-    row: { paddingLeft: 16, paddingRight: 12, paddingVertical: 3 },
+    row: { minHeight: fonts.row, justifyContent: "center", paddingLeft: 16, paddingRight: 12 },
     path: { fontSize: fonts.text, color: theme.colors.foreground },
     // As Paseo's Changes tab dims a file's name while it isn't hovered or selected.
     dimmedPath: { opacity: 0.76 },

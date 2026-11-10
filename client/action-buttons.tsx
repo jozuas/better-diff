@@ -31,9 +31,15 @@ function useStyles(theme: PluginTheme, color: string) {
       ...StyleSheet.create({
         buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
         // Rounded as its box is, for its focus ring.
-        button: { borderRadius: 4 },
+        button: { borderRadius: 6 },
         hidden: { opacity: 0 },
-        box: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 4, overflow: "hidden" },
+        box: {
+          height: fonts.button,
+          justifyContent: "center",
+          paddingHorizontal: fonts.buttonPadding,
+          borderRadius: 6,
+          overflow: "hidden",
+        },
         armed: { backgroundColor: theme.colors.statusDanger },
         text: { fontSize: fonts.small },
       }),
