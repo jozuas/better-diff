@@ -5,7 +5,7 @@ import type { Page } from "@playwright/test";
 
 import { commitAll, deleteFile, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { button, clipboardOf, line, openFile, row, selectLines } from "./panel";
+import { clipboardOf, line, openFile, row, selectLines } from "./panel";
 
 // Right-clicks the file's row, and picks the item from its menu.
 async function copyFrom(page: Page, heading: string, path: string, item: string): Promise<void> {
@@ -153,7 +153,7 @@ test("right-clicking a diff's lines opens a menu whose Copy copies the selected 
   await expect(page.getByRole("menu")).toBeHidden();
 });
 
-test("the Copy of the bar a selection of a diff's lines shows copies the selected text, and leaves it selected", async ({
+test("the Copy of the bar a selection of a diff's lines shows copies the selected text, and leaves it selected, under the bar", async ({
   app,
   page,
   repository,
@@ -169,9 +169,9 @@ test("the Copy of the bar a selection of a diff's lines shows copies the selecte
   await bar.getByRole("button", { name: "Copy", exact: true }).click();
 
   await expect.poll(clipboardOf(page)).toBe("bravo\ncharlie");
-  await expect(bar).toBeHidden();
+  await expect(bar).toBeVisible();
   expect(await page.evaluate("getSelection().toString()")).toBe("bravo\ncharlie");
-  await expect(button(page, "Stage Lines")).toBeVisible();
+  await expect(bar.getByRole("button", { name: "Stage Lines", exact: true })).toBeVisible();
 });
 
 test("the Copy of a diff's lines is disabled while no text is selected", async ({

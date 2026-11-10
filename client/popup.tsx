@@ -8,7 +8,7 @@ import { FontSizesContext } from "./fonts";
 import { Hoverable } from "./hoverable";
 import { useCommands, useContextMenu } from "./keyboard";
 import { itemLook, itemName, menuPosition, menuStep } from "./menu";
-import type { Point, Position, Size } from "./menu";
+import type { MenuItem, Point, Position, Size } from "./menu";
 
 function useStyles(theme: PluginTheme) {
   const fonts = useContext(FontSizesContext);
@@ -53,11 +53,13 @@ function useStyles(theme: PluginTheme) {
         plain: {},
         hovered: { backgroundColor: theme.colors.surface2 },
         disabled: {},
+        armed: { backgroundColor: theme.colors.surface2 },
       }),
       labels: StyleSheet.create({
         plain: { color: theme.colors.foreground },
         hovered: { color: theme.colors.foreground },
         disabled: { color: theme.colors.foregroundMuted },
+        armed: { color: theme.colors.statusDanger },
       }),
       // An item's icon, before its label.
       icon: { size: fonts.fileIcon, color: theme.colors.foregroundMuted },
@@ -135,17 +137,6 @@ export function Popup({
   );
 }
 
-interface MenuItem {
-  label: string;
-  // What it says after its label, dimmed, if anything, which stays as the label's cut short.
-  detail?: string | undefined;
-  // A Lucide icon's name.
-  icon: string;
-  onPress: () => void;
-  // Shown, but not pressable, as while there's nothing for it to do.
-  disabled: boolean;
-}
-
 interface MenuItemProps extends MenuItem {
   onFocus: () => void;
   itemRef: Ref<View>;
@@ -158,6 +149,7 @@ function Item({
   icon,
   onPress,
   disabled,
+  armed,
   onFocus,
   itemRef,
   styles,
@@ -173,7 +165,7 @@ function Item({
       onFocus={onFocus}
     >
       {({ hovered }) => {
-        const look = itemLook(hovered, disabled);
+        const look = itemLook(hovered, disabled, armed);
 
         return (
           <View style={[styles.item, styles.boxes[look]]}>
@@ -210,8 +202,9 @@ interface MenuProps {
 }
 
 // A menu, at the point as a right-click menu is unless it's placed otherwise, which closes once an
-// item is chosen, before the item runs. ↓ and ↑ move focus from one item to the next or the one
-// before, round from the last to the first and back.
+// item is chosen, before the item runs, but for one that stays open for it to ask to be chosen
+// again. ↓ and ↑ move focus from one item to the next or the one before, round from the last to
+// the first and back.
 export function Menu({
   label,
   point,
@@ -252,7 +245,7 @@ export function Menu({
     >
       {shown.map((section, index) => (
         <Fragment key={starts[index]}>
-          {index === 0 ? null : <View style={styles.separator} />}
+          {index === 0 ? null : <View role="separator" style={styles.separator} />}
           {section.map((item, position) => {
             const at = (starts[index] ?? 0) + position;
 
@@ -261,7 +254,10 @@ export function Menu({
                 key={at}
                 {...item}
                 onPress={() => {
-                  onClose();
+                  if (item.stays !== true) {
+                    onClose();
+                  }
+
                   item.onPress();
                 }}
                 onFocus={() => {

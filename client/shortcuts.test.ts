@@ -7,7 +7,7 @@ import type { Action } from "./actions";
 import type { Target } from "./apply";
 import type { GroupName } from "./groups";
 import type { Place } from "./keymap";
-import { buttonShortcut, runShortcut, shortcutOf, shortcutText } from "./shortcuts";
+import { buttonShortcut, nameTip, runShortcut, shortcutOf, shortcutText } from "./shortcuts";
 import type { ActionCommand, Bar, Level } from "./shortcuts";
 
 function onPartRun(): void {}
@@ -236,4 +236,9 @@ test("once the pointer rests on a button, it teaches the key that runs its actio
       },
     ),
   );
+});
+
+test("a button that shows only an icon is named above it, with its key after its name, if it has one", () => {
+  expect(nameTip("Stage Lines", "\u21A9")).toBe("Stage Lines  \u21A9");
+  expect(nameTip("Comment")).toBe("Comment");
 });

@@ -49,8 +49,8 @@ export function shortcutOf(
 }
 
 // A bar's actions, as its buttons have them.
-export interface Bar {
-  actions: readonly Action[];
+export interface Bar<Of extends Action = Action> {
+  actions: readonly Of[];
   // Tells the bar's buttons apart from other bars'.
   bar: string;
   // What its actions act on.
@@ -118,4 +118,10 @@ export function buttonShortcut(
   mac: boolean,
 ): string | undefined {
   return level === undefined ? undefined : shortcutText(shortcutOf(action, level, place, mac), mac);
+}
+
+// What shows above a button that shows only an icon once the pointer rests on it: its name, and
+// its key after it, if it has one, to teach it.
+export function nameTip(name: string, shortcut?: string): string {
+  return shortcut === undefined ? name : `${name}  ${shortcut}`;
 }

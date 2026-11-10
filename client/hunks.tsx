@@ -14,21 +14,19 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
+import { barRequests } from "./bar-requests";
 import type { NumberedFile } from "./comments";
-import { UnchangedLines } from "./diff-lines";
-import { beforeSection } from "./find";
 import { useFindableLines } from "./find-page";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
-import { HunkArea } from "./hunk-area";
+import { HunkArea, LinesBefore } from "./hunk-area";
 import { HunkBar } from "./hunk-bar";
 import { unchangedLines } from "./lines";
 import type { NumberedLine, Unchanged } from "./lines";
-import { LinesArea } from "./lines-menu";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
 import { covers, widened, windowAround } from "./rendering";
@@ -36,6 +34,7 @@ import type { LineWindow } from "./rendering";
 import { ReviewContext } from "./review-context";
 import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
+import { SelectionBarLayer } from "./selection-bar";
 import { useFocus } from "./text-selection";
 import {
   KeptPlaceContext,
@@ -47,17 +46,6 @@ import {
 } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
-
-function useStyles() {
-  return useMemo(
-    () =>
-      StyleSheet.create({
-        // Under each hunk, and the unchanged lines before the first.
-        spaced: { marginBottom: 8 },
-      }),
-    [],
-  );
-}
 
 export interface HunksProps {
   diff: Diff;
@@ -252,8 +240,8 @@ export function Hunks({
   controls,
   theme,
 }: HunksProps): ReactElement {
-  const styles = useStyles();
   const pointed = useMemo(() => pointedHunk(), []);
+  const requests = useMemo(() => barRequests(), []);
   const [entire, setEntire] = useState(false);
   const shownDiff = useEntireDiff(diff, entireQuery, entire);
   const showsEntire = shownDiff !== diff;
@@ -320,6 +308,7 @@ export function Hunks({
         selection={selected}
         sides={focus}
         pointed={pointed}
+        requests={requests}
         controls={controls}
         entire={entire}
         onToggleEntire={bars.onToggleEntire}
@@ -335,43 +324,52 @@ export function Hunks({
         key={`lines ${hunk.oldStart},${hunk.newStart}`}
         hunk={hunk}
         index={index}
+        version={shownDiff.version}
+        open={file}
         file={commented}
-        path={file.path}
         view={view}
         fileIndex={fileIndex}
         selection={selected}
         pointed={pointed}
+        requests={requests}
         focus={focus}
         after={unchanged.after[index] ?? noLines}
         window={window}
         ceiling={ceiling}
+        controls={controls}
         theme={theme}
       />,
     ];
   });
 
   const shown = [
-    <LinesArea key="before" path={file.path} ceiling={ceiling} theme={theme}>
-      <UnchangedLines
-        lines={unchanged.before}
-        container={container}
-        section={beforeSection}
-        focus={focus}
-        window={window}
-        style={styles.spaced}
-        theme={theme}
-      />
-    </LinesArea>,
+    <LinesBefore
+      key="before"
+      lines={unchanged.before}
+      path={file.path}
+      view={view}
+      fileIndex={fileIndex}
+      requests={requests}
+      focus={focus}
+      window={window}
+      ceiling={ceiling}
+      controls={controls}
+      theme={theme}
+    />,
     ...hunks,
   ];
 
   return scrolls ? (
-    <ScrollView
-      nativeID={view}
-      stickyHeaderIndices={shownDiff.hunks.map((_, index) => 2 * index + 1)}
-    >
-      {shown}
-    </ScrollView>
+    <SelectionBarLayer theme={theme}>
+      {(layer) => (
+        <ScrollView
+          nativeID={view}
+          stickyHeaderIndices={shownDiff.hunks.map((_, index) => 2 * index + 1)}
+        >
+          {[...shown, layer]}
+        </ScrollView>
+      )}
+    </SelectionBarLayer>
   ) : (
     <View>{shown}</View>
   );

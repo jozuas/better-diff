@@ -143,6 +143,13 @@ test("a menu's item is highlighted while the pointer is over it, unless it's dis
   expect(itemLook(true, true)).toBe("disabled");
 });
 
+test("a menu's item that asks to be chosen again looks it, though the pointer's over it, unless it's disabled", () => {
+  expect(itemLook(false, false, true)).toBe("armed");
+  expect(itemLook(true, false, true)).toBe("armed");
+  expect(itemLook(true, true, true)).toBe("disabled");
+  expect(itemLook(true, false, false)).toBe("hovered");
+});
+
 test("a menu's item is called by its label, and what it says after it, if anything", () => {
   expect(itemName("Reviewer")).toBe("Reviewer");
   expect(itemName("Reviewer", "Working")).toBe("Reviewer, Working");
@@ -180,7 +187,7 @@ test("a panel opens above its button, its right edge at the button's, as wide as
 });
 
 // An area on the page, a bar no wider than it, where the pointer let go in it, the highest the page
-// shows the area's lines from, and a gap.
+// shows the area's lines from, a gap, and the corner of what the bar is placed in.
 const shownBar = fc
   .record({
     x: fc.integer({ min: -500, max: 500 }),
@@ -196,6 +203,10 @@ const shownBar = fc
         x: fc.integer({ min: area.x, max: area.x + area.width }),
         y: fc.integer({ min: area.y, max: area.y + area.height }),
       }),
+      origin: fc.record({
+        x: fc.integer({ min: -900, max: 900 }),
+        y: fc.integer({ min: -900, max: 900 }),
+      }),
       ceiling: fc.integer({ min: -600, max: 600 }),
       gap: fc.integer({ min: 1, max: 20 }),
     }),
@@ -203,43 +214,66 @@ const shownBar = fc
 
 test("shows a bar where the pointer let go of a selection inside its area, above the point by the gap where it's room under the area's top and the ceiling, and else below it", () => {
   fc.assert(
-    fc.property(shownBar, ({ area, bar, point, ceiling, gap }) => {
-      const { left, top } = barPosition(point, area, bar, ceiling, gap);
+    fc.property(shownBar, fc.boolean(), ({ area, bar, point, origin, ceiling, gap }, centred) => {
+      const { left, top } = barPosition({ point, area, origin, ceiling, centred }, bar, gap);
       const room = point.y - gap - bar.height >= Math.max(area.y, ceiling);
 
-      expect(left).toBeGreaterThanOrEqual(0);
-      expect(left + bar.width).toBeLessThanOrEqual(area.width);
-      expect(area.y + top + bar.height === point.y - gap).toBe(room);
-      expect(area.y + top === point.y + gap).toBe(!room);
+      expect(origin.x + left).toBeGreaterThanOrEqual(area.x);
+      expect(origin.x + left + bar.width).toBeLessThanOrEqual(area.x + area.width);
+      expect(origin.y + top + bar.height === point.y - gap).toBe(room);
+      expect(origin.y + top === point.y + gap).toBe(!room);
     }),
   );
 });
 
+const placedIn = { x: 100, y: 50, width: 400, height: 300 };
+
+// Where the bar is let go of at the point, in an area from its own corner.
+function letGo(x: number, y: number, centred: boolean, area = placedIn) {
+  return { point: { x, y }, area, origin: { x: area.x, y: area.y }, ceiling: 0, centred };
+}
+
 test("centres a bar on where the pointer let go of a selection, as far as its area leaves room", () => {
-  const area = { x: 100, y: 50, width: 400, height: 300 };
   const bar = { width: 60, height: 20 };
 
-  expect(barPosition({ x: 300, y: 200 }, area, bar, 0, 10)).toStrictEqual({ left: 170, top: 120 });
-  expect(barPosition({ x: 110, y: 200 }, area, bar, 0, 10).left).toBe(0);
-  expect(barPosition({ x: 490, y: 200 }, area, bar, 0, 10).left).toBe(340);
+  expect(barPosition(letGo(300, 200, true), bar, 10)).toStrictEqual({ left: 170, top: 120 });
+  expect(barPosition(letGo(110, 200, true), bar, 10).left).toBe(0);
+  expect(barPosition(letGo(490, 200, true), bar, 10).left).toBe(340);
+});
+
+test("starts a bar shown for lines the keyboard selected at the start of the line's text, as far as its area leaves room", () => {
+  const bar = { width: 60, height: 20 };
+
+  expect(barPosition(letGo(130, 200, false), bar, 10)).toStrictEqual({ left: 30, top: 120 });
+  expect(barPosition(letGo(480, 200, false), bar, 10).left).toBe(340);
+});
+
+test("places a bar from the corner of what it's in", () => {
+  const at = { ...letGo(300, 200, true), origin: { x: 20, y: -30 } };
+
+  expect(barPosition(at, { width: 60, height: 20 }, 10)).toStrictEqual({ left: 250, top: 200 });
+});
+
+test("shows a bar for a selection let go of past its area as at the area's edge", () => {
+  const area = { x: 0, y: 100, width: 400, height: 300 };
+  const bar = { width: 60, height: 20 };
+
+  expect(barPosition(letGo(200, 900, true, area), bar, 10).top).toBe(270);
+  expect(barPosition(letGo(200, 400, true, area), bar, 10).top).toBe(270);
+  expect(barPosition(letGo(200, 20, true, area), bar, 10).top).toBe(10);
+  expect(barPosition(letGo(200, 100, true, area), bar, 10).top).toBe(10);
 });
 
 test("shows a bar wider than its area from the area's left edge", () => {
-  expect(
-    barPosition(
-      { x: 150, y: 100 },
-      { x: 100, y: 0, width: 40, height: 200 },
-      { width: 60, height: 20 },
-      0,
-      4,
-    ).left,
-  ).toBe(0);
+  const area = { x: 100, y: 0, width: 40, height: 200 };
+
+  expect(barPosition(letGo(150, 100, true, area), { width: 60, height: 20 }, 4).left).toBe(0);
 });
 
 test("shows a bar that just fits above where the pointer let go there", () => {
   const area = { x: 0, y: 40, width: 400, height: 300 };
   const bar = { width: 60, height: 20 };
 
-  expect(barPosition({ x: 200, y: 70 }, area, bar, 30, 10).top).toBe(0);
-  expect(barPosition({ x: 200, y: 70 }, area, bar, 41, 10).top).toBe(40);
+  expect(barPosition({ ...letGo(200, 70, true, area), ceiling: 30 }, bar, 10).top).toBe(0);
+  expect(barPosition({ ...letGo(200, 70, true, area), ceiling: 41 }, bar, 10).top).toBe(40);
 });

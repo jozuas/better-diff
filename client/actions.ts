@@ -20,32 +20,34 @@ export interface Action {
   confirmation?: string;
 }
 
-// An action the sidebar offers too, whose button there shows the icon until it's armed.
-export interface SidebarAction extends Action {
+// An action the sidebar, or the bar over selected lines, offers, whose button there shows the icon
+// until it's armed.
+export interface IconAction extends Action {
   // A Lucide icon's name.
   icon: string;
 }
 
-const discardFile: SidebarAction = {
+const discardFile: IconAction = {
   operation: "discard",
   label: "Discard",
   confirmation: "Confirm discard?",
   icon: "Undo2",
 };
 
-const deleteFile: SidebarAction = {
+const deleteFile: IconAction = {
   operation: "discard",
   label: "Delete",
   confirmation: "Confirm delete?",
   icon: "Trash2",
 };
 
-const stageFile: SidebarAction = { operation: "stage", label: "Stage", icon: "Plus" };
+const stageFile: IconAction = { operation: "stage", label: "Stage", icon: "Plus" };
 
-const discardLines: Action = {
+const discardLines: IconAction = {
   operation: "discard",
   label: "Discard Lines",
   confirmation: "Confirm discard?",
+  icon: discardFile.icon,
 };
 
 const discardHunk: Action = {
@@ -61,14 +63,14 @@ const discardMode: Action = {
 };
 
 // Discarding staged changes is left out: they can only be unstaged.
-export const fileActions: Record<GroupName, SidebarAction[]> = {
+export const fileActions: Record<GroupName, IconAction[]> = {
   modified: [discardFile, stageFile],
   untracked: [deleteFile, stageFile],
   staged: [{ operation: "unstage", label: "Unstage", icon: "Minus" }],
 };
 
 // On a group's heading, acting on all its files.
-export const groupActions: Record<GroupName, SidebarAction[]> = {
+export const groupActions: Record<GroupName, IconAction[]> = {
   modified: [
     { ...discardFile, label: "Discard All" },
     { ...stageFile, label: "Stage All" },
@@ -81,7 +83,7 @@ export const groupActions: Record<GroupName, SidebarAction[]> = {
 };
 
 // On the rows of the files selected in a group, acting on all of them.
-const selectionActions: Record<GroupName, SidebarAction[]> = {
+const selectionActions: Record<GroupName, IconAction[]> = {
   modified: [
     { ...discardFile, label: "Discard Selected" },
     { ...stageFile, label: "Stage Selected" },
@@ -96,7 +98,7 @@ const selectionActions: Record<GroupName, SidebarAction[]> = {
 // A file's row's actions, and what they act on: all the files selected, if it's one of them, or
 // else the file, as shown if its diff is.
 export interface RowActions {
-  actions: SidebarAction[];
+  actions: IconAction[];
   target: Target;
   // Tells the row's buttons apart from other rows', and from its own while other files are
   // selected, so one armed then is no longer.
@@ -157,11 +159,13 @@ export interface Controls extends Pick<ControlsStore, "state" | "subscribe"> {
   cancel: () => boolean;
 }
 
-// Over the hunk whose lines are selected.
-export const lineActions: Record<GroupName, Action[]> = {
-  modified: [discardLines, { operation: "stage", label: "Stage Lines" }],
-  untracked: [discardLines, { operation: "stage", label: "Stage Lines" }],
-  staged: [{ operation: "unstage", label: "Unstage Lines" }],
+const stageLines: IconAction = { ...stageFile, label: "Stage Lines" };
+
+// Over the selected lines.
+export const lineActions: Record<GroupName, IconAction[]> = {
+  modified: [discardLines, stageLines],
+  untracked: [discardLines, stageLines],
+  staged: [{ operation: "unstage", label: "Unstage Lines", icon: "Minus" }],
 };
 
 export function buttonText({ label, confirmation }: Action, armed: boolean): string {

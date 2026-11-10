@@ -2,7 +2,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
 import { fileActions, fileBarOf, hunkActions, hunkLines, lineActions } from "./actions";
-import type { Controls } from "./actions";
+import type { Controls, IconAction } from "./actions";
 import { fileBar } from "./focus";
 import type { BarAt, KeyboardFocus } from "./focus";
 import type { OpenFile } from "./groups";
@@ -81,7 +81,7 @@ export function lineBarOf(
   { version, index, hunk }: { version: string; index: number; hunk: Hunk },
   selection: LineRange | undefined,
   onRun: () => void,
-): Bar | undefined {
+): Bar<IconAction> | undefined {
   return selection === undefined
     ? undefined
     : {

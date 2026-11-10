@@ -266,24 +266,18 @@ export function useKeptSelection(id: string): void {
 }
 
 // Calls `onPress` each time the pointer's main button is pressed in the element with the id,
-// outside the lines' comments there and the element with the id `outside`, and `onRelease` with
-// where it's let go after that, once the page's text selection has what the press made it, as a
-// press in the selection clears it only once it's let go.
+// outside the lines' comments there, and `onRelease` with where it's let go after that, once the
+// page's text selection has what the press made it, as a press in the selection clears it only
+// once it's let go.
 export function useSelecting(
   id: string,
-  outside: string,
   onPress: () => void,
   onRelease: (point: Point) => void,
 ): void {
   const released = useLatest(onRelease);
 
   useListener(id, "pointerdown", ({ target, button }) => {
-    if (
-      target === null ||
-      button !== 0 ||
-      (target.closest?.(commentsMarked) ?? null) !== null ||
-      (target.closest?.(`#${CSS.escape(outside)}`) ?? null) !== null
-    ) {
+    if (target === null || button !== 0 || (target.closest?.(commentsMarked) ?? null) !== null) {
       return;
     }
 

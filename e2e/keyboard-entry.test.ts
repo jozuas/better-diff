@@ -147,8 +147,8 @@ test("only the pointer shows a button's key, not focus resting on a bar", async 
 
   await page.keyboard.press("ArrowRight");
   await button(page, "Stage Lines").hover();
-  await expectKeyUnder(page, "Stage Lines", /^(?:↩|Enter)$/u);
 
+  await expect(tips).toHaveText(/^Stage Lines\s+(?:↩|Enter)$/u);
   await expect(tips).toHaveCount(1);
 
   await page.keyboard.press("Escape");

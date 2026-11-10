@@ -1,15 +1,14 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { useContext, useId, useMemo, useSyncExternalStore } from "react";
+import { useId, useMemo, useSyncExternalStore } from "react";
 import type { PressableProps, StyleProp, ViewStyle } from "react-native";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-import { buttonLook, buttonText, sidebarButtonName } from "./actions";
-import type { ButtonLook, Controls, SidebarAction } from "./actions";
+import { ActionFace } from "./action-face";
+import { buttonLook, sidebarButtonName } from "./actions";
+import type { Controls, IconAction } from "./actions";
 import type { Target } from "./apply";
-import { FontSizesContext } from "./fonts";
-import { Hoverable, TintLayer } from "./hoverable";
+import { Hoverable } from "./hoverable";
 import type { Place } from "./keymap";
 import { showsButtons } from "./reveal";
 import type { Look } from "./reveal";
@@ -21,20 +20,9 @@ import { onMac, overlayId } from "./web";
 type RevealHandlers = Pick<PressableProps, "onHoverIn" | "onHoverOut" | "onFocus" | "onBlur">;
 
 function useStyles(theme: PluginTheme) {
-  const fonts = useContext(FontSizesContext);
-
-  return useMemo(() => {
-    // The icon's colour, or the armed button's text's, and its tint's, by how the button looks.
-    const faces: Record<ButtonLook, string> = {
-      // As readable as the theme's danger colour is on its surface.
-      armed: theme.colors.surface0,
-      warning: theme.colors.statusDanger,
-      hovered: theme.colors.foreground,
-      plain: theme.colors.foregroundMuted,
-    };
-
-    return {
-      ...StyleSheet.create({
+  return useMemo(
+    () =>
+      StyleSheet.create({
         // Over the end of the row, taking no room from what it shows.
         buttons: {
           position: "absolute",
@@ -54,35 +42,16 @@ function useStyles(theme: PluginTheme) {
           overflow: "hidden",
           backgroundColor: theme.colors.statusDanger,
         },
-        armedText: { fontSize: fonts.small, color: faces.armed },
         hidden: { opacity: 0 },
       }),
-      faces,
-    };
-  }, [theme, fonts]);
+    [theme],
+  );
 }
 
 type Styles = ReturnType<typeof useStyles>;
 
-interface FaceProps {
-  action: SidebarAction;
-  look: ButtonLook;
-  styles: Styles;
-}
-
-// The action's icon, or what it asks while armed.
-function Face({ action, look, styles }: FaceProps): ReactElement {
-  return look === "armed" ? (
-    <Text selectable={false} style={styles.armedText}>
-      {buttonText(action, true)}
-    </Text>
-  ) : (
-    <Icon name={action.icon} size={14} color={styles.faces[look]} />
-  );
-}
-
 interface SidebarButtonProps {
-  action: SidebarAction;
+  action: IconAction;
   row: string;
   // Where focus is while its key presses it: in a file's row, or a group's heading.
   place: Place;
@@ -132,8 +101,14 @@ function SidebarButton({
 
         return (
           <>
-            <TintLayer color={styles.faces[look]} hovered={hovered} pressed={pressed} />
-            <Face action={action} look={look} styles={styles} />
+            <ActionFace
+              action={action}
+              look={look}
+              hovered={hovered}
+              pressed={pressed}
+              size={14}
+              theme={theme}
+            />
             <ShortcutTip
               shortcut={shortcutText(shortcutOf(action, "file", place, onMac()), onMac())}
               resting={hovered && !pressed}
@@ -147,7 +122,7 @@ function SidebarButton({
 }
 
 interface SidebarButtonsProps {
-  actions: SidebarAction[];
+  actions: IconAction[];
   // Tells the row's buttons apart from other rows'.
   row: string;
   // Where focus is while their keys press them: in a file's row, or a group's heading.

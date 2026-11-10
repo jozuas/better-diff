@@ -1,13 +1,10 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import type { ReactElement } from "react";
 
-import { ActionButtons } from "./action-buttons";
-import type { Controls } from "./actions";
 import { IconButton } from "./icon-button";
 import { entireFileIcon, onlyHunksIcon } from "./icons";
 import { chordOf } from "./keymap";
 import { shortcutText } from "./shortcuts";
-import type { Bar } from "./shortcuts";
 import { onMac } from "./web";
 
 // What the toggle shows the entire file with, and only the hunks.
@@ -40,27 +37,6 @@ export function EntireFileToggle({
       onPress={onPress}
       shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
       hidden={hidden}
-      theme={theme}
-    />
-  );
-}
-
-interface LineButtonsProps {
-  // The selected lines' actions, while the hunk has any.
-  bar: Bar | undefined;
-  controls: Controls;
-  theme: PluginTheme;
-}
-
-// The actions on the hunk's selected lines, while it has any.
-export function LineButtons({ bar, controls, theme }: LineButtonsProps): ReactElement | null {
-  return bar === undefined ? null : (
-    <ActionButtons
-      {...bar}
-      level="part"
-      place="lines"
-      controls={controls}
-      color={theme.colors.foreground}
       theme={theme}
     />
   );

@@ -146,7 +146,7 @@ test("a selection's comment is on its lines from the first that can be commented
   expect(runGit(repository, ["show", ":a.txt"])).toBe("one\nTWO\nthree\n");
 });
 
-test("the bar a selection shows goes once the selection changes, and lines the keyboard selects don't show it", async ({
+test("the bar a selection shows goes once the selection's cleared, or once the pointer's pressed in the lines again", async ({
   app,
   page,
   repository,
@@ -161,11 +161,6 @@ test("the bar a selection shows goes once the selection changes, and lines the k
 
   await page.keyboard.press("Escape");
 
-  await expect(selectionBar(page)).toBeHidden();
-
-  await page.keyboard.press("ArrowRight");
-
-  await expect(button(page, "Stage Lines")).toBeVisible();
   await expect(selectionBar(page)).toBeHidden();
 
   await selectLines(page, "charlie");

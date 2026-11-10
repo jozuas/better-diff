@@ -178,6 +178,16 @@ export function selectedInHunk(
   return rangeInHunk(rangeIn(onSide(range, focus), file), hunk);
 }
 
+// The index of the hunk whose lines the range has, if it's of the view's file at the index `file`,
+// and another than the hunk at the index `own`, if any.
+export function otherHunk(
+  range: LineRange | undefined,
+  file: number,
+  own?: number,
+): number | undefined {
+  return range?.file === file && range.hunk !== own ? range.hunk : undefined;
+}
+
 // Whether the range has the line of its file, as shown on the side, in a side-by-side view.
 export function isSelected(
   range: LineRange | undefined,

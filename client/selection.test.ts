@@ -10,6 +10,7 @@ import {
   isSelected,
   lineId,
   onSide,
+  otherHunk,
   rangeIn,
   rangeInHunk,
   rangeKey,
@@ -302,6 +303,16 @@ test("gives a hunk of the view's file only the range of its own lines, on the si
   expect(selectedInHunk(selected, undefined, 1, 2)).toBe(selected);
   expect(selectedInHunk(selected, focus, 0, 2)).toBeUndefined();
   expect(selectedInHunk(selected, focus, 1, 1)).toBeUndefined();
+});
+
+test("a range of the view's file is of another hunk than one that isn't its own", () => {
+  const selected = { file: 1, hunk: 2, first: 3, last: 4 };
+
+  expect(otherHunk(selected, 1, 0)).toBe(2);
+  expect(otherHunk(selected, 1)).toBe(2);
+  expect(otherHunk(selected, 1, 2)).toBeUndefined();
+  expect(otherHunk(selected, 0)).toBeUndefined();
+  expect(otherHunk(undefined, 1)).toBeUndefined();
 });
 
 test("tells apart ranges of a hunk with other lines, or on another side", () => {

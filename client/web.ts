@@ -367,10 +367,10 @@ export function useScrolled(id: string, listener: () => void): void {
 }
 
 // Where the element with the id is on the page, or nowhere, at the page's top left corner, while
-// it's not on it.
-export function rectOf(id: string): Rect {
+// it's not on it, or there's no id.
+export function rectOf(id?: string): Rect {
   const box =
-    Platform.OS === "web"
+    Platform.OS === "web" && id !== undefined
       ? document.querySelector(`#${CSS.escape(id)}`)?.getBoundingClientRect()
       : undefined;
 

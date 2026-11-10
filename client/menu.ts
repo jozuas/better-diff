@@ -26,23 +26,35 @@ export function menuPosition(point: Point, menu: Size, window: Size): Position {
   };
 }
 
-// Where a bar shown where the pointer let go of a selection goes, by its top left corner from the
-// top left corner of the area it's in: above the point by the gap, centred on it, or as far below
-// it where it would show above the area's top or the ceiling, the highest the page shows the
-// area's lines from, under bars that stay at the top, and never past the area's left edge, nor its
-// right one where the area leaves room for that.
+// Where a bar over a selection of lines shows from: the point, where the lines are on the page, the
+// top left corner of what it's placed in, the highest the page shows the lines from, under bars
+// that stay at the top, and whether it's centred on the point, as where the pointer let go of the
+// selection, or starts at it, as at the start of the text of the line the keyboard selected up to.
+export interface LetGo {
+  point: Point;
+  area: Rect;
+  origin: Point;
+  ceiling: number;
+  centred: boolean;
+}
+
+// Where the bar goes, by its top left corner from the origin: above the point by the gap, or as far
+// below it where it would show above the lines' area's top or the ceiling, and never past the
+// area's left edge, nor its right one where the area leaves room for that. A point above the area
+// or below it, as where the pointer let go past the lines it selected, is taken to be at the area's
+// edge.
 export function barPosition(
-  point: Point,
-  area: Rect,
+  { point, area, origin, ceiling, centred }: LetGo,
   bar: Size,
-  ceiling: number,
   gap: number,
 ): Position {
-  const above = point.y - gap - bar.height;
+  const y = Math.min(Math.max(point.y, area.y), area.y + area.height);
+  const above = y - gap - bar.height;
+  const left = centred ? point.x - bar.width / 2 : point.x;
 
   return {
-    left: Math.max(0, Math.min(point.x - bar.width / 2, area.x + area.width - bar.width) - area.x),
-    top: (above < Math.max(area.y, ceiling) ? point.y + gap : above) - area.y,
+    left: Math.max(area.x, Math.min(left, area.x + area.width - bar.width)) - origin.x,
+    top: (above < Math.max(area.y, ceiling) ? y + gap : above) - origin.y,
   };
 }
 
@@ -52,11 +64,35 @@ export function menuEndingAt(point: Point, menu: Size): Position {
   return { left: Math.max(0, point.x - menu.width), top: Math.max(0, point.y - menu.height) };
 }
 
-// How a menu's item looks: dimmed while it's disabled, whatever the pointer does, and else
-// highlighted while the pointer is over it.
-export function itemLook(hovered: boolean, disabled: boolean): "plain" | "hovered" | "disabled" {
+// A menu's item.
+export interface MenuItem {
+  label: string;
+  // What it says after its label, dimmed, if anything, which stays as the label's cut short.
+  detail?: string | undefined;
+  // A Lucide icon's name.
+  icon: string;
+  onPress: () => void;
+  // Shown, but not pressable, as while there's nothing for it to do.
+  disabled: boolean;
+  // Whether it asks to be chosen again, as an action that loses work does once chosen.
+  armed?: boolean;
+  // Whether choosing it leaves the menu open, as for it to ask that.
+  stays?: boolean;
+}
+
+// How a menu's item looks: dimmed while it's disabled, whatever the pointer does, in the danger
+// colour while it asks to be chosen again, and else highlighted while the pointer is over it.
+export function itemLook(
+  hovered: boolean,
+  disabled: boolean,
+  armed = false,
+): "plain" | "hovered" | "disabled" | "armed" {
   if (disabled) {
     return "disabled";
+  }
+
+  if (armed) {
+    return "armed";
   }
 
   return hovered ? "hovered" : "plain";

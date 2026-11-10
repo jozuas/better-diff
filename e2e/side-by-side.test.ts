@@ -180,6 +180,8 @@ test("side by side, removals and additions are separate texts: a selection has o
     })
     .toBe("a old one\na old two");
 
+  // Clears the selection, whose bar is over where the next one starts.
+  await page.keyboard.press("Escape");
   await selectLines(page, "a new one", "a new two");
 
   await expect

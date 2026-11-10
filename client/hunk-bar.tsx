@@ -15,10 +15,11 @@ import type { diffRpc } from "../shared/diff";
 import { ActionButtons } from "./action-buttons";
 import type { Controls } from "./actions";
 import { barCommand, fileBarActions, hunkBarOf, lineBarOf, lineCommand } from "./bar-commands";
+import type { BarRequests } from "./bar-requests";
 import { KeyboardFocusContext } from "./focus";
 import type { HunkEnd } from "./focus";
 import type { OpenFile } from "./groups";
-import { EntireFileToggle, LineButtons } from "./hunk-buttons";
+import { EntireFileToggle } from "./hunk-buttons";
 import { handled, heard } from "./key-events";
 import { useBarFocus, useKeys } from "./keyboard";
 import { rangeOf, selectedCursor } from "./line-cursor";
@@ -81,6 +82,8 @@ interface HunkBarProps {
   sides: Focus | undefined;
   // Which of the diff's hunks the pointer is over.
   pointed: PointedHunk;
+  // What asks the hunk's lines to show the bar over them, as once the keyboard selects them.
+  requests: BarRequests;
   controls: Controls;
   // Whether the view shows the entire file, rather than only its hunks.
   entire: boolean;
@@ -134,16 +137,20 @@ function useHunkFocus(
 }
 
 // Selects the hunk's lines from the keyboard: on their side, which then has focus, side by side,
-// showing the line the selection reaches. The lines selected are the page's text selection's, which
-// keys move or the pointer does.
+// showing the line the selection reaches, and telling the hunk's lines, which show what acts on
+// them. The lines selected are the page's text selection's, which keys move or the pointer does.
 function useLineSelection({
   hunk,
   index,
   fileIndex,
   view,
   sides,
+  requests,
   onReveal,
-}: Pick<HunkBarProps, "hunk" | "index" | "fileIndex" | "view" | "sides" | "onReveal">) {
+}: Pick<
+  HunkBarProps,
+  "hunk" | "index" | "fileIndex" | "view" | "sides" | "requests" | "onReveal"
+>) {
   const kinds = useMemo(() => hunk.lines.map(({ kind }) => kind), [hunk.lines]);
   const container = fileId(view, fileIndex);
 
@@ -151,8 +158,11 @@ function useLineSelection({
     select: (anchor, head) => {
       selectLines(container, index, anchor, head);
     },
+    // Once the view shows the line the selection reaches, the hunk's lines show what acts on them
+    // there.
     reveal: (line) => {
       onReveal(lineId(container, index, line));
+      requests.show(index, { head: line });
     },
     afterRender,
   };
@@ -178,8 +188,8 @@ function useLineSelection({
 }
 
 // On its left, the toggle between the entire file and only its hunks, and on its right, the hunk's
-// actions, both hidden until the hunk is revealed, and those on its selected lines while it has
-// any. Keys move focus to the bar itself, and in it move focus on through the view's bars, or back
+// actions, both hidden until the hunk is revealed. The bar over its selected lines has their
+// actions, which keys here press too. Keys move focus to the bar itself, and in it move focus on through the view's bars, or back
 // to its file's row, run the hunk's actions or its file's, and select its lines and move the
 // selection on, while the actions they run act on the lines. Once an action on the hunk or its
 // lines runs with focus in it, focus moves on with the view, and once one on its file does, to the
@@ -232,8 +242,6 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
     holdFocus();
     onRun(index);
   });
-
-  const lineBar = lineBarOf(file, { version, index, hunk }, selection, holdFocus);
 
   // The file's bar's buttons, which their shortcuts press from here too. Focus then moves to the
   // first hunk in the place of the file's first.
@@ -314,7 +322,6 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
     >
       <EntireFileToggle entire={entire} onPress={toggleEntire} hidden={!revealed} theme={theme} />
       <View style={styles.buttons}>
-        <LineButtons bar={lineBar} controls={controls} theme={theme} />
         <ActionButtons
           {...hunkBar}
           level="part"

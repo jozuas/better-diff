@@ -158,16 +158,21 @@ test("offers discarding and staging a modified or untracked file's hunk, and uns
   });
 });
 
-test("offers discarding and staging a modified or untracked file's selected lines, and unstaging a staged one's, asking before discarding", () => {
+test("offers discarding and staging a modified or untracked file's selected lines, and unstaging a staged one's, asking before discarding, with the sidebar's icons", () => {
   const discardOrStage = [
-    { operation: "discard", label: "Discard Lines", confirmation: "Confirm discard?" },
-    { operation: "stage", label: "Stage Lines" },
+    {
+      operation: "discard",
+      label: "Discard Lines",
+      confirmation: "Confirm discard?",
+      icon: "Undo2",
+    },
+    { operation: "stage", label: "Stage Lines", icon: "Plus" },
   ];
 
   expect(lineActions).toStrictEqual({
     modified: discardOrStage,
     untracked: discardOrStage,
-    staged: [{ operation: "unstage", label: "Unstage Lines" }],
+    staged: [{ operation: "unstage", label: "Unstage Lines", icon: "Minus" }],
   });
 });
 

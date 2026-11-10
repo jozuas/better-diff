@@ -33,6 +33,7 @@ import { useFocusOnPress } from "./keyboard";
 import { Failed, Queried } from "./queried";
 import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
+import { SelectionBarLayer } from "./selection-bar";
 import { useSelectedLines } from "./text-selection";
 import {
   KeptPlaceContext,
@@ -293,50 +294,55 @@ function GroupFiles({
   }, []);
 
   return (
-    <ScrollView nativeID={view} stickyHeaderIndices={files.map((_, index) => 2 * index)}>
-      {files.length === 0 ? (
-        <Text style={styles.hint}>No changes</Text>
-      ) : (
-        files.flatMap((shown, index) => [
-          <GroupFileBar
-            key={`bar ${shown.path}`}
-            group={group}
-            path={shown.path}
-            index={index}
-            diff={shownDiffs[index]}
-            barHeight={barHeight}
-            onHeights={setHeights}
-            onRun={onFileRun}
-            onShow={onShowFile}
-            onExpand={onExpand}
-            controls={controls}
-            theme={theme}
-          />,
-          <View key={`diff ${shown.path}`}>
-            <View nativeID={fileId(view, index)} />
-            {index < rendered ? (
-              <GroupFileDiff
+    <SelectionBarLayer theme={theme}>
+      {(layer) => (
+        <ScrollView nativeID={view} stickyHeaderIndices={files.map((_, index) => 2 * index)}>
+          {files.length === 0 ? (
+            <Text style={styles.hint}>No changes</Text>
+          ) : (
+            files.flatMap((shown, index) => [
+              <GroupFileBar
+                key={`bar ${shown.path}`}
                 group={group}
-                query={expanded}
-                read={shown}
-                expanded={expandedDiff(shown.path)}
-                view={view}
-                fileIndex={index}
-                selection={rangeIn(selection, index)}
-                sideBySide={sideBySide}
-                barsBelow={barHeight}
-                onHunkRun={onHunkRun}
-                onFileRun={onFileRun}
-                onShowFile={onShowFile}
-                controls={controls}
+                path={shown.path}
+                index={index}
+                diff={shownDiffs[index]}
+                barHeight={barHeight}
+                onHeights={setHeights}
+                onRun={onFileRun}
+                onShow={onShowFile}
                 onExpand={onExpand}
+                controls={controls}
                 theme={theme}
-              />
-            ) : null}
-          </View>,
-        ])
+              />,
+              <View key={`diff ${shown.path}`}>
+                <View nativeID={fileId(view, index)} />
+                {index < rendered ? (
+                  <GroupFileDiff
+                    group={group}
+                    query={expanded}
+                    read={shown}
+                    expanded={expandedDiff(shown.path)}
+                    view={view}
+                    fileIndex={index}
+                    selection={rangeIn(selection, index)}
+                    sideBySide={sideBySide}
+                    barsBelow={barHeight}
+                    onHunkRun={onHunkRun}
+                    onFileRun={onFileRun}
+                    onShowFile={onShowFile}
+                    controls={controls}
+                    onExpand={onExpand}
+                    theme={theme}
+                  />
+                ) : null}
+              </View>,
+            ])
+          )}
+          {layer}
+        </ScrollView>
       )}
-    </ScrollView>
+    </SelectionBarLayer>
   );
 }
 

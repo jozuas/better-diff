@@ -45,6 +45,8 @@ interface PageSelection {
   readonly rangeCount: number;
   readonly anchorNode: PageNode | null;
   readonly anchorOffset: number;
+  readonly focusNode: PageNode | null;
+  readonly focusOffset: number;
   getRangeAt: (index: number) => PageRange;
   containsNode: (node: PageNode, partly: boolean) => boolean;
   removeAllRanges: () => void;
@@ -228,6 +230,46 @@ export function useSelectionChanges(listening: boolean, listener: () => void): v
 // The text the page's selection has, as copying it with the keyboard copies it.
 export function selectedText(): string {
   return Platform.OS === "web" ? (document.getSelection()?.toString() ?? "") : "";
+}
+
+// The page's text selection as it is, which tells it apart from another, as of lines that say the
+// same: the text it has, as copying it copies it, and where it starts and ends.
+export interface SelectionMark {
+  readonly text: string;
+  readonly anchor: PageNode | null;
+  readonly anchorOffset: number;
+  readonly focus: PageNode | null;
+  readonly focusOffset: number;
+}
+
+// The page's text selection as it is now, if it has any, though it can have no text, as one of
+// empty lines has none.
+export function selectionMark(): SelectionMark | undefined {
+  const selection = Platform.OS === "web" ? document.getSelection() : null;
+
+  return selection === null || selection.isCollapsed || selection.rangeCount === 0
+    ? undefined
+    : {
+        text: selection.toString(),
+        anchor: selection.anchorNode,
+        anchorOffset: selection.anchorOffset,
+        focus: selection.focusNode,
+        focusOffset: selection.focusOffset,
+      };
+}
+
+// Whether the page's text selection is still as it was when marked.
+export function stillMarked(mark: SelectionMark): boolean {
+  const now = selectionMark();
+
+  return (
+    now !== undefined &&
+    now.text === mark.text &&
+    now.anchor === mark.anchor &&
+    now.anchorOffset === mark.anchorOffset &&
+    now.focus === mark.focus &&
+    now.focusOffset === mark.focusOffset
+  );
 }
 
 function lineElement(container: string, hunk: number, line: number): PageElement | null {
