@@ -12,7 +12,7 @@ import { IconButton } from "./icon-button";
 import type { CommentedFile } from "./numbering";
 import { ReviewContext } from "./review-context";
 import type { Review } from "./review-context";
-import { lineLabel, lineNote, lineNumberOf, placedLine } from "./review-list";
+import { lineLabel, lineNote, linkLabel, placedLine } from "./review-list";
 import type { ListedComment, ListedFile } from "./review-list";
 
 // Paseo sets its UI font on everything in the app but what's marked data-pmono.
@@ -83,7 +83,7 @@ function CommentLink({ listed, onShow, canShow, styles }: CommentLinkProps): Rea
   return (
     <Hoverable
       accessibilityRole="button"
-      accessibilityLabel={`Show line ${String(lineNumberOf(listed))} of ${comment.path}`}
+      accessibilityLabel={linkLabel(listed)}
       disabled={file === undefined || !canShow(file)}
       style={styles.link}
       onPress={() => {

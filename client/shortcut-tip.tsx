@@ -30,6 +30,24 @@ function useStyles(theme: PluginTheme) {
         },
         // Larger than the button's label, as a key's symbol is hard to read small.
         text: { fontSize: fonts.text, color: theme.colors.foreground },
+        // Above the button, centred on it, however wide the name.
+        above: {
+          position: "absolute",
+          bottom: "100%",
+          left: -100,
+          right: -100,
+          alignItems: "center",
+          marginBottom: 8,
+        },
+        name: {
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderWidth: 1,
+          borderRadius: 6,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface0,
+          boxShadow: "0 2px 6px rgba(0, 0, 0, 0.2)",
+        },
       }),
     [theme, fonts],
   );
@@ -77,6 +95,31 @@ export function ShortcutTip({ shortcut, resting, theme }: ShortcutTipProps): Rea
       <Text selectable={false} numberOfLines={1} style={styles.text}>
         {shortcut}
       </Text>
+    </View>
+  ) : null;
+}
+
+interface NameTipProps {
+  // Undefined for a button whose name doesn't show.
+  name: string | undefined;
+  // Whether the pointer is over the button, and not pressing it.
+  resting: boolean;
+  theme: PluginTheme;
+}
+
+// The name of a button that shows only an icon, which shows above it once the pointer rests on it.
+// The pointer passes through it to what's under it.
+export function NameTip({ name, resting, theme }: NameTipProps): ReactElement | null {
+  const styles = useStyles(theme);
+  const shown = useAfterDelay(resting);
+
+  return shown && name !== undefined ? (
+    <View pointerEvents="none" style={styles.above}>
+      <View role="tooltip" style={styles.name}>
+        <Text selectable={false} numberOfLines={1} style={styles.text}>
+          {name}
+        </Text>
+      </View>
     </View>
   ) : null;
 }

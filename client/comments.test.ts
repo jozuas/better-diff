@@ -2,7 +2,17 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { asNumbered, commentBody, commentTarget, reviewComments } from "../test/comments";
-import { bodyOf, reviewComment, saved, targetOf, unsent, without } from "./comments";
+import {
+  bodyOf,
+  rangeLabel,
+  rangeNumbers,
+  rangeOf,
+  reviewComment,
+  saved,
+  targetOf,
+  unsent,
+  without,
+} from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
 
@@ -44,6 +54,49 @@ test("side by side, a comment is on the number the side shows the line with, and
   ]);
 });
 
+test("a comment on several lines is on the last, from the first, and one on a line from itself only on it", () => {
+  const first: CommentTarget = { path: "a.txt", side: "old", line: 4 };
+  const last: CommentTarget = { path: "a.txt", side: "new", line: 7 };
+
+  expect(rangeOf(first, last)).toStrictEqual({ ...last, start: { side: "old", line: 4 } });
+  expect(rangeOf({ ...first, side: "new" }, last)).toStrictEqual({
+    ...last,
+    start: { side: "new", line: 4 },
+  });
+  expect(rangeOf({ ...first, line: 7 }, last)).toStrictEqual({
+    ...last,
+    start: { side: "old", line: 7 },
+  });
+  expect(rangeOf(last, last)).toBe(last);
+});
+
+test("a comment on several lines says which they are, as Linear does", () => {
+  const last: CommentTarget = { path: "a.txt", side: "new", line: 51 };
+
+  expect(rangeLabel({ ...last, start: { side: "new", line: 45 } })).toBe("Lines 45\u201351");
+  expect(rangeNumbers({ ...last, start: { side: "new", line: 45 } })).toBe("45\u201351");
+  expect(rangeLabel(last)).toBeUndefined();
+  expect(rangeNumbers(last)).toBeUndefined();
+});
+
+test("a comment on lines on different sides says which side each of the first and last is on, as GitHub does", () => {
+  const last: CommentTarget = { path: "a.txt", side: "new", line: 51 };
+
+  expect(rangeLabel({ ...last, start: { side: "old", line: 44 } })).toBe("Lines \u221244 to +51");
+  expect(rangeLabel({ ...last, side: "old", start: { side: "new", line: 44 } })).toBe(
+    "Lines +44 to \u221251",
+  );
+});
+
+test("a comment kept on several lines reads back on them, and one kept from before comments could be is on one line", () => {
+  const kept = { path: "a.txt", side: "new", line: 3, id: 1, body: "Why?" };
+  const onSeveral = { ...kept, start: { side: "old", line: 2 } };
+
+  expect(reviewComment.parse(onSeveral)).toStrictEqual(onSeveral);
+  expect(reviewComment.parse(kept)).toStrictEqual(kept);
+  expect(reviewComment.safeParse({ ...kept, start: { side: "old", line: 0 } }).success).toBe(false);
+});
+
 test("a comment says what's written, without whitespace at either end, and nothing is kept if it's only whitespace", () => {
   expect(bodyOf("  Rename this\r\n\tplease  \n")).toBe("Rename this\r\n\tplease");
   expect(bodyOf("😀")).toBe("😀");
@@ -68,6 +121,20 @@ test("a comment saved on a line comes after the others, as written, on its line,
 });
 
 const comment: ReviewComment = { path: "a.txt", side: "new", line: 3, id: 2, body: "Why?" };
+
+test("a comment saved on several lines is on them", () => {
+  const target: CommentTarget = {
+    path: "a.txt",
+    side: "new",
+    line: 5,
+    start: { side: "new", line: 2 },
+  };
+
+  expect(saved([comment], { target, id: undefined }, "Why?")).toStrictEqual([
+    comment,
+    { ...target, id: 3, body: "Why?" },
+  ]);
+});
 
 test("the first comment has the id 1, and one saved on the line of one edited is only what it says, on the line", () => {
   const target: CommentTarget = { path: "a.txt", side: "new", line: 1 };

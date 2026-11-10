@@ -204,6 +204,27 @@ function onSelection(container: string, listener: (touched: Touched) => void): (
   };
 }
 
+// Calls the latest listener each time the page's text selection changes, while `listening`.
+export function useSelectionChanges(listening: boolean, listener: () => void): void {
+  const latest = useLatest(listener);
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || !listening) {
+      return () => {};
+    }
+
+    function changed(): void {
+      latest.current();
+    }
+
+    document.addEventListener("selectionchange", changed);
+
+    return () => {
+      document.removeEventListener("selectionchange", changed);
+    };
+  }, [listening, latest]);
+}
+
 // The text the page's selection has, as copying it with the keyboard copies it.
 export function selectedText(): string {
   return Platform.OS === "web" ? (document.getSelection()?.toString() ?? "") : "";

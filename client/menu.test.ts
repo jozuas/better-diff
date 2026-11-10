@@ -1,7 +1,15 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { itemLook, itemName, menuEndingAt, menuPosition, menuStep, panelPosition } from "./menu";
+import {
+  barPosition,
+  itemLook,
+  itemName,
+  menuEndingAt,
+  menuPosition,
+  menuStep,
+  panelPosition,
+} from "./menu";
 
 const length = fc.integer({ min: 0, max: 2000 });
 
@@ -169,4 +177,69 @@ test("a panel opens above its button, its right edge at the button's, as wide as
   expect(panelPosition({ x: 0, y: 4, width: 10, height: 10 }, window, 100)).toMatchObject({
     maxHeight: 0,
   });
+});
+
+// An area on the page, a bar no wider than it, where the pointer let go in it, the highest the page
+// shows the area's lines from, and a gap.
+const shownBar = fc
+  .record({
+    x: fc.integer({ min: -500, max: 500 }),
+    y: fc.integer({ min: -500, max: 500 }),
+    width: length,
+    height: length,
+  })
+  .chain((area) =>
+    fc.record({
+      area: fc.constant(area),
+      bar: fc.record({ width: fc.integer({ min: 0, max: area.width }), height: length }),
+      point: fc.record({
+        x: fc.integer({ min: area.x, max: area.x + area.width }),
+        y: fc.integer({ min: area.y, max: area.y + area.height }),
+      }),
+      ceiling: fc.integer({ min: -600, max: 600 }),
+      gap: fc.integer({ min: 1, max: 20 }),
+    }),
+  );
+
+test("shows a bar where the pointer let go of a selection inside its area, above the point by the gap where it's room under the area's top and the ceiling, and else below it", () => {
+  fc.assert(
+    fc.property(shownBar, ({ area, bar, point, ceiling, gap }) => {
+      const { left, top } = barPosition(point, area, bar, ceiling, gap);
+      const room = point.y - gap - bar.height >= Math.max(area.y, ceiling);
+
+      expect(left).toBeGreaterThanOrEqual(0);
+      expect(left + bar.width).toBeLessThanOrEqual(area.width);
+      expect(area.y + top + bar.height === point.y - gap).toBe(room);
+      expect(area.y + top === point.y + gap).toBe(!room);
+    }),
+  );
+});
+
+test("centres a bar on where the pointer let go of a selection, as far as its area leaves room", () => {
+  const area = { x: 100, y: 50, width: 400, height: 300 };
+  const bar = { width: 60, height: 20 };
+
+  expect(barPosition({ x: 300, y: 200 }, area, bar, 0, 10)).toStrictEqual({ left: 170, top: 120 });
+  expect(barPosition({ x: 110, y: 200 }, area, bar, 0, 10).left).toBe(0);
+  expect(barPosition({ x: 490, y: 200 }, area, bar, 0, 10).left).toBe(340);
+});
+
+test("shows a bar wider than its area from the area's left edge", () => {
+  expect(
+    barPosition(
+      { x: 150, y: 100 },
+      { x: 100, y: 0, width: 40, height: 200 },
+      { width: 60, height: 20 },
+      0,
+      4,
+    ).left,
+  ).toBe(0);
+});
+
+test("shows a bar that just fits above where the pointer let go there", () => {
+  const area = { x: 0, y: 40, width: 400, height: 300 };
+  const bar = { width: 60, height: 20 };
+
+  expect(barPosition({ x: 200, y: 70 }, area, bar, 30, 10).top).toBe(0);
+  expect(barPosition({ x: 200, y: 70 }, area, bar, 41, 10).top).toBe(40);
 });

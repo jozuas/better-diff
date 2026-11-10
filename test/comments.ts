@@ -18,14 +18,21 @@ export const asNumbered = numberingOf("unstaged", { hunks: [] });
 // Two paths, so that comments are often on the same file, or any path.
 const path = fc.oneof(fc.constantFrom("a.txt", "b.txt"), filePath);
 
-const targetParts = {
-  path,
+const lineOnSide = {
   side: fc.constantFrom("old", "new"),
   // Few lines, so that comments are often on the same line.
   line: fc.integer({ min: 1, max: 4 }),
 } as const;
 
+// A comment's lines: one, or several, from a first on either side.
+const targetParts = {
+  path,
+  ...lineOnSide,
+  start: fc.record(lineOnSide, { noNullPrototype: true }),
+} as const;
+
 export const commentTarget: fc.Arbitrary<CommentTarget> = fc.record(targetParts, {
+  requiredKeys: ["path", "side", "line"],
   noNullPrototype: true,
 });
 
@@ -34,7 +41,7 @@ export const commentBody = fc.string({ unit: "binary", maxLength: 10 });
 
 const reviewComment: fc.Arbitrary<ReviewComment> = fc.record(
   { ...targetParts, id: fc.integer({ min: 1, max: 20 }), body: commentBody },
-  { noNullPrototype: true },
+  { requiredKeys: ["path", "side", "line", "id", "body"], noNullPrototype: true },
 );
 
 // Pending comments, each with an id of its own, in the order they were made, which is the order of

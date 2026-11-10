@@ -11,14 +11,21 @@ type Paseo = PluginCommandCapabilities["paseo"];
 
 type Agent = Awaited<ReturnType<Paseo["agents"]["list"]>>["entries"][number]["agent"];
 
+const sideSchema = z.enum(["old", "new"]) satisfies z.ZodType<Side>;
+
 // A line of a file's uncommitted changes, by its number in the version it's in, as the review the
 // agent reads numbers it: HEAD, on the old side, or the worktree, on the new one. A line both have
 // is in each. Neither stages nor unstages, so the line stays the same as the file's hunks are
 // staged and unstaged, and shows in whichever of the file's diffs has it.
+const lineOnSide = { side: sideSchema, line: z.int().positive() };
+
+// A comment's lines: the line it's on, which it shows under, and for a comment on several lines, as
+// GitHub's start line and side, the first of them, which can be on the other side from the last
+// inline, as a removed line before an added one is.
 const commentTarget = z.object({
   path: z.string(),
-  side: z.enum(["old", "new"]) satisfies z.ZodType<Side>,
-  line: z.int().positive(),
+  ...lineOnSide,
+  start: z.object(lineOnSide).exactOptional(),
 });
 
 export type CommentTarget = z.infer<typeof commentTarget>;
@@ -61,6 +68,36 @@ export function targetOf(
   return onSides(file, line, side === undefined ? ["new", "old"] : [side])[0];
 }
 
+// What a comment on the lines from the first of the targets to the last is on: the last, from the
+// first, or only the last where they're the same line.
+export function rangeOf(first: CommentTarget, last: CommentTarget): CommentTarget {
+  return first.side === last.side && first.line === last.line
+    ? last
+    : { ...last, start: { side: first.side, line: first.line } };
+}
+
+const signs: Record<Side, string> = { old: "\u2212", new: "+" };
+
+// The numbers of a comment's lines, as the review numbers them, for a comment on several: from the
+// first to the last, and with each one's side where they're on different sides, as GitHub writes
+// them. Undefined for a comment on one line.
+export function rangeNumbers({ side: last, line, start }: CommentTarget): string | undefined {
+  if (start === undefined) {
+    return undefined;
+  }
+
+  return start.side === last
+    ? `${String(start.line)}\u2013${String(line)}`
+    : `${signs[start.side]}${String(start.line)} to ${signs[last]}${String(line)}`;
+}
+
+// What a comment on several lines says they are, as Linear says it, or nothing for one on one line.
+export function rangeLabel(target: CommentTarget): string | undefined {
+  const numbers = rangeNumbers(target);
+
+  return numbers === undefined ? undefined : `Lines ${numbers}`;
+}
+
 // Tells the comments on a line apart from those on others.
 function targetKey({ path, side, line }: CommentTarget): string {
   return JSON.stringify([path, side, line]);
@@ -92,12 +129,12 @@ export function bodyOf(text: string): string | undefined {
 // The comments with one more on the target, after them, with an id none of them has.
 function withComment(
   comments: readonly ReviewComment[],
-  { path, side, line }: CommentTarget,
+  target: CommentTarget,
   body: string,
 ): ReviewComment[] {
   const id = Math.max(0, ...comments.map((comment) => comment.id)) + 1;
 
-  return [...comments, { path, side, line, id, body }];
+  return [...comments, { ...target, id, body }];
 }
 
 // The comments with the one with the id saying the body instead.

@@ -19,11 +19,12 @@ import { StyleSheet, View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import type { NumberedFile } from "./comments";
-import { HunkLines, UnchangedLines } from "./diff-lines";
-import { afterSection, beforeSection } from "./find";
+import { UnchangedLines } from "./diff-lines";
+import { beforeSection } from "./find";
 import { useFindableLines } from "./find-page";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
+import { HunkArea } from "./hunk-area";
 import { HunkBar } from "./hunk-bar";
 import { unchangedLines } from "./lines";
 import type { NumberedLine, Unchanged } from "./lines";
@@ -32,13 +33,13 @@ import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
 import { covers, widened, windowAround } from "./rendering";
 import type { LineWindow } from "./rendering";
-import { hunkMark } from "./reveal";
 import { ReviewContext } from "./review-context";
 import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
 import type { LineRange } from "./selection";
 import { useFocus } from "./text-selection";
 import {
   KeptPlaceContext,
+  rectOf,
   scrollToOffset,
   scrollToShow,
   stopScrollAnchoring,
@@ -234,7 +235,8 @@ const noLines: NumberedLine[] = [];
 // file shows, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
 // again, and the selection changing only the hunks it leaves or reaches. Right-clicking its lines
-// opens their menu, which copies what was selected then.
+// opens their menu, and letting go of a selection of them shows a bar, which start a comment and
+// copy what was selected then.
 export function Hunks({
   diff,
   file,
@@ -296,9 +298,14 @@ export function Hunks({
 
   const commented = useNumbered(file);
 
+  // The highest the view shows lines from: under its file's bar, while that stays at its top, and
+  // a hunk's bar.
+  function ceiling(): number {
+    return rectOf(view).y + (barsBelow ?? 0) + bars.barHeight();
+  }
+
   const hunks = shownDiff.hunks.flatMap((hunk, index) => {
     const selected = rangeInHunk(range, index);
-    const mark = { hunk: hunkMark([fileIndex, index]) };
 
     return [
       <HunkBar
@@ -324,38 +331,27 @@ export function Hunks({
         stuckBelow={barsBelow}
         theme={theme}
       />,
-      <LinesArea
+      <HunkArea
         key={`lines ${hunk.oldStart},${hunk.newStart}`}
+        hunk={hunk}
+        index={index}
+        file={commented}
         path={file.path}
-        dataSet={mark}
-        style={styles.spaced}
+        view={view}
+        fileIndex={fileIndex}
+        selection={selected}
+        pointed={pointed}
+        focus={focus}
+        after={unchanged.after[index] ?? noLines}
+        window={window}
+        ceiling={ceiling}
         theme={theme}
-      >
-        <View nativeID={hunkId(container, index)} />
-        <HunkLines
-          hunk={hunk}
-          index={index}
-          file={commented}
-          container={container}
-          selection={selected}
-          pointed={pointed}
-          focus={focus}
-          theme={theme}
-        />
-        <UnchangedLines
-          lines={unchanged.after[index] ?? noLines}
-          container={container}
-          section={afterSection(index)}
-          focus={focus}
-          window={window}
-          theme={theme}
-        />
-      </LinesArea>,
+      />,
     ];
   });
 
   const shown = [
-    <LinesArea key="before" path={file.path} theme={theme}>
+    <LinesArea key="before" path={file.path} ceiling={ceiling} theme={theme}>
       <UnchangedLines
         lines={unchanged.before}
         container={container}

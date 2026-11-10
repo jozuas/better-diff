@@ -18,8 +18,7 @@ import { Block } from "./line-block";
 import type { ChangedText, FoundText, IdOf, Selected } from "./line-block";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
-import { pointedLine } from "./pointed";
-import type { PointedHunk } from "./pointed";
+import type { PointedHunk, PointedLine } from "./pointed";
 import { blocksOfRows, rendersBlock } from "./rendering";
 import type { LineWindow } from "./rendering";
 import { isSelected, lineId, unchangedLineId } from "./selection";
@@ -117,8 +116,9 @@ interface HunkLinesProps {
   container: string;
   // Its lines the page's text selection touches, if any.
   selection: LineRange | undefined;
-  // Which of the diff's hunks the pointer is over.
+  // Which of the diff's hunks the pointer is over, and which of the hunk's lines.
   pointed: PointedHunk;
+  pointedOver: PointedLine;
   // Undefined for an inline view.
   focus: Focus | undefined;
   // The diff's.
@@ -133,6 +133,7 @@ function LinesOfHunk({
   container,
   selection,
   pointed,
+  pointedOver,
   focus,
   theme,
 }: HunkLinesProps): ReactElement {
@@ -140,7 +141,6 @@ function LinesOfHunk({
   const lines = useMemo(() => numberLines(hunk), [hunk]);
   const pairing = useMemo(() => pairingOf(lines), [lines]);
   const found = useFoundLines(container, hunkSection(index));
-  const pointedOver = useMemo(() => pointedLine(), []);
 
   const commenting = useMemo(
     () => (file === undefined ? undefined : { file, pointed: pointedOver }),

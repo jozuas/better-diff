@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 
 import { KeyboardFocusContext } from "./focus";
 import { takesText } from "./key-events";
-import type { Point } from "./menu";
+import type { Point, Rect } from "./menu";
 import type { KeptPlace, ViewPage } from "./place";
 import { focusedId, unfocusedId } from "./selection";
 
@@ -366,14 +366,24 @@ export function useScrolled(id: string, listener: () => void): void {
   }, [id, latest]);
 }
 
-// Where a menu the keyboard opens for the element with the id shows: under its left end.
-export function pointUnder(id: string): Point {
+// Where the element with the id is on the page, or nowhere, at the page's top left corner, while
+// it's not on it.
+export function rectOf(id: string): Rect {
   const box =
     Platform.OS === "web"
       ? document.querySelector(`#${CSS.escape(id)}`)?.getBoundingClientRect()
       : undefined;
 
-  return box === undefined ? { x: 0, y: 0 } : { x: box.left, y: box.bottom };
+  return box === undefined
+    ? { x: 0, y: 0, width: 0, height: 0 }
+    : { x: box.left, y: box.top, width: box.width, height: box.bottom - box.top };
+}
+
+// Where a menu the keyboard opens for the element with the id shows: under its left end.
+export function pointUnder(id: string): Point {
+  const { x, y, height } = rectOf(id);
+
+  return { x, y: y + height };
 }
 
 // What ids of elements laid over the end of the row they're in start with.

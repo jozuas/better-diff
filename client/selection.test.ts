@@ -14,6 +14,7 @@ import {
   rangeInHunk,
   rangeKey,
   rangeLines,
+  selectedInHunk,
   selectedLines,
   selectedRange,
   unchangedLineId,
@@ -291,6 +292,16 @@ test("puts a range on the side with focus, and leaves it as it is inline", () =>
   expect(onSide(range, focus)).toStrictEqual({ ...range, side: "old" });
   expect(onSide(range)).toBe(range);
   expect(onSide(undefined, focus)).toBeUndefined();
+});
+
+test("gives a hunk of the view's file only the range of its own lines, on the side with focus", () => {
+  const selected = { file: 1, hunk: 2, first: 3, last: 4 };
+  const focus = { side: "new" as const, onFocus: () => {} };
+
+  expect(selectedInHunk(selected, focus, 1, 2)).toStrictEqual({ ...selected, side: "new" });
+  expect(selectedInHunk(selected, undefined, 1, 2)).toBe(selected);
+  expect(selectedInHunk(selected, focus, 0, 2)).toBeUndefined();
+  expect(selectedInHunk(selected, focus, 1, 1)).toBeUndefined();
 });
 
 test("tells apart ranges of a hunk with other lines, or on another side", () => {

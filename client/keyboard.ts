@@ -40,6 +40,12 @@ interface PagePointerEvent {
   readonly button: number;
 }
 
+// Where the pointer was let go.
+interface PageReleaseEvent {
+  readonly clientX: number;
+  readonly clientY: number;
+}
+
 // What a pointer can be pressed on.
 interface PageTarget {
   closest?: (selectors: string) => PageTarget | null;
@@ -49,6 +55,7 @@ interface PageTarget {
 // What an element's listeners hear, by the event they listen for.
 interface PageEvents {
   dblclick: PageMouseEvent;
+  mousedown: PageMouseEvent;
   contextmenu: PageMouseEvent;
   keydown: PageKeyboardEvent;
   keyup: PageKeyboardEvent;
@@ -73,12 +80,12 @@ declare const document: {
   querySelector: (selectors: string) => PageElement | null;
   addEventListener: (
     type: "pointerup" | "pointercancel",
-    listener: () => void,
+    listener: (event: PageReleaseEvent) => void,
     capture: true,
   ) => void;
   removeEventListener: (
     type: "pointerup" | "pointercancel",
-    listener: () => void,
+    listener: (event: PageReleaseEvent) => void,
     capture: true,
   ) => void;
 };
@@ -248,6 +255,51 @@ export function useFocusOnPress(id: string, view: string, focus: KeyboardFocus):
     },
     true,
   );
+}
+
+// Keeps the page's text selection, and focus, as they are when the pointer is pressed on the element
+// with the id, rather than as a press elsewhere moves them: its buttons still hear the press.
+export function useKeptSelection(id: string): void {
+  useListener(id, "mousedown", (event) => {
+    event.preventDefault();
+  });
+}
+
+// Calls `onPress` each time the pointer's main button is pressed in the element with the id,
+// outside the lines' comments there and the element with the id `outside`, and `onRelease` with
+// where it's let go after that, once the page's text selection has what the press made it, as a
+// press in the selection clears it only once it's let go.
+export function useSelecting(
+  id: string,
+  outside: string,
+  onPress: () => void,
+  onRelease: (point: Point) => void,
+): void {
+  const released = useLatest(onRelease);
+
+  useListener(id, "pointerdown", ({ target, button }) => {
+    if (
+      target === null ||
+      button !== 0 ||
+      (target.closest?.(commentsMarked) ?? null) !== null ||
+      (target.closest?.(`#${CSS.escape(outside)}`) ?? null) !== null
+    ) {
+      return;
+    }
+
+    onPress();
+
+    function release({ clientX, clientY }: PageReleaseEvent): void {
+      document.removeEventListener("pointerup", release, true);
+      document.removeEventListener("pointercancel", release, true);
+      setTimeout(() => {
+        released.current({ x: clientX, y: clientY });
+      }, 0);
+    }
+
+    document.addEventListener("pointerup", release, true);
+    document.addEventListener("pointercancel", release, true);
+  });
 }
 
 // Moves focus to what's open once the changes are first listed in the panel with the id, unless

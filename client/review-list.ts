@@ -3,6 +3,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { diffRpc } from "../shared/diff";
 import { placementOf } from "./attachment";
 import type { Unsent } from "./attachment";
+import { rangeNumbers } from "./comments";
 import type { ReviewComment } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
 import type { NumberedLine } from "./lines";
@@ -123,7 +124,7 @@ export function partlyStaged(listed: Readonly<Record<GroupName, readonly string[
 
 // The number a comment's line is labelled with: its number in the diff that has it, on the comment's
 // side, or else the number the review has it at.
-export function lineNumberOf({ comment, placed }: ListedComment): number {
+function lineNumberOf({ comment, placed }: ListedComment): number {
   const shown = placedLine(placed);
 
   return (shown === undefined ? undefined : numberIn(shown.line, comment.side)) ?? comment.line;
@@ -148,17 +149,26 @@ export function pendingOn(counts: ReadonlyMap<string, number>, { path }: OpenFil
 const marks = { context: "", removed: "\u2212", added: "+" };
 
 // What a comment's line is labelled with in the review: its number in the diff that has it, marked
-// as removed or added there, and whether that's the staged diff, or else the number the review has
-// it at.
+// as removed or added there, or else the number the review has it at, or for a comment on several
+// lines, their numbers as the review has them, and whether the diff is the staged one.
 export function lineLabel(listed: ListedComment): string {
   const placed = placedLine(listed.placed);
+  const range = rangeNumbers(listed.comment);
   const number = String(lineNumberOf(listed));
 
   if (placed === undefined) {
-    return number;
+    return range ?? number;
   }
 
-  return `${marks[placed.line.kind]}${number}${placed.diff === "staged" ? " staged" : ""}`;
+  return `${range ?? marks[placed.line.kind] + number}${placed.diff === "staged" ? " staged" : ""}`;
+}
+
+// What the button that shows a comment in its diff is called: by its line, or its lines.
+export function linkLabel(listed: ListedComment): string {
+  const range = rangeNumbers(listed.comment);
+  const lines = range === undefined ? `line ${String(lineNumberOf(listed))}` : `lines ${range}`;
+
+  return `Show ${lines} of ${listed.comment.path}`;
 }
 
 // What's said of a comment's line in the review, after its label: the line, as its diff has it, or

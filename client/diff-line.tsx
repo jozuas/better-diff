@@ -1,10 +1,12 @@
+import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement, ReactNode } from "react";
 import { memo, useContext } from "react";
 import type { TextStyle } from "react-native";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import type { Styles } from "./diff-styles";
 import { FontSizesContext, textPadding } from "./fonts";
+import { Hoverable } from "./hoverable";
 import { lineAsBefore, textAsBefore } from "./line-content";
 import type { LineContent, TextContent } from "./line-content";
 import { numbersOf } from "./side-by-side";
@@ -97,19 +99,26 @@ interface CommentButtonProps {
   styles: Styles;
 }
 
-// Starts a comment on the line, at the start of its numbers.
+// Starts a comment on the line, at the start of its numbers: a speech bubble, as in Linear's PR
+// review, which brightens while the pointer is over it.
 function CommentButton({ onPress, styles }: CommentButtonProps): ReactElement | null {
+  const fonts = useContext(FontSizesContext);
+
   return onPress === undefined ? null : (
-    <Pressable
+    <Hoverable
       accessibilityRole="button"
       accessibilityLabel="Add review comment"
       style={styles.comment}
       onPress={onPress}
     >
-      <Text selectable={false} style={styles.commentPlus}>
-        +
-      </Text>
-    </Pressable>
+      {({ hovered }) => (
+        <Icon
+          name="MessageCircle"
+          size={fonts.code}
+          color={(hovered ? styles.commentHovered : styles.commentIcon).color}
+        />
+      )}
+    </Hoverable>
   );
 }
 

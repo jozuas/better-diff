@@ -167,6 +167,17 @@ export function rangeInHunk(range: LineRange | undefined, hunk: number): LineRan
   return range?.hunk === hunk ? range : undefined;
 }
 
+// The range, on the side with focus in a side-by-side view, if it's of the hunk at the index of the
+// view's file at the index `file`.
+export function selectedInHunk(
+  range: LineRange | undefined,
+  focus: Focus | undefined,
+  file: number,
+  hunk: number,
+): LineRange | undefined {
+  return rangeInHunk(rangeIn(onSide(range, focus), file), hunk);
+}
+
 // Whether the range has the line of its file, as shown on the side, in a side-by-side view.
 export function isSelected(
   range: LineRange | undefined,

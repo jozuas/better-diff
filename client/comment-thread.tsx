@@ -4,8 +4,8 @@ import type { ReactElement } from "react";
 import { useContext, useId, useLayoutEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { bodyOf, editorKey, editorKeyUp } from "./comments";
-import type { Editing, ReviewComment, Thread } from "./comments";
+import { bodyOf, editorKey, editorKeyUp, rangeLabel } from "./comments";
+import type { CommentTarget, Editing, ReviewComment, Thread } from "./comments";
 import { FontSizesContext } from "./fonts";
 import { IconButton } from "./icon-button";
 import { commentsMark, useKeyUp, useKeys, usePageMenu } from "./keyboard";
@@ -45,6 +45,8 @@ function useStyles(theme: PluginTheme) {
           fontWeight: "600",
           color: theme.colors.statusWarning,
         },
+        // Which lines a comment on several is on.
+        range: { fontSize: fonts.label, color: theme.colors.foregroundMuted },
         body: { fontSize: fonts.text, color: theme.colors.foreground },
         input: {
           minHeight: Math.round(3.5 * fonts.text),
@@ -60,6 +62,22 @@ function useStyles(theme: PluginTheme) {
 }
 
 type Styles = ReturnType<typeof useStyles>;
+
+interface RangeLabelProps {
+  target: CommentTarget | undefined;
+  styles: Styles;
+}
+
+// Which lines a comment on several is on, as Linear says it, and nothing for one on one line.
+function RangeLabel({ target, styles }: RangeLabelProps): ReactElement | null {
+  const label = target === undefined ? undefined : rangeLabel(target);
+
+  return label === undefined ? null : (
+    <Text selectable={false} style={styles.range}>
+      {label}
+    </Text>
+  );
+}
 
 interface CommentEditorProps {
   review: Review;
@@ -100,6 +118,7 @@ export function CommentEditor({ review, theme }: CommentEditorProps): ReactEleme
 
   return (
     <View nativeID={id} style={[styles.box, focused && styles.focused]}>
+      <RangeLabel target={review.editing?.target} styles={styles} />
       <TextInput
         accessibilityLabel="Review comment"
         placeholder="Leave a comment"
@@ -177,6 +196,7 @@ function PendingComment({ comment, review, styles, theme }: PendingCommentProps)
       style={[styles.box, revealed && styles.focused]}
     >
       <View style={styles.header}>
+        <RangeLabel target={comment} styles={styles} />
         <Text selectable={false} style={styles.pending}>
           Pending
         </Text>

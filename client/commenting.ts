@@ -1,8 +1,9 @@
-import { shownOn, targetOf, threadAt } from "./comments";
-import type { NumberedFile, Thread } from "./comments";
-import type { IndexedLine } from "./lines";
+import { rangeOf, shownOn, targetOf, threadAt } from "./comments";
+import type { CommentTarget, NumberedFile, Thread } from "./comments";
+import type { IndexedLine, NumberedLine } from "./lines";
 import type { LineAt, PointedLine, PointerHandlers } from "./pointed";
 import type { Review } from "./review-context";
+import type { LineRange } from "./selection";
 import type { Row, Side } from "./side-by-side";
 
 // How lines can be commented on, as a hunk's can: the file whose diff they're in, with how the
@@ -72,6 +73,45 @@ export function commentsOn(
         : undefined,
     thread: threadAt(review.threads, review.editing, shownOn(commented.file, shown.line, side)),
   };
+}
+
+// What a comment started on a hunk's lines other than with the button over one is on, of the hunk's
+// lines of the file's diff: with some of them selected, those from the first that can be commented
+// on to the last, on the last one's side where the first has it, as an unchanged line does inline,
+// and with none selected, the line the pointer is over, if any. Undefined if that's none that can be
+// commented on, or the lines can't be, as until it's known how the review numbers them.
+export function startedOn(
+  file: NumberedFile | undefined,
+  lines: readonly NumberedLine[],
+  selected?: LineRange,
+  pointed?: LineAt,
+): CommentTarget | undefined {
+  if (file === undefined) {
+    return undefined;
+  }
+
+  if (selected !== undefined) {
+    const shown = lines.slice(selected.first, selected.last + 1);
+    const last = shown.flatMap((line) => targetOf(file, line, selected.side) ?? []).at(-1);
+
+    if (last === undefined) {
+      return undefined;
+    }
+
+    const [first = last] = shown.flatMap(
+      (line) => targetOf(file, line, last.side) ?? targetOf(file, line, selected.side) ?? [],
+    );
+
+    return rangeOf(first, last);
+  }
+
+  if (pointed === undefined) {
+    return undefined;
+  }
+
+  const line = lines[pointed.index];
+
+  return line === undefined ? undefined : targetOf(file, line, pointed.side);
 }
 
 // The line the pointer is over, of lines that can be commented on, if it's one of those from

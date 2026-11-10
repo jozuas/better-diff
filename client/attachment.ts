@@ -2,6 +2,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 
 import type { diffRpc } from "../shared/diff";
+import { rangeLabel } from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
@@ -92,8 +93,8 @@ function contextLine(line: NumberedLine, review: Numbering): ContextLine {
 const around = 3;
 
 // Where a comment's line is in one of its file's diffs: the diff, its hunk, and the hunk's index
-// among the diff's, the hunk's lines, and the line at its index among them, and how the review
-// numbers the diff's lines.
+// among the diff's, the hunk's lines, and the line at its index among them, the index of the first
+// of the comment's lines, and how the review numbers the diff's lines.
 interface Located {
   diff: CommentedFile["diff"];
   hunk: Hunk;
@@ -101,7 +102,24 @@ interface Located {
   lines: NumberedLine[];
   at: number;
   line: NumberedLine;
+  from: number;
   numbering: Numbering;
+}
+
+// The index among the hunk's lines of the first of the comment's lines, of a comment on several,
+// where the hunk has it before the line at the index `at`, which the comment's on, and else `at`.
+function startIn(
+  lines: readonly NumberedLine[],
+  at: number,
+  { start }: CommentTarget,
+  numbering: Numbering,
+): number {
+  const from =
+    start === undefined
+      ? at
+      : lines.findIndex((line) => numbered(line, start.side, numbering) === start.line);
+
+  return from === -1 ? at : Math.min(from, at);
 }
 
 // Where the comment's line is in the file's diff, as the review numbers it by the file's other
@@ -120,22 +138,40 @@ function locate(
     const line = lines[at];
 
     if (line !== undefined) {
-      return { diff, hunk, index, lines, at, line, numbering };
+      return {
+        diff,
+        hunk,
+        index,
+        lines,
+        at,
+        line,
+        from: startIn(lines, at, target, numbering),
+        numbering,
+      };
     }
   }
 
   return undefined;
 }
 
-// The comment's line and those around it in its hunk, as the review the agent reads has them.
-function contextOf({ hunk, lines, at, line, numbering }: Located): ReviewContext {
+// The comment's line and those around it in its hunk, as the review the agent reads has them, from
+// before the first of its lines, for a comment on several.
+function contextOf({ hunk, lines, at, line, from, numbering }: Located): ReviewContext {
   return {
     hunkHeader: hunkHeader(hunk, lines, numbering),
     targetLine: contextLine(line, numbering),
     lines: lines
-      .slice(Math.max(0, at - around), at + around + 1)
+      .slice(Math.max(0, from - around), at + around + 1)
       .map((each) => contextLine(each, numbering)),
   };
+}
+
+// What a comment sent says: for a comment on several lines, which they are first, since the agent
+// reads it as on the last of them, the one marked among the lines around it.
+function sentBody(comment: ReviewComment): string {
+  const lines = rangeLabel(comment);
+
+  return lines === undefined ? comment.body : `${lines}: ${comment.body}`;
 }
 
 // Why a comment pending isn't sent: its line is in neither of its file's diffs, or one of them can't
@@ -178,7 +214,7 @@ export function placementOf(comment: ReviewComment, diffOf: DiffOf): Placement {
           filePath: comment.path,
           side: comment.side,
           lineNumber: comment.line,
-          body: comment.body,
+          body: sentBody(comment),
           context: contextOf(located),
         },
       };

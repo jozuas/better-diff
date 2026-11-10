@@ -26,6 +26,26 @@ export function menuPosition(point: Point, menu: Size, window: Size): Position {
   };
 }
 
+// Where a bar shown where the pointer let go of a selection goes, by its top left corner from the
+// top left corner of the area it's in: above the point by the gap, centred on it, or as far below
+// it where it would show above the area's top or the ceiling, the highest the page shows the
+// area's lines from, under bars that stay at the top, and never past the area's left edge, nor its
+// right one where the area leaves room for that.
+export function barPosition(
+  point: Point,
+  area: Rect,
+  bar: Size,
+  ceiling: number,
+  gap: number,
+): Position {
+  const above = point.y - gap - bar.height;
+
+  return {
+    left: Math.max(0, Math.min(point.x - bar.width / 2, area.x + area.width - bar.width) - area.x),
+    top: (above < Math.max(area.y, ceiling) ? point.y + gap : above) - area.y,
+  };
+}
+
 // Where a menu that ends at the point goes, as one opened from a button above it does: above the
 // point and to its left, but never past the window's top or left edge.
 export function menuEndingAt(point: Point, menu: Size): Position {

@@ -5,7 +5,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 import { StyleSheet, View } from "react-native";
 
 import { Hoverable, TintLayer } from "./hoverable";
-import { ShortcutTip } from "./shortcut-tip";
+import { NameTip, ShortcutTip } from "./shortcut-tip";
 
 const styles = StyleSheet.create({
   // Rounded as its face is, for its focus ring.
@@ -22,6 +22,9 @@ interface IconButtonProps {
   onPress: () => void;
   // How its key is written, if it has one, which shows under it once the pointer rests on it.
   shortcut?: string | undefined;
+  // Its name, if it shows above it once the pointer rests on it, as where nothing near it says what
+  // it does.
+  name?: string | undefined;
   hidden?: boolean;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
@@ -33,6 +36,7 @@ export function IconButton({
   icon,
   onPress,
   shortcut,
+  name,
   hidden = false,
   style,
   theme,
@@ -46,6 +50,7 @@ export function IconButton({
     >
       {({ hovered, pressed }) => {
         const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
+        const resting = hovered && !pressed;
 
         return (
           <>
@@ -53,7 +58,8 @@ export function IconButton({
               <TintLayer color={color} hovered={hovered} pressed={pressed} />
               <Icon icon={icon} size={15} color={color} />
             </View>
-            <ShortcutTip shortcut={shortcut} resting={hovered && !pressed} theme={theme} />
+            <ShortcutTip shortcut={shortcut} resting={resting} theme={theme} />
+            <NameTip name={name} resting={resting} theme={theme} />
           </>
         );
       }}

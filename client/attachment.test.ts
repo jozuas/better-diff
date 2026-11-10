@@ -6,7 +6,7 @@ import type { diffRpc } from "../shared/diff";
 import { asNumbered, commentTarget, diffHunks, reviewComments } from "../test/comments";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Unsent } from "./attachment";
-import { targetOf } from "./comments";
+import { rangeLabel, targetOf } from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
 import type { CommentedFile } from "./numbering";
@@ -188,6 +188,13 @@ test("a comment on a line its diff doesn't have has nothing to send it with", ()
   );
 });
 
+// What a comment is sent saying: what it says, after which lines it's on, for one on several.
+function sentBody(comment: ReviewComment): string {
+  const lines = rangeLabel(comment);
+
+  return lines === undefined ? comment.body : `${lines}: ${comment.body}`;
+}
+
 type Diffs = (path: string) => { diff: Diff } | undefined;
 
 // What the review does with each comment, by the diffs on the side, and whether each file's other
@@ -219,7 +226,7 @@ function reviewed(
             filePath: comment.path,
             side: comment.side,
             lineNumber: comment.line,
-            body: comment.body,
+            body: sentBody(comment),
             context,
           },
         };

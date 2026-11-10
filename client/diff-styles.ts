@@ -95,15 +95,14 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
       height: fonts.codeLine - 2,
       alignItems: "center",
       justifyContent: "center",
+      borderWidth: 1,
       borderRadius: 4,
-      backgroundColor: theme.colors.accent,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface1,
     },
-    commentPlus: {
-      fontSize: fonts.code + 2,
-      lineHeight: fonts.codeLine - 2,
-      fontWeight: "700",
-      color: theme.colors.accentForeground,
-    },
+    // Its icon's colour, brighter while the pointer is over it.
+    commentIcon: { color: theme.colors.foregroundMuted },
+    commentHovered: { color: theme.colors.foreground },
   });
 }
 

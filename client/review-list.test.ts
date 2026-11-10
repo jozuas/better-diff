@@ -11,7 +11,7 @@ import type { CommentedFile } from "./numbering";
 import {
   lineLabel,
   lineNote,
-  lineNumberOf,
+  linkLabel,
   openFileOf,
   partlyStaged,
   pendingCounts,
@@ -283,10 +283,39 @@ test.each(placings)(
   "a comment's line in the review is labelled with its number where it's shown, marked as removed, added or neither, and as staged, or else the review's, and shown, or as gone or not yet read: %o",
   (placed, label, note) => {
     expect(lineLabel({ comment, placed })).toBe(label);
-    expect(String(lineNumberOf({ comment, placed }))).toBe(label.replaceAll(/\D+/gu, ""));
+    expect(linkLabel({ comment, placed })).toBe(
+      `Show line ${label.replaceAll(/\D+/gu, "")} of a.txt`,
+    );
     expect(lineNote(placed)).toBe(note);
   },
 );
+
+// A comment on lines 4 to 7 of HEAD.
+const onSeveral = { ...comment, start: { side: "old", line: 4 } } as const;
+
+const rangePlacings: [Placed, string][] = [
+  [{ line, diff: "unstaged" }, "4\u20137"],
+  [{ line: { ...line, kind: "removed" }, diff: "staged" }, "4\u20137 staged"],
+  ["gone", "4\u20137"],
+];
+
+test.each(rangePlacings)(
+  "a comment on several lines is labelled in the review with their numbers as the review has them, and as staged: %o",
+  (placed, label) => {
+    expect(lineLabel({ comment: onSeveral, placed })).toBe(label);
+  },
+);
+
+test("what shows a comment in its diff is named by its line, or its lines", () => {
+  const placed: Placed = { line, diff: "unstaged" };
+
+  expect(linkLabel({ comment, placed })).toBe("Show line 2 of a.txt");
+  expect(linkLabel({ comment, placed: "gone" })).toBe("Show line 7 of a.txt");
+  expect(linkLabel({ comment: onSeveral, placed })).toBe("Show lines 4\u20137 of a.txt");
+  expect(linkLabel({ comment: { ...onSeveral, start: { side: "new", line: 5 } }, placed })).toBe(
+    "Show lines +5 to \u22127 of a.txt",
+  );
+});
 
 test("a file's row says how many comments are pending on it", () => {
   expect(pendingLabel(1)).toBe("1 pending comment");
