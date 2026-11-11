@@ -114,7 +114,7 @@ function CommentButton({ onPress, styles }: CommentButtonProps): ReactElement | 
       {({ hovered }) => (
         <Icon
           name="MessageCircle"
-          size={fonts.code}
+          size={fonts.codeIcon}
           color={(hovered ? styles.commentHovered : styles.commentIcon).color}
         />
       )}

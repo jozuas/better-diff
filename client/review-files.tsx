@@ -52,7 +52,8 @@ function useStyles(theme: PluginTheme) {
           fontSize: fonts.code,
           color: theme.colors.foregroundMuted,
         },
-        body: { fontSize: fonts.text, color: theme.colors.foreground },
+        // What the comment says, as large as it is under its line.
+        body: { fontSize: fonts.code, color: theme.colors.foreground },
         editor: { paddingHorizontal: 8, paddingVertical: 4 },
       }),
     [theme, fonts],

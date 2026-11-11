@@ -85,14 +85,15 @@ function stylesOf(theme: PluginTheme, fonts: FontSizes, tabSize: number) {
     filler: { flex: 1, backgroundColor: theme.colors.surface1 },
     // What starts a comment on the line the pointer is over, at the start of its numbers, where they
     // leave room, and clear of its text, which a selection starts in. Like the numbers, it's no part
-    // of the text a selection of lines has.
+    // of the text a selection of lines has. As tall as the line, and no taller: the block of lines
+    // it's in clips what's past its edges.
     comment: {
       position: "absolute",
       userSelect: "none",
-      top: 1,
+      top: 0,
       left: 2,
-      width: fonts.codeLine - 2,
-      height: fonts.codeLine - 2,
+      width: fonts.codeLine,
+      height: fonts.codeLine,
       alignItems: "center",
       justifyContent: "center",
       borderWidth: 1,

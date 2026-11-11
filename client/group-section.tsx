@@ -77,7 +77,7 @@ interface PendingProps {
 function Pending({ count, styles, theme }: PendingProps): ReactElement | null {
   return count === 0 ? null : (
     <View accessibilityLabel={pendingLabel(count)} style={styles.pending}>
-      <Icon name="MessageSquare" size={12} color={theme.colors.foregroundMuted} />
+      <Icon name="MessageSquare" size={styles.pendingIcon} color={theme.colors.foregroundMuted} />
       <Text style={styles.pendingCount}>{count}</Text>
     </View>
   );

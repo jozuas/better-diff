@@ -2,7 +2,8 @@ import type { Locator, Page } from "@playwright/test";
 
 import { writeFile } from "../test/repository";
 import { changesSettings, expect, test as base } from "./fixtures";
-import { box, button, line, openFile } from "./panel";
+import { box, button, line, openFile, row } from "./panel";
+import { changeA, comment, editor, openReview, pending, startComment } from "./review";
 
 type Setting = "Diff font size" | "Panel font size";
 
@@ -145,6 +146,72 @@ test("buttons, the sidebar's rows and menus' items scale with the panel font siz
   await expect
     .poll(sizeOf(page.getByRole("menuitem", { name: "Copy full path" })))
     .toMatchObject({ height: 41 });
+});
+
+test("a line's comment button, a comment's Pending mark and a file's count of comments scale with the font sizes, as buttons do", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeA(repository);
+
+  await app.openSettings();
+  await choose(page, "Diff font size", 16);
+  await choose(page, "Panel font size", 18);
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await line(page, "BRAVO").hover();
+
+  await expect
+    .poll(sizeOf(button(page, "Add review comment")))
+    .toStrictEqual({ width: 24, height: 24 });
+  await expect
+    .poll(sizeOf(button(page, "Add review comment").locator("svg")))
+    .toStrictEqual({ width: 18, height: 18 });
+
+  await comment(page, "BRAVO", "Why?");
+
+  const count = row(page, "MODIFIED FILES (1)", "a.txt").getByLabel("1 pending comment", {
+    exact: true,
+  });
+
+  await expect(pending(page, "Why?").getByText("Pending", { exact: true })).toHaveCSS(
+    "font-size",
+    "15px",
+  );
+  await expect(count.getByText("1", { exact: true })).toHaveCSS("font-size", "18px");
+  await expect.poll(sizeOf(count.locator("svg"))).toStrictEqual({ width: 21, height: 21 });
+});
+
+test("what a comment says is in the diff font size, under its line, in the review and while it's written", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeA(repository);
+
+  await app.openSettings();
+  await choose(page, "Diff font size", 16);
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await startComment(page, "BRAVO");
+
+  await expect(editor(page)).toHaveCSS("font-size", "16px");
+
+  await editor(page).fill("Why?");
+  await button(page, "Save review comment").click();
+
+  await expect(pending(page, "Why?").getByText("Why?", { exact: true })).toHaveCSS(
+    "font-size",
+    "16px",
+  );
+
+  const opened = await openReview(page, 1);
+
+  await expect(pending(opened, "Why?").getByText("Why?", { exact: true })).toHaveCSS(
+    "font-size",
+    "16px",
+  );
 });
 
 test("a size chosen on one client of the host shows at once in a Better Diff panel open on another", async ({

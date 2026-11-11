@@ -27,6 +27,9 @@ export interface FontSizes {
   code: number;
   // The height of a diff's line.
   codeLine: number;
+  // The speech bubble that starts a comment on a line, in a box as tall as the line: as large to the
+  // diff font size as a button's icon is to the panel font size.
+  codeIcon: number;
   // The width of a line number's column: five digits, each a little over 0.6 of the size wide in a
   // monospace font, as Menlo's are 0.602, and a gap.
   number: number;
@@ -56,6 +59,7 @@ export function fontSizes({
     row: Math.round(32 * scale),
     code: diffFontSize,
     codeLine: Math.round(1.5 * diffFontSize),
+    codeIcon: Math.round((16 * diffFontSize) / 14),
     number: Math.ceil(5 * 0.61 * diffFontSize) + 8,
   };
 }

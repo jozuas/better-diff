@@ -34,24 +34,26 @@ function useStyles(theme: PluginTheme) {
         // The box, rather than the input in it, shows it has focus.
         focused: { borderColor: theme.colors.accent },
         header: { flexDirection: "row", alignItems: "center", gap: 4 },
-        // As GitHub marks a comment of a review not yet submitted.
+        // As GitHub marks a comment of a review not yet submitted, in a pill as large to its text.
         pending: {
           marginRight: "auto",
-          paddingHorizontal: 6,
+          paddingHorizontal: 8,
+          paddingVertical: 2,
           borderWidth: 1,
-          borderRadius: 8,
+          borderRadius: fonts.button,
           borderColor: theme.colors.statusWarning,
-          fontSize: fonts.label,
+          fontSize: fonts.small,
           fontWeight: "600",
           color: theme.colors.statusWarning,
         },
         // Which lines a comment on several is on.
-        range: { fontSize: fonts.label, color: theme.colors.foregroundMuted },
-        body: { fontSize: fonts.text, color: theme.colors.foreground },
+        range: { fontSize: fonts.small, color: theme.colors.foregroundMuted },
+        // What a comment says, as large as the lines it's on.
+        body: { fontSize: fonts.code, color: theme.colors.foreground },
         input: {
-          minHeight: Math.round(3.5 * fonts.text),
+          minHeight: Math.round(3.5 * fonts.code),
           padding: 0,
-          fontSize: fonts.text,
+          fontSize: fonts.code,
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
