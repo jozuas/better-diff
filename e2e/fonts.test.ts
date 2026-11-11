@@ -183,7 +183,7 @@ test("a line's comment button, a comment's Pending mark and a file's count of co
   await expect.poll(sizeOf(count.locator("svg"))).toStrictEqual({ width: 21, height: 21 });
 });
 
-test("what a comment says is in the diff font size, under its line, in the review and while it's written", async ({
+test("what a comment says scales with the diff font size, a little larger than the lines, under its line, in the review and while it's written", async ({
   app,
   page,
   repository,
@@ -196,21 +196,21 @@ test("what a comment says is in the diff font size, under its line, in the revie
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
   await startComment(page, "BRAVO");
 
-  await expect(editor(page)).toHaveCSS("font-size", "16px");
+  await expect(editor(page)).toHaveCSS("font-size", "17px");
 
   await editor(page).fill("Why?");
   await button(page, "Save review comment").click();
 
   await expect(pending(page, "Why?").getByText("Why?", { exact: true })).toHaveCSS(
     "font-size",
-    "16px",
+    "17px",
   );
 
   const opened = await openReview(page, 1);
 
   await expect(pending(opened, "Why?").getByText("Why?", { exact: true })).toHaveCSS(
     "font-size",
-    "16px",
+    "17px",
   );
 });
 

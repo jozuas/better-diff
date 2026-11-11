@@ -20,6 +20,7 @@ test("at Paseo's default font sizes, the panel's text is Paseo's sizes, and its 
     code: 12,
     codeLine: 18,
     codeIcon: 14,
+    commentText: 13,
     number: 45,
   });
 });
@@ -74,11 +75,12 @@ test("a button is over twice as tall as its label, its icon smaller than it, and
 });
 
 test.each([
-  [9, { code: 9, codeLine: 14, codeIcon: 10, number: 36 }],
-  [16, { code: 16, codeLine: 24, codeIcon: 18, number: 57 }],
-  [22, { code: 22, codeLine: 33, codeIcon: 25, number: 76 }],
+  [9, { code: 9, codeLine: 14, codeIcon: 10, commentText: 10, number: 36 }],
+  [13, { code: 13, codeLine: 20, codeIcon: 15, commentText: 14, number: 48 }],
+  [16, { code: 16, codeLine: 24, codeIcon: 18, commentText: 17, number: 57 }],
+  [22, { code: 22, codeLine: 33, codeIcon: 25, commentText: 24, number: 76 }],
 ])(
-  "at a diff font size of %i, the lines are half as tall again, and their numbers' column and the comment button's icon scale with it",
+  "at a diff font size of %i, the lines are half as tall again, and their numbers' column, the comment button's icon and comments' text scale with it",
   (size, sizes) => {
     expect(fontSizes({ panelFontSize: 14, diffFontSize: size })).toMatchObject(sizes);
   },
@@ -95,6 +97,17 @@ test("the comment button's icon is larger than the diff's text, with room either
   );
 });
 
+test("comments' text is a pixel or two larger than the diff's lines", () => {
+  fc.assert(
+    fc.property(panelFontSize, diffFontSize, (panel, diff) => {
+      const { code, commentText } = fontSizes({ panelFontSize: panel, diffFontSize: diff });
+
+      expect(commentText - code).toBeGreaterThanOrEqual(1);
+      expect(commentText - code).toBeLessThanOrEqual(2);
+    }),
+  );
+});
+
 test("at the same panel and diff font sizes, the comment button's icon is a button's icon's size", () => {
   fc.assert(
     fc.property(diffFontSize, (size) => {
@@ -105,7 +118,7 @@ test("at the same panel and diff font sizes, the comment button's icon is a butt
   );
 });
 
-test("a larger diff font size makes no line, comment button's icon or numbers' column smaller", () => {
+test("a larger diff font size makes no line, comment button's icon, comment's text or numbers' column smaller", () => {
   fc.assert(
     fc.property(diffFontSize, fc.integer({ min: 0, max: 13 }), (diff, more) => {
       const sizes = fontSizes({ panelFontSize: 14, diffFontSize: diff });
@@ -113,6 +126,7 @@ test("a larger diff font size makes no line, comment button's icon or numbers' c
 
       expect(larger.codeLine).toBeGreaterThanOrEqual(sizes.codeLine);
       expect(larger.codeIcon).toBeGreaterThanOrEqual(sizes.codeIcon);
+      expect(larger.commentText).toBeGreaterThanOrEqual(sizes.commentText);
       expect(larger.number).toBeGreaterThanOrEqual(sizes.number);
     }),
   );
@@ -136,7 +150,7 @@ test("the panel font size sizes only the panel's text, and the diff font size on
       diffFontSize,
       diffFontSize,
       (panel, otherPanel, diff, otherDiff) => {
-        const { code, codeLine, codeIcon, number, ...panelSizes } = fontSizes({
+        const { code, codeLine, codeIcon, commentText, number, ...panelSizes } = fontSizes({
           panelFontSize: panel,
           diffFontSize: diff,
         });
@@ -149,6 +163,7 @@ test("the panel font size sizes only the panel's text, and the diff font size on
           code,
           codeLine,
           codeIcon,
+          commentText,
           number,
         });
       },

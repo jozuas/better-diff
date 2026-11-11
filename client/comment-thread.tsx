@@ -48,12 +48,11 @@ function useStyles(theme: PluginTheme) {
         },
         // Which lines a comment on several is on.
         range: { fontSize: fonts.small, color: theme.colors.foregroundMuted },
-        // What a comment says, as large as the lines it's on.
-        body: { fontSize: fonts.code, color: theme.colors.foreground },
+        body: { fontSize: fonts.commentText, color: theme.colors.foreground },
         input: {
-          minHeight: Math.round(3.5 * fonts.code),
+          minHeight: Math.round(3.5 * fonts.commentText),
           padding: 0,
-          fontSize: fonts.code,
+          fontSize: fonts.commentText,
           color: theme.colors.foreground,
           outlineWidth: 0,
         },
