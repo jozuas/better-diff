@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { labelOf } from "./labels";
+import { labelOf, unchangedLabel } from "./labels";
 
 test.each([
   ["unchanged", "No changes"],
@@ -41,4 +41,12 @@ test("shows a diff with lines", () => {
       ],
     }),
   ).toBeUndefined();
+});
+
+test.each([
+  [1, "1 unchanged line"],
+  [2, "2 unchanged lines"],
+  [27, "27 unchanged lines"],
+])("says %i of a hunk's unchanged lines left out before it as %j", (count, label) => {
+  expect(unchangedLabel(count)).toBe(label);
 });

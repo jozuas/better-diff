@@ -1,5 +1,9 @@
+import type { Locator, Page } from "@playwright/test";
+
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
+import { hunkBar } from "./keyboard";
+import { changeLines } from "./numbered";
 import { box, button, line, openFile, selectLines } from "./panel";
 
 function staged(repository: string): string {
@@ -99,6 +103,145 @@ test('"Show entire file" shows the unchanged lines around the hunks, and "Show o
   const hunks = await box(button(page, "Show entire file").last());
 
   expect(hunks.y).toBe(before.y);
+});
+
+// The count on a hunk's bar of the unchanged lines left out before it.
+function countOn(page: Page, hunk: number, count: number): Locator {
+  return hunkBar(page, "a.txt", hunk).getByRole("button", {
+    name: `${String(count)} unchanged lines`,
+    exact: true,
+  });
+}
+
+function counts(page: Page): Locator {
+  return page.getByRole("button", { name: /^\d+ unchanged lines?$/u });
+}
+
+test("while the unchanged lines before a hunk, after the hunk before it, are left out, its bar says how many, and pressing that shows only them, leaving the hunk where it was", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeLines(repository, [100, 110, 130, 150, 170, 190]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  await expect(countOn(page, 1, 96)).toBeVisible();
+  await expect(countOn(page, 2, 3)).toBeVisible();
+  await expect(countOn(page, 3, 13)).toBeVisible();
+  await expect(counts(page)).toHaveCount(6);
+
+  const before = await box(hunkBar(page, "a.txt", 2));
+
+  await countOn(page, 2, 3).click();
+
+  await expect(line(page, "a 104")).toBeVisible();
+  await expect(line(page, "a 106")).toBeVisible();
+  await expect(line(page, "a 96")).toBeHidden();
+  await expect(line(page, "a 120")).toBeHidden();
+  await expect(counts(page)).toHaveCount(5);
+  await expect(button(page, "Show entire file")).toHaveCount(6);
+
+  const after = await box(hunkBar(page, "a.txt", 2));
+
+  expect(after.y).toBe(before.y);
+});
+
+test('"Show entire file" shows every unchanged line, though some already show, and "Show only modified hunks" then none of them', async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await countOn(page, 2, 43).click();
+  await expect(line(page, "a 125")).toBeVisible();
+  await line(page, "a second").hover();
+  await button(page, "Show entire file").last().click();
+
+  await expect(line(page, "a 50")).toBeVisible();
+  await expect(line(page, "a 200")).toBeVisible();
+  await expect(counts(page)).toHaveCount(0);
+  await expect(button(page, "Show only modified hunks")).toHaveCount(2);
+
+  await button(page, "Show only modified hunks").last().click();
+
+  await expect(line(page, "a 125")).toBeHidden();
+  await expect(line(page, "a 50")).toBeHidden();
+  await expect(counts(page)).toHaveCount(2);
+});
+
+test("the unchanged lines shown before a hunk stay shown as a hunk above it is staged", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await countOn(page, 2, 43).click();
+  await expect(line(page, "a 125")).toBeVisible();
+  await line(page, "a first").hover();
+  await button(page, "Stage Hunk").first().click();
+
+  await expect(page.getByRole("heading", { name: "STAGED FILES (1)" })).toBeVisible();
+  expect(staged(repository)).toContain("-a 100\n+a first\n");
+  expect(staged(repository)).not.toContain("a second");
+  await expect(button(page, "Stage Hunk")).toHaveCount(1);
+  await expect(line(page, "a 125")).toBeVisible();
+  await expect(line(page, "a 146")).toBeVisible();
+});
+
+test("the unchanged lines shown before a hunk stay shown as lines are added above it, as by an agent", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await countOn(page, 2, 43).click();
+  await expect(line(page, "a 125")).toBeVisible();
+
+  const changed = linesOf("a").with(99, "a first").with(149, "a second");
+
+  writeFile(repository, "a.txt", `${["a added", ...changed].join("\n")}\n`);
+
+  await expect(line(page, "a added")).toBeVisible();
+  await expect(line(page, "a 125")).toBeVisible();
+  await expect(hunkBar(page, "a.txt", 3)).toBeVisible();
+  await expect(
+    hunkBar(page, "a.txt", 3).getByRole("button", { name: /unchanged lines?$/u }),
+  ).toHaveCount(0);
+  await expect(counts(page)).toHaveCount(1);
+});
+
+test("the unchanged lines shown before a hunk don't carry over to the next file", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository, ["a", "b"]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await countOn(page, 2, 43).click();
+  await expect(line(page, "a 125")).toBeVisible();
+  await openFile(page, "MODIFIED FILES (2)", "b.txt");
+
+  await expect(line(page, "b first")).toBeVisible();
+  await expect(line(page, "b 125")).toBeHidden();
+
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+
+  await expect(line(page, "a first")).toBeVisible();
+  await expect(line(page, "a 125")).toBeHidden();
+  await expect(countOn(page, 2, 43)).toBeVisible();
 });
 
 test("every file opens showing only modified hunks: the toggle doesn't carry over to the next file", async ({

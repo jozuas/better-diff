@@ -142,3 +142,27 @@ export function unchangedLines({ hunks, contents }: Pick<Diff, "hunks" | "conten
     after: spans.map(({ end }, index) => unchanged(contents, end, upTo(index + 1))),
   };
 }
+
+// What a hunk's bar shows of the file above the hunk: how many unchanged lines are left out there,
+// after the hunk before it, if any, which none are while they show, and whether any of the file's
+// lines are above it, shown or not, which a line across the bar separates it from.
+export interface Above {
+  hunk: Hunk;
+  leftOut: number;
+  separates: boolean;
+}
+
+// Each of the hunks with what's above it, by whether the run of unchanged lines above the hunk at
+// an index shows.
+export function aboveHunks(hunks: readonly Hunk[], shows: (index: number) => boolean): Above[] {
+  let end = 0;
+
+  return hunks.map((hunk, index) => {
+    const span = spanOf(hunk);
+    const gap = span.start.new - end;
+
+    end = span.end.new;
+
+    return { hunk, leftOut: shows(index) ? 0 : gap, separates: index > 0 || gap > 0 };
+  });
+}

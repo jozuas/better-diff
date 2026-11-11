@@ -37,3 +37,8 @@ export function labelOf({
 
   return labels[kind];
 }
+
+// What a hunk's bar says of the unchanged lines the diff leaves out before the hunk.
+export function unchangedLabel(count: number): string {
+  return count === 1 ? "1 unchanged line" : `${count} unchanged lines`;
+}

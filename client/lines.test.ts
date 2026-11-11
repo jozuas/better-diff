@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { hunkLines } from "../test/hunk-lines";
-import { lineKey, numberLines, unchangedLines } from "./lines";
+import { aboveHunks, lineKey, numberLines, unchangedLines } from "./lines";
 import type { NumberedLine } from "./lines";
 
 type Kind = "context" | "removed" | "added";
@@ -130,9 +130,9 @@ function foundIn(lines: readonly FileLine[], gap: number): unknown[] {
 }
 
 // A file's lines, some in hunks and the rest unchanged, around them, the diff of the file, its
-// versions, and the unchanged lines before the first hunk and after each one, each with the text of
-// each version where it is. Each line has text no other line has, so a number can only find it
-// where it is, and runs no other line has.
+// versions, the unchanged lines before the first hunk and after each one, each with the text of
+// each version where it is, and whether any of the file's lines are above each hunk. Each line has
+// text no other line has, so a number can only find it where it is, and runs no other line has.
 // Hunks often have none of a version's lines, as where they only add or remove lines.
 const fileInHunks = fc
   .record({
@@ -197,6 +197,7 @@ const fileInHunks = fc
         before: foundIn(lines, 0),
         after: sections.map((_, hunk) => foundIn(lines, hunk + 1)),
       },
+      above: sections.map((_, hunk) => lines.findIndex((line) => line.hunk === hunk) > 0),
     };
   });
 
@@ -224,6 +225,32 @@ test("the unchanged lines are those of both versions before the first hunk and a
         before: read(versions, before),
         after: after.map((lines) => read(versions, lines)),
       }).toStrictEqual(found);
+    }),
+  );
+});
+
+test("while the unchanged lines above each hunk are left out, its bar says how many, between it and the hunk before it, or the start of the file, and separates it from any of the file's lines above it", () => {
+  fc.assert(
+    fc.property(fileInHunks, ({ diff, found, above }) => {
+      const gaps = [found.before, ...found.after].slice(0, diff.hunks.length);
+
+      expect(aboveHunks(diff.hunks, () => false)).toStrictEqual(
+        gaps.map((lines, index) => ({
+          hunk: diff.hunks[index],
+          leftOut: lines.length,
+          separates: above[index],
+        })),
+      );
+    }),
+  );
+});
+
+test("while the unchanged lines above each hunk show, its bar says none are left out, and still separates it from any of the file's lines above it", () => {
+  fc.assert(
+    fc.property(fileInHunks, ({ diff, above }) => {
+      expect(aboveHunks(diff.hunks, () => true)).toStrictEqual(
+        diff.hunks.map((hunk, index) => ({ hunk, leftOut: 0, separates: above[index] })),
+      );
     }),
   );
 });

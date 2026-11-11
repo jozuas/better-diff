@@ -19,7 +19,7 @@ import type { BarRequests } from "./bar-requests";
 import { KeyboardFocusContext } from "./focus";
 import type { HunkEnd } from "./focus";
 import type { OpenFile } from "./groups";
-import { EntireFileToggle } from "./hunk-buttons";
+import { HunkBarContent } from "./hunk-buttons";
 import { handled, heard } from "./key-events";
 import { useBarFocus, useKeys } from "./keyboard";
 import { rangeOf, selectedCursor } from "./line-cursor";
@@ -49,19 +49,17 @@ function useStyles(theme: PluginTheme) {
   return useMemo(
     () =>
       StyleSheet.create({
+        // As tall as a file's bar, in the diff's background rather than one of its own, so it breaks
+        // the diff up no more than the line across it does, as Linear's PR review separates hunks.
         // Opaque, and over the hunk's lines, since it stays over them as they scroll under it.
         bar: {
           zIndex: 1,
           flexDirection: "row",
+          alignItems: "center",
           paddingHorizontal: 12,
-          // With its borders, as tall as a file's bar.
-          paddingVertical: 5,
-          borderTopWidth: 1,
-          borderBottomWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.surface1,
+          paddingVertical: 6,
+          backgroundColor: theme.colors.surface0,
         },
-        buttons: { flexDirection: "row", gap: 6, marginLeft: "auto" },
       }),
     [theme],
   );
@@ -87,8 +85,16 @@ interface HunkBarProps {
   controls: Controls;
   // Whether the view shows the entire file, rather than only its hunks.
   entire: boolean;
+  // How many unchanged lines the diff leaves out before the hunk: none while they show.
+  leftOut: number;
+  // Whether any of the file's lines, shown or not, are above the hunk, which the line across the bar
+  // separates it from: the first hunk's bar has none where it starts the file, as only its file's
+  // bar is above it.
+  separates: boolean;
   // Called with the hunk's index.
   onToggleEntire: (hunk: number) => void;
+  // Shows the run of unchanged lines above the hunk, with the hunk's index.
+  onOpen: (hunk: number) => void;
   // Hears the height of the diff's first hunk's bar, which every hunk's bar has. Only that one is
   // measured: measuring each bar would read the page's layout once for each of a diff's hunks.
   onHeight: (height: number) => void;
@@ -187,13 +193,15 @@ function useLineSelection({
   };
 }
 
-// On its left, the toggle between the entire file and only its hunks, and on its right, the hunk's
-// actions, both hidden until the hunk is revealed. The bar over its selected lines has their
-// actions, which keys here press too. Keys move focus to the bar itself, and in it move focus on through the view's bars, or back
-// to its file's row, run the hunk's actions or its file's, and select its lines and move the
-// selection on, while the actions they run act on the lines. Once an action on the hunk or its
-// lines runs with focus in it, focus moves on with the view, and once one on its file does, to the
-// first hunk of the file that takes the file's place.
+// A line across the diff, with how many unchanged lines are left out before the hunk in its middle,
+// which shows them. On its left, the toggle between the entire file and only its hunks,
+// and on its right, the hunk's actions, both hidden until the hunk is revealed. The bar over its
+// selected lines has their actions, which keys here press too. Keys move focus to the bar itself,
+// and in it move focus on through the view's bars, or back to its file's row, run the hunk's
+// actions or its file's, and select its lines and move the selection on, while the actions they run
+// act on the lines. Once an action on the hunk or its lines runs with focus in it, focus moves on
+// with the view, and once one on its file does, to the first hunk of the file that takes the file's
+// place.
 function BarOfHunk(props: HunkBarProps): ReactElement {
   const {
     hunk,
@@ -207,7 +215,10 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
     pointed,
     controls,
     entire,
+    leftOut,
+    separates,
     onToggleEntire,
+    onOpen,
     onHeight,
     onRun,
     onFileRun,
@@ -320,8 +331,17 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
       {...handlers}
       {...pointed.pointer(index)}
     >
-      <EntireFileToggle entire={entire} onPress={toggleEntire} hidden={!revealed} theme={theme} />
-      <View style={styles.buttons}>
+      <HunkBarContent
+        entire={entire}
+        revealed={revealed}
+        leftOut={leftOut}
+        separates={separates}
+        onToggle={toggleEntire}
+        onOpen={() => {
+          onOpen(index);
+        }}
+        theme={theme}
+      >
         <ActionButtons
           {...hunkBar}
           level="part"
@@ -331,7 +351,7 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
           color={theme.colors.foreground}
           theme={theme}
         />
-      </View>
+      </HunkBarContent>
     </View>
   );
 }
