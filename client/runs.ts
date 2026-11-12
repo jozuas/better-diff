@@ -73,9 +73,18 @@ export function toggledEntire(shown: ShownRuns): ShownRuns {
   };
 }
 
-// Whether the run of unchanged lines above the hunk at the index shows.
-export function showsAbove(shown: ShownRuns, index: number): boolean {
-  return shown.entire || shown.runs[index]?.open === true;
+// None of the runs of unchanged lines.
+const noRuns: ReadonlySet<number> = new Set();
+
+// Whether the run of unchanged lines above the hunk at the index shows: while it's open, or the
+// entire file shows, or it's one of those commented on, by index, the run before the first hunk at
+// 0, and the one after the hunk at an index at the next.
+export function showsAbove(
+  shown: ShownRuns,
+  index: number,
+  commented: ReadonlySet<number> = noRuns,
+): boolean {
+  return shown.entire || shown.runs[index]?.open === true || commented.has(index);
 }
 
 // Whether any of the file's unchanged lines show.
@@ -93,10 +102,30 @@ function runIfShown(lines: NumberedLine[], shown: boolean): NumberedLine[] {
 }
 
 // Those of the unchanged lines around the hunks that show: the run above each hunk while it's open,
-// and those after the last only while the entire file shows.
-export function shownLines(unchanged: Unchanged, shown: ShownRuns): Unchanged {
+// and those after the last only while the entire file shows, or else those of them commented on, by
+// index, the run before the first hunk at 0, and the one after the hunk at an index at the next.
+export function shownLines(
+  unchanged: Unchanged,
+  shown: ShownRuns,
+  commented: ReadonlySet<number> = noRuns,
+): Unchanged {
   return {
-    before: runIfShown(unchanged.before, showsAbove(shown, 0)),
-    after: unchanged.after.map((lines, index) => runIfShown(lines, showsAbove(shown, index + 1))),
+    before: runIfShown(unchanged.before, showsAbove(shown, 0, commented)),
+    after: unchanged.after.map((lines, index) =>
+      runIfShown(lines, showsAbove(shown, index + 1, commented)),
+    ),
   };
+}
+
+// The runs of unchanged lines with a line commented on, by index: the run before the first hunk at
+// 0, and the one after the hunk at an index at the next.
+export function commentedRuns(
+  unchanged: Unchanged,
+  commented: (line: NumberedLine) => boolean,
+): ReadonlySet<number> {
+  return new Set(
+    [unchanged.before, ...unchanged.after].flatMap((lines, index) =>
+      lines.some(commented) ? [index] : [],
+    ),
+  );
 }

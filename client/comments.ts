@@ -99,7 +99,7 @@ export function rangeLabel(target: CommentTarget): string | undefined {
 }
 
 // Tells the comments on a line apart from those on others.
-function targetKey({ path, side, line }: CommentTarget): string {
+export function targetKey({ path, side, line }: CommentTarget): string {
   return JSON.stringify([path, side, line]);
 }
 
@@ -251,26 +251,87 @@ export function unsent(
   return comments.filter((comment) => !sent.includes(comment));
 }
 
-// An agent comments can be sent to, what it's called, and whether it's taking a turn, which they'd
-// go to the middle of.
+// A review sent, which can be restored: the comments sent, and the message they were sent with.
+export interface SentReview {
+  comments: readonly ReviewComment[];
+  message: string;
+}
+
+// The comments pending once the review sent is restored: those pending, and after them those sent,
+// each pending again with an id none of the others has, in the order they were sent.
+export function restoredComments(
+  comments: readonly ReviewComment[],
+  { comments: sent }: SentReview,
+): ReviewComment[] {
+  const first = Math.max(0, ...comments.map(({ id }) => id)) + 1;
+
+  return [...comments, ...sent.map((comment, at) => ({ ...comment, id: first + at }))];
+}
+
+// The review's message once the review sent is restored: the message it was sent with, unless the
+// review's says something now.
+export function restoredMessage(message: string, sent: SentReview): string {
+  return bodyOf(message) === undefined ? sent.message : message;
+}
+
+// What an agent comments can be sent to is doing, as far as sending them goes: nothing, a turn,
+// which they'd go to the middle of, a turn waiting for permission to go on, or nothing since its
+// last turn failed. Or that they can't be sent to it, as its provider's unavailable.
+export type AgentState = "idle" | "working" | "permission" | "error" | "unavailable";
+
+// An agent comments can be sent to, what it's called, what it's doing, and when it was last active,
+// in milliseconds since 1970.
 export interface Recipient {
   id: string;
   label: string;
-  working: boolean;
+  state: AgentState;
+  active: number;
 }
 
-// An agent as listed, with what tells whether comments can be sent to it, what it's called, and
-// what it's doing.
+// An agent as listed, with what tells whether comments can be sent to it, what it's called, what
+// it's doing, when it was last active, and what a new agent like it starts as.
 export interface ListedAgent {
   agent: Pick<
     Agent,
-    "id" | "provider" | "title" | "workspaceId" | "archivedAt" | "internal" | "status"
+    | "id"
+    | "provider"
+    | "title"
+    | "workspaceId"
+    | "archivedAt"
+    | "internal"
+    | "status"
+    | "updatedAt"
+    | "pendingPermissions"
+    | "providerUnavailable"
+    | "model"
+    | "currentModeId"
+    | "thinkingOptionId"
   >;
 }
 
+function stateOf({
+  status,
+  pendingPermissions,
+  providerUnavailable,
+}: ListedAgent["agent"]): AgentState {
+  if (providerUnavailable === true) {
+    return "unavailable";
+  }
+
+  if (pendingPermissions.length > 0) {
+    return "permission";
+  }
+
+  if (status === "running") {
+    return "working";
+  }
+
+  return status === "error" ? "error" : "idle";
+}
+
 // The agents in the workspace that comments can be sent to, of those listed, as listed: those not
-// archived, nor Paseo's own, by their titles, or their providers while they have none, and whether
-// each is running a turn.
+// archived, nor Paseo's own, by their titles, or their providers while they have none, with what
+// each is doing, and when it was last active.
 export function recipientsOf(entries: readonly ListedAgent[], workspace: string): Recipient[] {
   return entries.flatMap(({ agent }) =>
     agent.workspaceId === workspace &&
@@ -280,11 +341,50 @@ export function recipientsOf(entries: readonly ListedAgent[], workspace: string)
           {
             id: agent.id,
             label: agent.title ?? agent.provider,
-            working: agent.status === "running",
+            state: stateOf(agent),
+            active: Date.parse(agent.updatedAt),
           },
         ]
       : [],
   );
+}
+
+// What a new agent comments are sent to starts as: its provider and model, and the mode and thinking
+// option it starts in, or the provider's own where they're null.
+export interface NewAgent {
+  provider: string;
+  model: string;
+  mode: string | null;
+  thinking: string | null;
+}
+
+// What a new agent comments are sent to starts as, of the agents listed, last active first: as the
+// one last active in the workspace was, or else the one last active on the host, of those not
+// archived, nor Paseo's own, whose providers are available. Undefined where there's none.
+export function templateOf(
+  entries: readonly ListedAgent[],
+  workspace: string,
+): NewAgent | undefined {
+  const candidates = entries.flatMap(({ agent }) =>
+    (agent.archivedAt ?? null) !== null ||
+    agent.internal === true ||
+    agent.providerUnavailable === true ||
+    agent.model === null
+      ? []
+      : [
+          {
+            inWorkspace: agent.workspaceId === workspace,
+            started: {
+              provider: agent.provider,
+              model: agent.model,
+              mode: agent.currentModeId,
+              thinking: agent.thinkingOptionId ?? null,
+            },
+          },
+        ],
+  );
+
+  return (candidates.find(({ inWorkspace }) => inWorkspace) ?? candidates[0])?.started;
 }
 
 // What an agent comments are sent to is asked, as Paseo's own diff asks it.

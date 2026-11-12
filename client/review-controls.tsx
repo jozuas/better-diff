@@ -6,9 +6,17 @@ import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 import { editorKey, reviewPrompt } from "./comments";
-import type { Recipient } from "./comments";
 import { confirmation } from "./confirmation";
-import { agentSections, agentState, agentsNotice, discardLabel, sendLabel } from "./feedback";
+import {
+  agentSections,
+  agentState,
+  agentsNotice,
+  canSendTo,
+  discardLabel,
+  newAgentLabel,
+  sendLabel,
+} from "./feedback";
+import type { Agents, Destination } from "./feedback";
 import { FontSizesContext } from "./fonts";
 import { useKeys } from "./keyboard";
 import { menuEndingAt } from "./menu";
@@ -132,18 +140,17 @@ export function DiscardReview({ onDiscard, disabled, theme }: DiscardReviewProps
 }
 
 interface AgentsNoticeProps {
-  agents: UseQueryResult<Recipient[]>;
+  agents: UseQueryResult<Agents>;
   theme: PluginTheme;
 }
 
 // Why the review can't be sent to an agent, while there's none to send it to.
 function AgentsNotice({ agents, theme }: AgentsNoticeProps): ReactElement | null {
   const styles = useStyles(theme);
-  const recipients = agents.data ?? [];
 
-  return recipients.length > 0 ? null : (
+  return canSendTo(agents.data) ? null : (
     <Text style={styles.notice}>
-      {agentsNotice({ pending: agents.isPending, error: agents.error, recipients })}
+      {agentsNotice({ pending: agents.isPending, error: agents.error, agents: agents.data })}
     </Text>
   );
 }
@@ -151,43 +158,72 @@ function AgentsNotice({ agents, theme }: AgentsNoticeProps): ReactElement | null
 interface AgentMenuProps {
   // The top right corner of the button it's opened from, above which it goes.
   point: Point;
-  recipients: readonly Recipient[];
-  onChoose: (recipient: Recipient) => void;
+  agents: Agents;
+  // When it opened, in milliseconds since 1970.
+  now: number;
+  onChoose: (to: Destination) => void;
   onClose: () => void;
   theme: PluginTheme;
 }
 
-// The agents the review can be sent to, to choose one from: those not at work, and then those at
-// work, marked so, each by what it's called, cut short where it's long.
-function AgentMenu({ point, recipients, onChoose, onClose, theme }: AgentMenuProps): ReactElement {
+// The agents the review can be sent to, to choose one from: those not at work, then those at work,
+// and those it can't be sent to, disabled, each by what it's called, cut short where it's long, and
+// what it's doing, or how long ago it was last active, as of when the menu opened. Last, a new agent,
+// where one can be started, with its provider and model.
+function AgentMenu({
+  point,
+  agents: { recipients, template },
+  now,
+  onChoose,
+  onClose,
+  theme,
+}: AgentMenuProps): ReactElement {
+  const listed = agentSections(recipients).map((section) =>
+    section.map((agent) => ({
+      label: agent.label,
+      detail: agentState(agent, now),
+      icon: "Bot",
+      onPress: () => {
+        onChoose({ agent });
+      },
+      disabled: agent.state === "unavailable",
+    })),
+  );
+
+  const started =
+    template === undefined
+      ? []
+      : [
+          {
+            label: "New agent",
+            detail: newAgentLabel(template),
+            icon: "Plus",
+            onPress: () => {
+              onChoose({ template });
+            },
+            disabled: false,
+          },
+        ];
+
   return (
     <Menu
       label="Choose an agent"
       point={point}
       place={menuEndingAt}
       maxWidth={400}
-      sections={agentSections(recipients).map((section) =>
-        section.map((recipient) => ({
-          label: recipient.label,
-          detail: agentState(recipient),
-          icon: "Bot",
-          onPress: () => {
-            onChoose(recipient);
-          },
-          disabled: false,
-        })),
-      )}
+      sections={[...listed, started]}
       onClose={onClose}
       theme={theme}
     />
   );
 }
 
-// The menu of agents to send the review to, while it's open: where it goes, and the agents it lists,
-// as they were when it opened.
+// The menu of agents to send the review to, while it's open: where it goes, the agents it lists, as
+// they were when it opened, and when that was, in milliseconds since 1970.
 export interface AgentsShown {
   point: Point;
-  recipients: Recipient[];
+  agents: Agents;
+  now: number;
 }
 
 // What opens the menu of agents to send the review to, and the menu while it's open.
@@ -203,15 +239,15 @@ export interface AgentChoice {
 }
 
 interface SendFeedbackProps {
-  agents: UseQueryResult<Recipient[]>;
+  agents: UseQueryResult<Agents>;
   choice: AgentChoice;
   sending: boolean;
-  onSend: (recipient: Recipient) => void;
+  onSend: (to: Destination) => void;
   theme: PluginTheme;
 }
 
 // Why the review can't be sent to an agent, while there's none to send it to, and Send feedback,
-// which asks which agent to send it to.
+// which asks which agent to send it to, or whether to start a new one.
 export function SendFeedback({
   agents,
   choice,
@@ -236,7 +272,8 @@ export function SendFeedback({
       {choice.shown === undefined ? null : (
         <AgentMenu
           point={choice.shown.point}
-          recipients={choice.shown.recipients}
+          agents={choice.shown.agents}
+          now={choice.shown.now}
           onChoose={onSend}
           onClose={choice.close}
           theme={theme}

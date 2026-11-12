@@ -8,6 +8,7 @@ import type { Controls } from "./actions";
 import { lineBarOf } from "./bar-commands";
 import type { BarRequests } from "./bar-requests";
 import { startedOn } from "./commenting";
+import type { Commenting } from "./commenting";
 import type { CommentTarget, NumberedFile } from "./comments";
 import { HunkLines, UnchangedLines } from "./diff-lines";
 import { afterSection, beforeSection } from "./find";
@@ -58,10 +59,34 @@ function usePassOn(
   );
 }
 
+// How unchanged lines outside the hunks are commented on: the lines, with which of them the pointer
+// is over, and what a comment started from their menu is on, if it can be on any: the line
+// right-clicked, if it's one of them. Undefined while they can't be commented on, as until it's
+// known how the review numbers them.
+function useUnchangedCommenting(
+  file: NumberedFile | undefined,
+  lines: readonly NumberedLine[],
+): [Commenting | undefined, (clicked: boolean) => CommentTarget | undefined] {
+  const pointed = useMemo(() => pointedLine(), []);
+
+  const commenting = useMemo(
+    () => (file === undefined ? undefined : { file, pointed }),
+    [file, pointed],
+  );
+
+  return [
+    commenting,
+    (clicked) => (clicked ? startedOn(file, lines, undefined, pointed.line()) : undefined),
+  ];
+}
+
 interface LinesBeforeProps {
-  // The file's lines before its first hunk, while the entire file shows.
+  // The file's lines before its first hunk, while they show.
   lines: NumberedLine[];
   path: string;
+  // The file whose diff they're in, with how the review numbers its lines, or undefined while they
+  // can't be commented on.
+  file: NumberedFile | undefined;
   // The id of the view it's shown in, and the file's index among the view's files.
   view: string;
   fileIndex: number;
@@ -74,11 +99,12 @@ interface LinesBeforeProps {
   theme: PluginTheme;
 }
 
-// The file's lines before its first hunk, which can't be commented on, and which a selection
-// reaching into the hunk shows the bar over the hunk's lines for.
+// The file's lines before its first hunk, whose menu starts a comment on the line right-clicked,
+// and which a selection reaching into the hunk shows the bar over the hunk's lines for.
 export function LinesBefore({
   lines,
   path,
+  file,
   view,
   fileIndex,
   requests,
@@ -89,11 +115,12 @@ export function LinesBefore({
   theme,
 }: LinesBeforeProps): ReactElement {
   const passOn = usePassOn(view, fileIndex, requests);
+  const [commenting, commentOn] = useUnchangedCommenting(file, lines);
 
   return (
     <LinesArea
       path={path}
-      commentOn={() => {}}
+      commentOn={commentOn}
       passOn={passOn}
       ceiling={ceiling}
       controls={controls}
@@ -105,6 +132,7 @@ export function LinesBefore({
         section={beforeSection}
         focus={focus}
         window={window}
+        commenting={commenting}
         style={styles.spaced}
         theme={theme}
       />
@@ -132,7 +160,7 @@ interface HunkAreaProps {
   requests: BarRequests;
   // Undefined for an inline view.
   focus: Focus | undefined;
-  // The file's lines after the hunk, up to the next, while the entire file shows.
+  // The file's lines after the hunk, up to the next, while they show.
   after: NumberedLine[];
   window: LineWindow;
   ceiling: () => number;
@@ -140,9 +168,9 @@ interface HunkAreaProps {
   theme: PluginTheme;
 }
 
-// A hunk's lines, and the file's lines after it while the entire file shows, whose menu and the
-// bar a selection shows start a comment on the hunk's lines selected, or from the menu with none
-// selected, on the line right-clicked. The bar has the selected lines' actions, and shows for lines
+// A hunk's lines, and the file's lines after it while they show, whose menu and the bar a selection
+// shows start a comment on the hunk's lines selected, or from the menu with none selected, on the
+// line right-clicked, of either. The bar has the selected lines' actions, and shows for lines
 // the keyboard selects too, and for those of the hunk a selection the pointer let go of elsewhere
 // has. Once one of their actions runs, focus moves on with the view, from the hunk.
 export function HunkArea({
@@ -190,13 +218,19 @@ export function HunkArea({
     [requests, index, container],
   );
 
-  function commentOn(clicked: boolean): CommentTarget | undefined {
+  const [commentingAfter, commentAfter] = useUnchangedCommenting(file, after);
+
+  function commentOnHunk(clicked: boolean): CommentTarget | undefined {
     return startedOn(
       file,
       numberLines(hunk),
       selectedInHunk(selectedNow(view)?.range, focus, fileIndex, index),
       clicked ? pointedOver.line() : undefined,
     );
+  }
+
+  function commentOn(clicked: boolean): CommentTarget | undefined {
+    return commentOnHunk(clicked) ?? commentAfter(clicked);
   }
 
   return (
@@ -230,6 +264,7 @@ export function HunkArea({
         section={afterSection(index)}
         focus={focus}
         window={window}
+        commenting={commentingAfter}
         theme={theme}
       />
     </LinesArea>

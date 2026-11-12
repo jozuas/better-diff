@@ -9,8 +9,8 @@ import { View } from "react-native";
 
 import { diffRpc } from "../shared/diff";
 import { bothDiffs } from "./attachment";
-import { saved, threadsOf, without } from "./comments";
-import type { Editing, ReviewComment } from "./comments";
+import { restoredComments, restoredMessage, saved, threadsOf, without } from "./comments";
+import type { Editing, ReviewComment, SentReview } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
 import { fileKey, numberings } from "./numbering";
 import type { CommentedFile } from "./numbering";
@@ -24,9 +24,10 @@ type Diff = RpcOutput<typeof diffRpc>;
 
 type Listed = Readonly<Record<GroupName, readonly string[]>>;
 
-// Both diffs of each file the comments are on, and of each file partly staged, whose diffs number
-// each other's lines, once they're read, as a file's view reads them with their hunks though they'd
-// be collapsed, so that what one reads, the other has. The same while what's read is.
+// Both diffs of each file the comments are on, with every line of the file, as the unchanged lines
+// around the hunks can be commented on, and of each file partly staged, whose diffs number each
+// other's lines, once they're read, as a file's view reads them with their hunks though they'd be
+// collapsed, so that what one reads, the other has. The same while what's read is.
 function useReviewedDiffs(
   directory: string,
   hideWhitespace: boolean,
@@ -36,10 +37,15 @@ function useReviewedDiffs(
   const readDiff = useRpc(diffRpc);
   const partly = useMemo(() => (listed === undefined ? undefined : partlyStaged(listed)), [listed]);
 
-  const files = useMemo(
-    () => bothDiffs([...comments.map(({ path }) => path), ...(partly ?? [])]),
-    [comments, partly],
-  );
+  const files = useMemo(() => {
+    const commented = new Set(comments.map(({ path }) => path));
+
+    return bothDiffs([...commented, ...(partly ?? [])]).map(({ diff, path }) => ({
+      diff,
+      path,
+      entire: commented.has(path),
+    }));
+  }, [comments, partly]);
 
   const combine = useCallback(
     (results: UseQueryResult<Diff>[]) => results.map(({ data }) => data),
@@ -47,15 +53,15 @@ function useReviewedDiffs(
   );
 
   const read = useQueries({
-    queries: files.map(({ diff, path }) => ({
-      queryKey: [directory, "diff", diff, path, true, false, hideWhitespace],
+    queries: files.map(({ diff, path, entire }) => ({
+      queryKey: [directory, "diff", diff, path, true, entire, hideWhitespace],
       queryFn: async () => {
         const diffRead = await readDiff({
           directory,
           path,
           side: diff,
           expand: true,
-          entire: false,
+          entire,
           hideWhitespace,
         });
 
@@ -104,8 +110,9 @@ interface ReviewProviderProps {
 // leaves the one being written. A comment's line is numbered as the review the agent reads numbers
 // it, so it shows in whichever of its file's diffs has it. Under them, while comments are pending, a
 // bar opens the review of them, which sends them to an agent, and shows any of them in the diff that
-// has its line, where it stands out for a moment. While any are pending, the tab shows it has
-// unsaved work, and asks before it's closed.
+// has its line, where it stands out for a moment. Once a review's sent, until another comment's
+// started, the bar restores it, its comments pending again, as for sending it to another agent.
+// While any are pending, the tab shows it has unsaved work, and asks before it's closed.
 export function ReviewProvider({
   comments,
   onComments,
@@ -116,6 +123,7 @@ export function ReviewProvider({
   ...bar
 }: ReviewProviderProps): ReactElement {
   const [editing, setEditing] = useState<Editing>();
+  const [restorable, setRestorable] = useState<SentReview>();
   const written = useRef("");
   const [revealing, setRevealing] = useState<Revealing>();
   const latest = useLatest({ tab, listed, onOpen });
@@ -136,6 +144,7 @@ export function ReviewProvider({
       onStart: (target) => {
         written.current = "";
         setEditing({ target, id: undefined, where: "line" });
+        setRestorable(undefined);
       },
       onEdit: (comment, where) => {
         written.current = comment.body;
@@ -184,6 +193,15 @@ export function ReviewProvider({
       <ReviewBar
         comments={comments}
         onComments={onComments}
+        restorable={restorable}
+        onRestore={() => {
+          if (restorable !== undefined) {
+            onComments((current) => restoredComments(current, restorable));
+            bar.onMessage((current) => restoredMessage(current, restorable));
+            setRestorable(undefined);
+          }
+        }}
+        onSent={setRestorable}
         diffOf={reviewed.diffOf}
         onShow={onShow}
         canShow={(file) => listed !== undefined && openFileOf(file, listed) !== undefined}

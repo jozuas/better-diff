@@ -1,9 +1,11 @@
 import { commitAll, runGit, worktreeFile, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
-import { box, button, line, openFile } from "./panel";
+import { button, line, openFile } from "./panel";
 import {
+  agentItem,
   agentMenu,
   changeA,
+  changeAAndB,
   comment,
   messageBox,
   openReview,
@@ -61,17 +63,17 @@ test("sending the review sends the pending comments to the agent chosen, as Pase
         comments: [
           {
             filePath: "a.txt",
-            side: "new",
-            lineNumber: 3,
-            body: "Why uppercase?",
-            context: { ...context, targetLine: context.lines[3] },
-          },
-          {
-            filePath: "a.txt",
             side: "old",
             lineNumber: 3,
             body: "Was fine",
             context: { ...context, targetLine: context.lines[2] },
+          },
+          {
+            filePath: "a.txt",
+            side: "new",
+            lineNumber: 3,
+            body: "Why uppercase?",
+            context: { ...context, targetLine: context.lines[3] },
           },
         ],
       },
@@ -79,99 +81,44 @@ test("sending the review sends the pending comments to the agent chosen, as Pase
   ]);
 });
 
-test("Send feedback asks which agent to send the review to, from a menu of the workspace's agents, those active most recently first, which Escape leaves for the review, and sends it to none but the one chosen", async ({
+test("the review sends the comments in the order it lists them, each file's together, by path, in the order of their lines, rather than the order they were made in", async ({
   agents,
   app,
   page,
   repository,
 }) => {
-  changeA(repository);
+  changeAAndB(repository);
 
   await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await comment(page, "delta", "Not needed");
+  await openFile(page, "MODIFIED FILES (2)", "b.txt");
+  await comment(page, "TWO", "Second file");
+  await openFile(page, "MODIFIED FILES (2)", "a.txt");
+  await comment(page, "delta", "Last line");
+  await comment(page, "BRAVO", "First line");
 
   const reviewer = await agents.start("Reviewer");
-  const second = await agents.start("Second");
-  const opened = await openReview(page, 1);
+  const opened = await openReview(page, 3);
 
-  await sendButton(opened).click();
-
-  await expect(agentMenu(page).getByRole("menuitem")).toHaveText(["Second", "Reviewer"]);
-
-  await page.keyboard.press("Escape");
-
-  await expect(agentMenu(page)).toBeHidden();
-  await expect(pending(opened, "Not needed")).toBeVisible();
+  await expect(opened.getByRole("group", { name: "Pending review comment" })).toContainText([
+    "First line",
+    "Last line",
+    "Second file",
+  ]);
 
   await sendTo(page, opened, "Reviewer");
 
-  await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
-  await expect.poll(reviewer.sent).toHaveLength(1);
-  expect(second.sent()).toStrictEqual([]);
-});
-
-test("the menu of agents lists those at work after the others, as they are when it opens, marked Working, however long their titles", async ({
-  agents,
-  app,
-  page,
-  repository,
-}) => {
-  const title =
-    "Busy with a title too long for the menu, as an agent titled after its first prompt has, which goes on and on";
-
-  changeA(repository);
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await comment(page, "delta", "Not needed");
-  await agents.start("Reviewer");
-
-  const opened = await openReview(page, 1);
-
-  await expect(sendButton(opened)).toBeEnabled();
-
-  const busy = await agents.startWorking(title);
-
-  await sendButton(opened).click();
-
-  const working = agentMenu(page).getByRole("menuitem", { name: `${title}, Working`, exact: true });
-
-  await expect(agentMenu(page).getByRole("menuitem")).toHaveText(["Reviewer", /^Busy/u]);
-  await expect(working.getByText("Working", { exact: true })).toBeVisible();
-
-  const menu = await box(agentMenu(page));
-  const shown = await box(working.getByText("Working", { exact: true }));
-  const panel = await box(opened);
-  const send = await box(sendButton(opened));
-
-  expect(shown.x + shown.width).toBeLessThanOrEqual(menu.x + menu.width);
-  expect(menu.width).toBeLessThanOrEqual(400);
-  expect(send.x + send.width).toBeLessThanOrEqual(panel.x + panel.width);
-
-  await working.click();
-
-  await expect(page.getByText(`Feedback sent to ${title}.`, { exact: true })).toBeVisible();
-  await expect.poll(busy.sent).toHaveLength(1);
-});
-
-test("without an agent in the workspace, the review says to start one, and can't be sent", async ({
-  app,
-  page,
-  repository,
-}) => {
-  changeA(repository);
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await comment(page, "BRAVO", "Why uppercase?");
-
-  const opened = await openReview(page, 1);
-
-  await expect(
-    opened.getByText("Start an agent in this workspace to send it feedback.", { exact: true }),
-  ).toBeVisible();
-  await expect(sendButton(opened)).toBeDisabled();
+  await expect.poll(reviewer.sent).toMatchObject([
+    [
+      prompt,
+      {
+        comments: [
+          { filePath: "a.txt", lineNumber: 3, body: "First line" },
+          { filePath: "a.txt", lineNumber: 5, body: "Last line" },
+          { filePath: "b.txt", lineNumber: 2, body: "Second file" },
+        ],
+      },
+    ],
+  ]);
 });
 
 test("the review is sent with the message written for the agent, Enter in it asking which agent to send it to as Send feedback does, Shift+Enter starting a new line in it, and the message is empty again after", async ({
@@ -197,9 +144,7 @@ test("the review is sent with the message written for the agent, Enter in it ask
   await messageBox(opened).press("Shift+Enter");
   await messageBox(opened).press("Enter");
 
-  await expect(
-    agentMenu(page).getByRole("menuitem", { name: "Reviewer", exact: true }),
-  ).toBeFocused();
+  await expect(agentItem(page, "Reviewer")).toBeFocused();
 
   await page.keyboard.press("Enter");
 
@@ -283,9 +228,7 @@ test("the review is sent once at a time: while it's sent, Send feedback is disab
   await messageBox(opened).fill("Fix this.");
   await messageBox(opened).press("Enter");
 
-  await expect(
-    agentMenu(page).getByRole("menuitem", { name: "Reviewer", exact: true }),
-  ).toBeFocused();
+  await expect(agentItem(page, "Reviewer")).toBeFocused();
 
   await page.keyboard.press("Enter");
 
@@ -351,16 +294,16 @@ test("comments on a partly staged file are sent with their lines' numbers in HEA
       {
         comments: [
           {
-            side: "new",
-            lineNumber: 2,
-            body: "Why zero?",
-            context: { hunkHeader: "@@ -1,3 +2,4 @@", targetLine: { content: "zero" } },
-          },
-          {
             side: "old",
             lineNumber: 9,
             body: "Keep nine",
             context: { hunkHeader: "@@ -6,5 +8,5 @@", targetLine: { content: "nine" } },
+          },
+          {
+            side: "new",
+            lineNumber: 2,
+            body: "Why zero?",
+            context: { hunkHeader: "@@ -1,3 +2,4 @@", targetLine: { content: "zero" } },
           },
         ],
       },

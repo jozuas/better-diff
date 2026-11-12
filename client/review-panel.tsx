@@ -9,9 +9,9 @@ import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "r
 
 import { diffRpc } from "../shared/diff";
 import { unsent } from "./comments";
-import type { Recipient, ReviewComment } from "./comments";
-import { agentsIn, agentsPage, feedbackTo, messageAfter } from "./feedback";
-import type { FeedbackServer } from "./feedback";
+import type { ReviewComment, SentReview } from "./comments";
+import { agentsIn, agentsPage, canSendTo, configOf, feedbackTo, messageAfter } from "./feedback";
+import type { Agents, Destination, FeedbackServer } from "./feedback";
 import { FontSizesContext } from "./fonts";
 import { useContextMenu } from "./keyboard";
 import { panelPosition } from "./menu";
@@ -26,10 +26,15 @@ import { useLatest } from "./web";
 type Diff = RpcOutput<typeof diffRpc>;
 
 // What feedback reaches the daemon with: the host's agents, those active most recently first, the
-// diffs of the worktree in the directory, as shown with whitespace changes hidden or not, and an
-// agent sent a review, which an agent at work is given in the turn it's taking, without interrupting
-// it, as Paseo's own diff sends it by default.
-function useFeedbackServer(directory: string, hideWhitespace: boolean): FeedbackServer {
+// diffs of the worktree in the directory, with every line of their files, as the unchanged lines
+// around the hunks can be commented on, as shown with whitespace changes hidden or not, an agent
+// sent a review, which an agent at work is given in the turn it's taking, without interrupting it,
+// as Paseo's own diff sends it by default, and a new agent in the workspace, which starts with it.
+function useFeedbackServer(
+  directory: string,
+  workspace: string,
+  hideWhitespace: boolean,
+): FeedbackServer {
   const paseo = usePaseo();
   const readDiff = useRpc(diffRpc);
 
@@ -44,7 +49,14 @@ function useFeedbackServer(directory: string, hideWhitespace: boolean): Feedback
         return page;
       },
       readDiff: async ({ diff, path }) => {
-        const read = await readDiff({ directory, path, side: diff, expand: true, hideWhitespace });
+        const read = await readDiff({
+          directory,
+          path,
+          side: diff,
+          expand: true,
+          entire: true,
+          hideWhitespace,
+        });
 
         return read;
       },
@@ -53,8 +65,13 @@ function useFeedbackServer(directory: string, hideWhitespace: boolean): Feedback
           .ref(agent)
           .send(prompt, { activeTurnBehavior: "steer", attachments: [review] });
       },
+      start: async (template, prompt, review) => {
+        await paseo.workspaces
+          .ref(workspace)
+          .agents.create({ config: configOf(template), prompt, attachments: [review] });
+      },
     }),
-    [paseo, readDiff, directory, hideWhitespace],
+    [paseo, readDiff, directory, workspace, hideWhitespace],
   );
 }
 
@@ -115,6 +132,8 @@ export interface ReviewPanelProps {
   // Whether it's being sent, and what sends it, unless it's being sent.
   sending: boolean;
   onSending: (send: () => Promise<void>) => Promise<void>;
+  // Keeps the review sent, once some of its comments have been, so it can be restored.
+  onSent: (sent: SentReview) => void;
   // Both diffs of each file comments are on, as read now, if they are.
   diffOf: (file: CommentedFile) => Diff | undefined;
   // Opens the file's diff, and shows the comment in it, and whether it can open it.
@@ -125,11 +144,11 @@ export interface ReviewPanelProps {
 
 // Sends the review to the agent chosen, with the message, unless it's being sent already, while the
 // review says it's being sent, and says what came of it. The comments sent no longer pend, and once
-// some are, the message is empty again, unless it's changed since.
+// some are, the message is empty again, unless it's changed since, and the review sent is kept.
 function useSend(
   panel: ReviewPanelProps,
   server: FeedbackServer,
-): (to: Recipient) => Promise<void> {
+): (to: Destination) => Promise<void> {
   const toast = useToast();
   const latest = useLatest(panel);
 
@@ -142,22 +161,27 @@ function useSend(
       toast.show(told.message, { variant: told.variant });
       onComments((current) => unsent(current, told.sent));
       onMessage((current) => messageAfter(told, message, current));
+
+      if (told.sent.length > 0) {
+        latest.current.onSent({ comments: told.sent, message });
+      }
     });
   };
 }
 
 // The menu of agents Send feedback opens, which lists them again first, so that it says which are at
 // work now, unless the review can't be sent.
-function useAgentChoice(agents: UseQueryResult<Recipient[]>, sending: boolean): AgentChoice {
+function useAgentChoice(agents: UseQueryResult<Agents>, sending: boolean): AgentChoice {
   const button = useRef<View>(null);
   const [shown, setShown] = useState<AgentsShown>();
-  const unsendable = sending || (agents.data ?? []).length === 0;
+  const unsendable = sending || !canSendTo(agents.data);
 
-  // Opens the menu above Send feedback, its right edge at the button's, while it has agents to list.
-  function open(recipients: Recipient[]): void {
-    if (recipients.length > 0) {
+  // Opens the menu above Send feedback, its right edge at the button's, while it has an agent to
+  // send to.
+  function open(listed: Agents | undefined): void {
+    if (canSendTo(listed)) {
       button.current?.measureInWindow((x, y, width) => {
-        setShown({ point: { x: x + width, y }, recipients });
+        setShown({ point: { x: x + width, y }, agents: listed, now: Date.now() });
       });
     }
   }
@@ -167,7 +191,7 @@ function useAgentChoice(agents: UseQueryResult<Recipient[]>, sending: boolean): 
       return;
     }
 
-    const { data = [] } = await agents.refetch();
+    const { data } = await agents.refetch();
 
     open(data);
   }
@@ -192,7 +216,7 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
   const styles = useStyles(theme);
   const window = useWindowDimensions();
   const backdrop = useId();
-  const server = useFeedbackServer(props.directory, props.hideWhitespace);
+  const server = useFeedbackServer(props.directory, props.workspace, props.hideWhitespace);
 
   const agents = useQuery({
     queryKey: ["better-diff agents", props.workspace],
@@ -250,8 +274,8 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
             agents={agents}
             choice={choice}
             sending={sending}
-            onSend={(recipient) => {
-              void send(recipient);
+            onSend={(to) => {
+              void send(to);
             }}
             theme={theme}
           />

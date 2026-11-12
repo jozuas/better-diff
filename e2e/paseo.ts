@@ -117,3 +117,35 @@ export async function addTestAgent(daemon: Daemon): Promise<void> {
   await paseoUi(daemon, ["paseo", "plugin", "add", join(root, "e2e", "agent"), "--id", testAgent]);
   await untilAvailable(daemon, 60);
 }
+
+// Opens the repository as a workspace on the daemon, and gives its ID.
+async function createWorkspace(daemon: Daemon, repository: string): Promise<string> {
+  const created = await paseoUi(daemon, [
+    "paseo",
+    "workspace",
+    "create",
+    "--isolation",
+    "local",
+    "--path",
+    repository,
+    "--json",
+  ]);
+
+  return z.object({ workspaceId: z.string() }).parse(JSON.parse(created)).workspaceId;
+}
+
+// Runs the test with the repository open as a workspace on the daemon, and archives it after, so
+// the daemon isn't left watching a directory that's gone once the repository is removed.
+export async function inWorkspace(
+  daemon: Daemon,
+  repository: string,
+  test: (workspace: string) => Promise<void>,
+): Promise<void> {
+  const workspace = await createWorkspace(daemon, repository);
+
+  try {
+    await test(workspace);
+  } finally {
+    await paseoUi(daemon, ["paseo", "workspace", "archive", workspace]);
+  }
+}

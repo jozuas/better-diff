@@ -1,15 +1,15 @@
 import { writeFileSync } from "node:fs";
 
-import type { Page } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 import { expect, test as base } from "@playwright/test";
 import { z } from "zod";
 
 import { inRepository } from "../test/repository";
-import { sendRequest, startAgent, startWorkingAgent } from "./agents";
+import { agentsOn, sendRequest } from "./agents";
 import type { Agents } from "./agents";
 import { hold, read } from "./messages";
 import type { Held } from "./messages";
-import { addressOf, paseoUi, pluginId } from "./paseo";
+import { addressOf, inWorkspace, paseoUi, pluginId } from "./paseo";
 import type { Daemon } from "./paseo";
 
 // The styles diffs can show in, as Better Diff's page in Paseo's settings names them.
@@ -65,6 +65,9 @@ interface Fixtures extends Record<"pageErrors" | "pluginLogs", void> {
   workspace: string;
   app: App;
   agents: Agents;
+  // Agents in a workspace of another repository, as those the user has at work elsewhere on the
+  // host are. Its workspace is archived after the test, before the repository is removed.
+  elsewhere: Agents;
 }
 
 const waitRequest = z.object({
@@ -116,6 +119,11 @@ async function show(page: Page, path: string): Promise<void> {
   await page.goto(path);
 }
 
+// The file an agent with the title notes what it's sent in, among the test's output.
+function notesIn(testInfo: TestInfo): (title: string) => string {
+  return (title) => testInfo.outputPath(`${title}.jsonl`);
+}
+
 export const test = base.extend<Fixtures>({
   daemon: ["shared", { option: true }],
 
@@ -128,24 +136,15 @@ export const test = base.extend<Fixtures>({
   },
 
   workspace: async ({ daemon, repository }, provide) => {
-    const created = await paseoUi(daemon, [
-      "paseo",
-      "workspace",
-      "create",
-      "--isolation",
-      "local",
-      "--path",
-      repository,
-      "--json",
-    ]);
+    await inWorkspace(daemon, repository, provide);
+  },
 
-    const { workspaceId } = z.object({ workspaceId: z.string() }).parse(JSON.parse(created));
-
-    try {
-      await provide(workspaceId);
-    } finally {
-      await paseoUi(daemon, ["paseo", "workspace", "archive", workspaceId]);
-    }
+  elsewhere: async ({ daemon }, provide, testInfo) => {
+    await inRepository(async (other) => {
+      await inWorkspace(daemon, other, async (workspace) => {
+        await provide(agentsOn(daemon, workspace, notesIn(testInfo)));
+      });
+    });
   },
 
   app: async ({ daemon, page, workspace }, provide) => {
@@ -291,28 +290,7 @@ export const test = base.extend<Fixtures>({
   },
 
   agents: async ({ daemon, workspace }, provide, testInfo) => {
-    await provide({
-      start: async (title) => {
-        const agent = await startAgent(
-          daemon,
-          workspace,
-          title,
-          testInfo.outputPath(`${title}.jsonl`),
-        );
-
-        return agent;
-      },
-      startWorking: async (title) => {
-        const agent = await startWorkingAgent(
-          daemon,
-          workspace,
-          title,
-          testInfo.outputPath(`${title}.jsonl`),
-        );
-
-        return agent;
-      },
-    });
+    await provide(agentsOn(daemon, workspace, notesIn(testInfo)));
   },
 
   // What the plugin's server printed, attached to a failed test. Set up before pageErrors, so it's
@@ -356,6 +334,13 @@ export const test = base.extend<Fixtures>({
 export function changesSettings(): void {
   test.use({ daemon: "settings" });
   test.describe.configure({ lock: "settings" });
+}
+
+// Has the file's tests run, one at a time, on the daemon of their own for tests that change the
+// plugin's settings, which no test starts an agent on, so that the host has no agents but those
+// the test starts.
+export function withoutOtherAgents(): void {
+  changesSettings();
 }
 
 export { expect } from "@playwright/test";

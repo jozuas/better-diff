@@ -197,11 +197,12 @@ function partsOf(thread: ReturnType<typeof threadAt>): Parts {
     : [[...thread.comments], [thread.editing].filter(Boolean)];
 }
 
-// The targets a line's comments are on: one, or two, as an unchanged line's are inline.
+// The targets a line's comments are on: one, or two, as an unchanged line's are inline, each on a
+// line of its own.
 const targets = fc.uniqueArray(commentTarget, {
   minLength: 1,
   maxLength: 2,
-  selector: (target) => JSON.stringify(target),
+  selector: ({ path: on, side, line }) => JSON.stringify([on, side, line]),
 });
 
 test("under a line shows the comments on it, in the order they were made, and the comment being written under it, if any", () => {

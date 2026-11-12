@@ -1,5 +1,9 @@
-import { rangeOf, shownOn, targetOf, threadAt } from "./comments";
-import type { CommentTarget, NumberedFile, Thread } from "./comments";
+import type { RpcOutput } from "@getpaseo/plugin";
+
+import type { diffRpc } from "../shared/diff";
+import { rangeOf, shownOn, targetKey, targetOf, threadAt } from "./comments";
+import type { CommentTarget, Editing, NumberedFile, ReviewComment, Thread } from "./comments";
+import { numberLines } from "./lines";
 import type { IndexedLine, NumberedLine } from "./lines";
 import type { LineAt, PointedLine, PointerHandlers } from "./pointed";
 import type { Review } from "./review-context";
@@ -147,4 +151,45 @@ function subscribeToNothing(): () => void {
 // nothing, for lines that can't be.
 export function subscribeToPointed(commenting?: Commenting): (listener: () => void) => () => void {
   return commenting?.pointed.subscribe ?? subscribeToNothing;
+}
+
+type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
+
+// The comments pending, by the key of the line each is on.
+type Threads = ReadonlyMap<string, readonly ReviewComment[]>;
+
+// What says whether a line of the file's diff has comments under it, or one being written, on
+// either side, as inline.
+export function commentedOn(
+  file: NumberedFile,
+  threads: Threads,
+  editing: Editing | undefined,
+): (line: NumberedLine) => boolean {
+  return (line) => threadAt(threads, editing, shownOn(file, line)) !== undefined;
+}
+
+// What's commented on under lines: the lines of the comments pending, and of the comment being
+// written under a line, if any.
+function commentedTargets(threads: Threads, editing: Editing | undefined): CommentTarget[] {
+  const pending: CommentTarget[] = [...threads.values()].flat();
+
+  return editing?.where === "line" ? [...pending, editing.target] : pending;
+}
+
+// Whether a comment pending on the file, or being written under a line of it, is on a line none of
+// the hunks of its diff has, as one on an unchanged line around them, which shows only once the diff
+// is read with every line.
+export function commentedOutside(
+  file: NumberedFile,
+  hunks: readonly Hunk[],
+  threads: Threads,
+  editing: Editing | undefined,
+): boolean {
+  const onHunks = new Set(
+    hunks.flatMap(numberLines).flatMap((line) => shownOn(file, line).map(targetKey)),
+  );
+
+  return commentedTargets(threads, editing).some(
+    (target) => target.path === file.path && !onHunks.has(targetKey(target)),
+  );
 }

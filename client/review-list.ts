@@ -1,8 +1,8 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
-import { placementOf } from "./attachment";
-import type { Unsent } from "./attachment";
+import { placedByFile } from "./attachment";
+import type { PlacedComment, Unsent } from "./attachment";
 import { rangeNumbers } from "./comments";
 import type { ReviewComment } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
@@ -37,71 +37,29 @@ export interface ListedFile {
   comments: ListedComment[];
 }
 
-// Where a comment comes in its file's list: by the diff its line is in, unstaged before staged, its
-// line's hunk and its place in the hunk, or after all of them where neither diff has the line, or
-// they aren't read.
-type Order = [number, number, number];
-
-// A comment as listed, and where it comes in its file's list.
-interface Placing {
-  listed: ListedComment;
-  order: Order;
-}
-
-const diffOrder = { unstaged: 0, staged: 1 };
-
-function placing(diffOf: DiffOf, comment: ReviewComment): Placing {
-  const placement = placementOf(comment, diffOf);
+// What the review lists of a comment: where its line is in the diff that has it, or why it isn't
+// sent.
+function listedOf({ comment, placement }: PlacedComment): ListedComment {
   const { located } = placement;
 
-  if (located === undefined) {
-    return { listed: { comment, placed: placement.unsent }, order: [2, 0, 0] };
-  }
-
-  return {
-    listed: { comment, placed: { line: located.line, diff: located.diff } },
-    order: [diffOrder[located.diff], located.index, located.at],
-  };
-}
-
-function byOrder(
-  { order: [diff, hunk, at] }: Placing,
-  { order: [otherDiff, otherHunk, otherAt] }: Placing,
-): number {
-  if (diff !== otherDiff) {
-    return diff - otherDiff;
-  }
-
-  return hunk === otherHunk ? at - otherAt : hunk - otherHunk;
-}
-
-// Each by path.
-function byPath({ path }: { path: string }, { path: other }: { path: string }): number {
-  // Stryker disable next-line EqualityOperator: no two files listed have the same path.
-  return path < other ? -1 : 1;
+  return located === undefined
+    ? { comment, placed: placement.unsent }
+    : { comment, placed: { line: located.line, diff: located.diff } };
 }
 
 // The diff of a file, as read now, if it is.
 type DiffOf = (file: CommentedFile) => Pick<Diff, "hunks"> | undefined;
 
 // The comments pending, by the file each is on, with where each one's line is in the file's diffs,
-// as read now, if they are: each file by path, and each file's comments in the order of their lines
-// in its unstaged diff and then its staged one, comments on one line in the order they were made,
-// and after them those on lines neither diff has, or whose diffs aren't read, in the order they were
-// made.
+// as read now, if they are, in the order the review sends them: each file by path, and each file's
+// comments in the order of their lines in its unstaged diff and then its staged one, comments on one
+// line in the order they were made, and after them those on lines neither diff has, or whose diffs
+// aren't read, in the order they were made.
 export function reviewList(comments: readonly ReviewComment[], diffOf: DiffOf): ListedFile[] {
-  const files = new Map<string, Placing[]>();
-
-  for (const comment of comments) {
-    files.set(comment.path, [...(files.get(comment.path) ?? []), placing(diffOf, comment)]);
-  }
-
-  return [...files.entries()]
-    .map(([path, placings]) => ({
-      path,
-      comments: placings.toSorted(byOrder).map(({ listed }) => listed),
-    }))
-    .toSorted(byPath);
+  return placedByFile(comments, diffOf).map(([path, placed]) => ({
+    path,
+    comments: placed.map(listedOf),
+  }));
 }
 
 // The file a comment's on, as a group lists it: the staged diff's in STAGED, and the unstaged

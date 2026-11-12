@@ -6,10 +6,18 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from "reac
 
 import type { diffRpc } from "../shared/diff";
 import { aboveHunks, unchangedLines } from "./lines";
-import type { Above, Unchanged } from "./lines";
+import type { Above, NumberedLine, Unchanged } from "./lines";
 import { covers, widened, windowAround } from "./rendering";
 import type { LineWindow } from "./rendering";
-import { carriedTo, openedAbove, showsAbove, showsAny, shownLines, toggledEntire } from "./runs";
+import {
+  carriedTo,
+  commentedRuns,
+  openedAbove,
+  showsAbove,
+  showsAny,
+  shownLines,
+  toggledEntire,
+} from "./runs";
 import type { ShownRuns } from "./runs";
 
 type Diff = RpcOutput<typeof diffRpc>;
@@ -99,23 +107,45 @@ export interface UnchangedShown {
   open: (hunk: number) => void;
 }
 
+// What's commented on among a diff's lines: what says whether a line has comments under it, or
+// one being written, and whether any of them is on a line outside the hunks, until it's known how
+// the review numbers the lines, or without a review, nothing.
+export interface CommentedLines {
+  commented: ((line: NumberedLine) => boolean) | undefined;
+  outside: boolean;
+}
+
+// No runs of unchanged lines, the same each time.
+const noRuns: ReadonlySet<number> = new Set();
+
 // The runs of unchanged lines around the diff's hunks that show, which the diff with every line of
 // the file is read for: none until asked for, then the run above a hunk once its bar asks, or the
-// entire file once the toggle does.
-function useUnchangedShown(diff: Diff, query: EntireQuery): UnchangedShown {
+// entire file once the toggle does, and whatever's asked, those with a line commented on, which the
+// diff's read for while a comment's on a line outside the hunks.
+function useUnchangedShown(
+  diff: Diff,
+  query: EntireQuery,
+  { commented, outside }: CommentedLines,
+): UnchangedShown {
   const runs = useShownRuns(diff.hunks);
-  const shownDiff = useEntireDiff(diff, query, showsAny(runs.shown));
+  const shownDiff = useEntireDiff(diff, query, showsAny(runs.shown) || outside);
   const whole = shownDiff !== diff;
   const [window, showAround] = useLineWindow(whole ? shownDiff.contents.length : undefined);
+  const all = useMemo(() => (whole ? unchangedLines(shownDiff) : none), [shownDiff, whole]);
+
+  const kept = useMemo(
+    () => (commented === undefined ? noRuns : commentedRuns(all, commented)),
+    [all, commented],
+  );
 
   const shownAround = useMemo(
-    () => (whole ? shownLines(unchangedLines(shownDiff), runs.shown) : none),
-    [shownDiff, whole, runs.shown],
+    () => (whole ? shownLines(all, runs.shown, kept) : none),
+    [whole, all, runs.shown, kept],
   );
 
   const above = useMemo(
-    () => aboveHunks(shownDiff.hunks, (index) => whole && showsAbove(runs.shown, index)),
-    [shownDiff.hunks, whole, runs.shown],
+    () => aboveHunks(shownDiff.hunks, (index) => whole && showsAbove(runs.shown, index, kept)),
+    [shownDiff.hunks, whole, runs.shown, kept],
   );
 
   function showAroundHunk(hunk: number): void {
@@ -143,6 +173,7 @@ function useUnchangedShown(diff: Diff, query: EntireQuery): UnchangedShown {
 interface UnchangedLinesShownProps {
   diff: Diff;
   query: EntireQuery;
+  commented: CommentedLines;
   children: (shown: UnchangedShown) => ReactElement;
 }
 
@@ -150,7 +181,8 @@ interface UnchangedLinesShownProps {
 export function UnchangedLinesShown({
   diff,
   query,
+  commented,
   children,
 }: UnchangedLinesShownProps): ReactElement {
-  return <>{children(useUnchangedShown(diff, query))}</>;
+  return <>{children(useUnchangedShown(diff, query, commented))}</>;
 }

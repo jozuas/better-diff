@@ -1,10 +1,11 @@
 import type { RpcOutput } from "@getpaseo/plugin";
+import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 
 import type { diffRpc } from "../shared/diff";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Reviewed, Unsent } from "./attachment";
-import { bodyOf, recipientsOf, reviewPrompt } from "./comments";
-import type { ListedAgent, Recipient, ReviewComment } from "./comments";
+import { bodyOf, recipientsOf, reviewPrompt, templateOf } from "./comments";
+import type { AgentState, ListedAgent, NewAgent, Recipient, ReviewComment } from "./comments";
 import { fileKey } from "./numbering";
 import type { CommentedFile } from "./numbering";
 
@@ -36,33 +37,118 @@ async function listedAll<Entry>(
     : entries;
 }
 
-// What sending feedback reaches the daemon with: a page of the host's agents, a file's diff, and an
-// agent the review is sent to, which interrupts nothing it's doing.
+// What sending feedback reaches the daemon with: a page of the host's agents, a file's diff, an
+// agent the review is sent to, which interrupts nothing it's doing, and a new agent in the workspace
+// started as the template says, which is sent it first.
 export interface FeedbackServer {
   listAgents: (cursor: string | undefined) => Promise<Page<ListedAgent>>;
   readDiff: (file: CommentedFile) => Promise<Diff>;
   send: (agent: string, prompt: string, attachment: ReviewAttachment) => Promise<void>;
+  start: (template: NewAgent, prompt: string, attachment: ReviewAttachment) => Promise<void>;
 }
 
-// The agents in the workspace that feedback can be sent to, of all the host lists.
-export async function agentsIn(server: FeedbackServer, workspace: string): Promise<Recipient[]> {
+// The agents in the workspace that feedback can be sent to, and what a new agent it's sent to starts
+// as, if one can be started, of all the host lists.
+export interface Agents {
+  recipients: Recipient[];
+  template: NewAgent | undefined;
+}
+
+export async function agentsIn(server: FeedbackServer, workspace: string): Promise<Agents> {
   const listed = await listedAll(server.listAgents);
 
-  return recipientsOf(listed, workspace);
+  return { recipients: recipientsOf(listed, workspace), template: templateOf(listed, workspace) };
 }
 
-// The menu of the agents feedback can be sent to, in sections: those not at work first, and then
-// those taking a turn, which it would go to the middle of, each in the order listed.
-export function agentSections(recipients: readonly Recipient[]): [Recipient[], Recipient[]] {
+// Whether there's an agent to send feedback to, once they're listed: one in the workspace, or a new
+// one.
+export function canSendTo(agents?: Agents): agents is Agents {
+  return agents !== undefined && (agents.recipients.length > 0 || agents.template !== undefined);
+}
+
+// Where feedback goes: to an agent in the workspace, or to a new one, started as the template says.
+export type Destination = { agent: Recipient } | { template: NewAgent };
+
+// What the menu of agents says of a new agent after "New agent": its provider and model, as Paseo
+// writes them.
+export function newAgentLabel({ provider, model }: NewAgent): string {
+  return `${provider}/${model}`;
+}
+
+type Paseo = PluginCommandCapabilities["paseo"];
+
+// What a new agent in a workspace is started as.
+type AgentConfig = Parameters<
+  ReturnType<Paseo["workspaces"]["ref"]>["agents"]["create"]
+>[0]["config"];
+
+// What a new agent feedback's sent to is started with: its provider and model, as Paseo writes them,
+// and its mode and thinking option, where they aren't the provider's own.
+export function configOf(template: NewAgent): AgentConfig {
+  const config: AgentConfig = { provider: newAgentLabel(template) };
+
+  if (template.mode !== null) {
+    config.modeId = template.mode;
+  }
+
+  if (template.thinking !== null) {
+    config.thinkingOptionId = template.thinking;
+  }
+
+  return config;
+}
+
+// Whether the agent's taking a turn, which feedback would go to the middle of.
+function atWork({ state }: Recipient): boolean {
+  return state === "working" || state === "permission";
+}
+
+// The menu of the agents feedback can be sent to, in sections: those not at work first, then those
+// taking a turn, which it would go to the middle of, and last those it can't be sent to, as their
+// providers are unavailable, each in the order listed.
+export function agentSections(
+  recipients: readonly Recipient[],
+): [Recipient[], Recipient[], Recipient[]] {
+  const available = recipients.filter(({ state }) => state !== "unavailable");
+
   return [
-    recipients.filter(({ working }) => !working),
-    recipients.filter(({ working }) => working),
+    available.filter((recipient) => !atWork(recipient)),
+    available.filter(atWork),
+    recipients.filter(({ state }) => state === "unavailable"),
   ];
 }
 
-// What the menu of agents says of one after what it's called: that it's at work, while it is.
-export function agentState({ working }: Recipient): string | undefined {
-  return working ? "Working" : undefined;
+const minute = 60 * 1000;
+const hour = 60 * minute;
+const day = 24 * hour;
+
+// How long ago something was, `elapsed` milliseconds ago: under a minute as just now, and else in
+// whole minutes, hours or days.
+function agoLabel(elapsed: number): string {
+  if (elapsed < minute) {
+    return "Just now";
+  }
+
+  if (elapsed < hour) {
+    return `${String(Math.floor(elapsed / minute))}m ago`;
+  }
+
+  return elapsed < day
+    ? `${String(Math.floor(elapsed / hour))}h ago`
+    : `${String(Math.floor(elapsed / day))}d ago`;
+}
+
+const stateLabels: Record<Exclude<AgentState, "idle">, string> = {
+  working: "Working",
+  permission: "Needs permission",
+  error: "Error",
+  unavailable: "Unavailable",
+};
+
+// What the menu of agents says of one after what it's called, at the time `now`, in milliseconds
+// since 1970: what it's doing, unless it's doing nothing, and then how long ago it was last active.
+export function agentState({ state, active }: Recipient, now: number): string {
+  return state === "idle" ? agoLabel(now - active) : stateLabels[state];
 }
 
 // Sends an agent the comments the review sends, by the diffs of their files as read now, with the
@@ -123,14 +209,14 @@ export interface Told {
   sent: readonly ReviewComment[];
 }
 
-// Sends the comments to the agent, asking it what the message says, or what Paseo's own diff asks
-// where it says nothing, and says what came of it: who they were sent to, or that nothing was, and
-// how many weren't, and why.
+// Sends the comments to the agent, or a new one, asking it what the message says, or what Paseo's own
+// diff asks where it says nothing, and says what came of it: who they were sent to, or that nothing
+// was, and how many weren't, and why.
 export async function feedbackTo(
   server: FeedbackServer,
   directory: string,
   comments: readonly ReviewComment[],
-  { id, label }: Recipient,
+  to: Destination,
   message: string,
 ): Promise<Told> {
   const prompt = bodyOf(message) ?? reviewPrompt;
@@ -141,10 +227,13 @@ export async function feedbackTo(
       comments,
       server.readDiff,
       async (review) => {
-        await server.send(id, prompt, review);
+        await ("agent" in to
+          ? server.send(to.agent.id, prompt, review)
+          : server.start(to.template, prompt, review));
       },
     );
 
+    const label = "agent" in to ? to.agent.label : "a new agent";
     const said = sent.length === 0 ? "Nothing was sent." : `Feedback sent to ${label}.`;
 
     return {
@@ -166,15 +255,16 @@ export function messageAfter({ sent }: Told, sentWith: string, message: string):
 }
 
 // What the review says of the agents feedback can be sent to, while it can't be sent to one: that
-// they're being listed, that they couldn't be, or that the workspace has none.
+// they're being listed, that they couldn't be, or that the workspace has none, and none can be
+// started, as the host has none to start one like.
 export function agentsNotice({
   pending,
   error,
-  recipients,
+  agents,
 }: {
   pending: boolean;
   error: Error | null;
-  recipients: readonly Recipient[];
+  agents: Agents | undefined;
 }): string | undefined {
   if (pending) {
     return "Finding the workspace's agents…";
@@ -184,9 +274,7 @@ export function agentsNotice({
     return `Couldn't list the workspace's agents: ${error.message}`;
   }
 
-  return recipients.length === 0
-    ? "Start an agent in this workspace to send it feedback."
-    : undefined;
+  return canSendTo(agents) ? undefined : "Start an agent in this workspace to send it feedback.";
 }
 
 // What the button that opens the review says: how many comments are pending.

@@ -14,6 +14,7 @@ import { View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { barRequests } from "./bar-requests";
+import { commentedOn, commentedOutside } from "./commenting";
 import type { NumberedFile } from "./comments";
 import { useFindableLines } from "./find-page";
 import { groups } from "./groups";
@@ -30,7 +31,7 @@ import type { LineRange } from "./selection";
 import { SelectionBarLayer } from "./selection-bar";
 import { useFocus } from "./text-selection";
 import { UnchangedLinesShown } from "./unchanged-shown";
-import type { EntireQuery, UnchangedShown } from "./unchanged-shown";
+import type { CommentedLines, EntireQuery, UnchangedShown } from "./unchanged-shown";
 import {
   KeptPlaceContext,
   rectOf,
@@ -308,6 +309,7 @@ function HunksShown({
       key="before"
       lines={unchanged.before}
       path={file.path}
+      file={commented}
       view={view}
       fileIndex={fileIndex}
       requests={requests}
@@ -336,10 +338,34 @@ function HunksShown({
   );
 }
 
-// The diff's hunks, with those of the unchanged lines around them that show.
+// Nothing commented on, as while lines can't be.
+const uncommented: CommentedLines = { commented: undefined, outside: false };
+
+// What's commented on among the diff's lines, while they can be commented on.
+function useCommentedLines(diff: Diff, file: NumberedFile | undefined): CommentedLines {
+  const review = useContext(ReviewContext);
+  const threads = review?.threads;
+  const editing = review?.editing;
+
+  return useMemo(
+    () =>
+      file === undefined || threads === undefined
+        ? uncommented
+        : {
+            commented: commentedOn(file, threads, editing),
+            outside: commentedOutside(file, diff.hunks, threads, editing),
+          },
+    [diff.hunks, file, threads, editing],
+  );
+}
+
+// The diff's hunks, with those of the unchanged lines around them that show, and those with a line
+// commented on, whether or not they're asked to show.
 export function Hunks(props: HunksProps): ReactElement {
+  const commented = useCommentedLines(props.diff, useNumbered(props.file));
+
   return (
-    <UnchangedLinesShown diff={props.diff} query={props.entireQuery}>
+    <UnchangedLinesShown diff={props.diff} query={props.entireQuery} commented={commented}>
       {(shown) => <HunksShown {...props} shown={shown} />}
     </UnchangedLinesShown>
   );

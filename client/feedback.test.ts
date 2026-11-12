@@ -6,13 +6,9 @@ import type { diffRpc } from "../shared/diff";
 import { diffHunks, reviewComments } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
-import type { ListedAgent, ReviewComment } from "./comments";
+import type { ListedAgent, NewAgent, Recipient, ReviewComment } from "./comments";
 import {
-  agentSections,
-  agentState,
   agentsIn,
-  agentsNotice,
-  agentsPage,
   discardLabel,
   feedbackTo,
   messageAfter,
@@ -39,12 +35,13 @@ const lastPage = fc.constantFrom<LastPage>(
   { hasMore: true, nextCursor: null },
 );
 
-// What the daemon was asked: for each page of agents, by its cursor, for each file's diff, and to
-// send each agent a message.
+// What the daemon was asked: for each page of agents, by its cursor, for each file's diff, to send
+// each agent a message, and to start each new agent with one.
 interface Asked {
   pages: (string | undefined)[];
   reads: string[];
   sends: [string, string, ReviewAttachment][];
+  starts: [NewAgent, string, ReviewAttachment][];
 }
 
 function keyOf({ diff, path }: CommentedFile): string {
@@ -97,16 +94,32 @@ function server({ pages, last, diffs, send }: Daemon, asked: Asked): FeedbackSer
       asked.sends.push([agent, prompt, review]);
       await send?.(agent, prompt, review);
     },
+    start: async (template, prompt, review) => {
+      asked.starts.push([template, prompt, review]);
+      await Promise.resolve();
+    },
   };
 }
 
 function asking(): Asked {
-  return { pages: [], reads: [], sends: [] };
+  return { pages: [], reads: [], sends: [], starts: [] };
 }
+
+const updatedAt = "2026-11-12T10:00:00Z";
 
 function agentIn(workspace: string, id: string): ListedAgent {
   return {
-    agent: { id, provider: "claude", title: `Agent ${id}`, workspaceId: workspace, status: "idle" },
+    agent: {
+      id,
+      provider: "claude",
+      title: `Agent ${id}`,
+      workspaceId: workspace,
+      status: "idle",
+      updatedAt,
+      pendingPermissions: [],
+      model: id,
+      currentModeId: null,
+    },
   };
 }
 
@@ -156,55 +169,47 @@ const comment: ReviewComment = {
   body: "Why?",
 };
 
-const reviewer = { id: "a", label: "Reviewer", working: false };
+const reviewer: Recipient = { id: "a", label: "Reviewer", state: "idle", active: 0 };
 
-test("the workspace's agents are listed a page at a time, in order, until a page says it's the last", async () => {
+// The agents of the pages in the workspace "w".
+function inW(pages: readonly ListedAgent[][]): ListedAgent["agent"][] {
+  return pages.flatMap((page) =>
+    page.flatMap(({ agent }) => (agent.workspaceId === "w" ? [agent] : [])),
+  );
+}
+
+// What a new agent starts as, by the agents of the pages, each of whose model is its ID: as the one
+// last active in "w", or else on the host, or nothing where there's none.
+function likeLast(pages: readonly ListedAgent[][]): NewAgent | undefined {
+  const like = inW(pages)[0] ?? pages.flat()[0]?.agent;
+
+  return like === undefined
+    ? undefined
+    : { provider: "claude", model: like.id, mode: null, thinking: null };
+}
+
+test("the workspace's agents are listed a page at a time, in order, until a page says it's the last, with what a new agent starts as", async () => {
   await fc.assert(
     fc.asyncProperty(agentPages, lastPage, async (pages, last) => {
       const asked = asking();
       const agents = await agentsIn(server({ pages, last, diffs: everyDiff }, asked), "w");
+      const inWorkspace = inW(pages);
 
-      expect(agents).toStrictEqual(
-        pages
-          .flat()
-          .filter(({ agent }) => agent.workspaceId === "w")
-          .map(({ agent }) => ({ id: agent.id, label: agent.title, working: false })),
-      );
+      expect(agents).toStrictEqual({
+        recipients: inWorkspace.map(({ id, title }) => ({
+          id,
+          label: title,
+          state: "idle",
+          active: Date.parse(updatedAt),
+        })),
+        template: likeLast(pages),
+      });
       expect(asked.pages).toStrictEqual([
         undefined,
         ...pages.slice(1).map((_, at) => String(at + 1)),
       ]);
     }),
   );
-});
-
-// Agents feedback can be sent to, each with an ID of its own, at work or not.
-const recipients = fc.uniqueArray(
-  fc.record({
-    id: fc.string({ unit: "binary" }),
-    label: fc.string({ unit: "binary" }),
-    working: fc.boolean(),
-  }),
-  { selector: ({ id }) => id },
-);
-
-test("the menu of agents has those not at work first, and then those at work, each in the order listed", () => {
-  fc.assert(
-    fc.property(recipients, (listed) => {
-      const [idle, working] = agentSections(listed);
-
-      expect([...idle, ...working]).toStrictEqual(
-        listed.toSorted((one, other) => Number(one.working) - Number(other.working)),
-      );
-      expect(idle.some((agent) => agent.working)).toBe(false);
-      expect(working.every((agent) => agent.working)).toBe(true);
-    }),
-  );
-});
-
-test("the menu of agents says an agent's working while it's taking a turn", () => {
-  expect(agentState({ ...reviewer, working: true })).toBe("Working");
-  expect(agentState(reviewer)).toBeUndefined();
 });
 
 // What sending the review says, but how: the comments sent, if any, which no longer pend.
@@ -247,7 +252,15 @@ test("comments are sent with the message, or what Paseo's own diff asks, on the 
       async (comments, diffs, [message, prompt]) => {
         const asked = asking();
         const daemon = server({ pages: [], last: lastPageOf(), diffs }, asked);
-        const result = await feedbackTo(daemon, "/repository", comments, reviewer, message);
+
+        const result = await feedbackTo(
+          daemon,
+          "/repository",
+          comments,
+          { agent: reviewer },
+          message,
+        );
+
         const review = reviewOf("/repository", comments, diffIn(diffs));
 
         expect(result).toMatchObject(toldOf(review));
@@ -266,7 +279,7 @@ async function told(
   diffs: Diffs = everyDiff,
 ): Promise<Told> {
   const daemon = server({ pages: [], last: lastPageOf(), diffs, send }, asking());
-  const sent = await feedbackTo(daemon, "/repository", comments, reviewer, "");
+  const sent = await feedbackTo(daemon, "/repository", comments, { agent: reviewer }, "");
 
   return sent;
 }
@@ -333,24 +346,6 @@ test("the message is empty again once comments have been sent with it, unless it
   expect(messageAfter(sent, "Fix these.", "Fix these.")).toBe("");
   expect(messageAfter(sent, "Fix these.", "Fix these, and test.")).toBe("Fix these, and test.");
   expect(messageAfter(none, "Fix these.", "Fix these.")).toBe("Fix these.");
-});
-
-test("while feedback can't be sent to an agent, the review says why", () => {
-  const agents = { pending: false, error: null, recipients: [reviewer] };
-
-  expect(agentsNotice(agents)).toBeUndefined();
-  expect(agentsNotice({ ...agents, pending: true })).toBe("Finding the workspace's agents…");
-  expect(agentsNotice({ ...agents, error: new Error("Disconnected.") })).toBe(
-    "Couldn't list the workspace's agents: Disconnected.",
-  );
-  expect(agentsNotice({ ...agents, recipients: [] })).toBe(
-    "Start an agent in this workspace to send it feedback.",
-  );
-});
-
-test("the daemon is asked for agents a page of 200 at a time, from the cursor, if there's one", () => {
-  expect(agentsPage()).toStrictEqual({ limit: 200 });
-  expect(agentsPage("next")).toStrictEqual({ limit: 200, cursor: "next" });
 });
 
 test("the buttons say how many comments are pending, whether they're being sent, and ask once Discard is pressed", () => {

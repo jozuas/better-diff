@@ -178,18 +178,21 @@ interface UnchangedLinesProps {
   focus: Focus | undefined;
   // The lines of the file's new version to render, while the view renders them a step at a time.
   window?: LineWindow | undefined;
+  // Undefined while they can't be commented on, as until it's known how the review numbers them.
+  commenting: Commenting | undefined;
   style?: StyleProp<ViewStyle>;
   theme: PluginTheme;
 }
 
-// Lines of the file outside its hunks, if there are any. A selection can copy them, but leaves
-// them out of the lines it selects.
+// Lines of the file outside its hunks, if there are any, which can be commented on. A selection can
+// copy them, but leaves them out of the lines it selects.
 function LinesOutsideHunks({
   lines,
   container,
   section,
   focus,
   window,
+  commenting,
   style,
   theme,
 }: UnchangedLinesProps): ReactElement | null {
@@ -218,6 +221,7 @@ function LinesOutsideHunks({
         found={found}
         partners={unpaired}
         window={window}
+        commenting={commenting}
         styles={styles}
         theme={theme}
       />

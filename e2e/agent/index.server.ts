@@ -1,4 +1,5 @@
 import { appendFileSync } from "node:fs";
+import { join } from "node:path";
 
 import type { PluginCleanup } from "@getpaseo/plugin";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
@@ -11,9 +12,19 @@ import type {
 // The environment variable that names the file an agent notes what it's sent in.
 export const promptsVariable = "BETTER_DIFF_PROMPTS";
 
+// The file in the git directory of the repository an agent works in where it notes what it's sent,
+// if it's started without the variable, as one Better Diff starts is.
+export const startedPrompts = "better-diff-test-agent.jsonl";
+
 // What an agent's asked to take a turn that doesn't end, as an agent at work is taking, rather than
 // one that ends at once.
 export const workPrompt = "Work";
+
+// What an agent's asked to take a turn that doesn't end, waiting for permission to run a command.
+export const askPrompt = "Ask";
+
+// What an agent's asked to take a turn that fails at once.
+export const failPrompt = "Fail";
 
 type Emit = (event: ProviderEvent) => void;
 
@@ -22,16 +33,19 @@ type Input<Type extends ProviderInput["type"]> = Extract<ProviderInput, { type: 
 // What's known of each open session, by its ID: where it notes what it's sent, and the turn it's
 // taking while it's at work.
 interface Sessions {
-  notes: Map<string, string | undefined>;
+  notes: Map<string, string>;
   working: Map<string, string>;
 }
 
-const capabilities = ["prompt.message", "prompt.steer"];
+const capabilities = ["prompt.message", "prompt.steer", "permission"];
 
 let turns = 0;
 
 function open(input: Input<"session.open">, emit: Emit, { notes }: Sessions): void {
-  notes.set(input.sessionId, input.config.env[promptsVariable]);
+  notes.set(
+    input.sessionId,
+    input.config.env[promptsVariable] ?? join(input.config.cwd, ".git", startedPrompts),
+  );
   emit({
     type: "session.opened",
     requestId: input.requestId,
@@ -43,11 +57,11 @@ function open(input: Input<"session.open">, emit: Emit, { notes }: Sessions): vo
   emit({ type: "session.ready", requestId: input.requestId, sessionId: input.sessionId });
 }
 
-// Whether the prompt asks for a turn that doesn't end.
-function asksToWork({ input }: Input<"session.prompt">["prompt"]): boolean {
+// Whether the prompt says the text, as asking for a turn of another kind does.
+function says({ input }: Input<"session.prompt">["prompt"], text: string): boolean {
   return (
     input.type === "message" &&
-    input.content.some((part) => part.type === "text" && part.text === workPrompt)
+    input.content.some((part) => part.type === "text" && part.text === text)
   );
 }
 
@@ -68,8 +82,54 @@ function steeredInto(
   return sent.delivery === "steer" ? working.get(sessionId) : undefined;
 }
 
+// How a turn goes on once it's started, by what its prompt asked for: it fails at once, waits for
+// permission to run a command, works without end, or else ends at once. Gives whether the session's
+// then at work on the turn.
+type Turn = (sessionId: string, turnId: string, emit: Emit) => boolean;
+
+function fail(sessionId: string, turnId: string, emit: Emit): boolean {
+  emit({ type: "session.turn", sessionId, turnId, state: "failed", error: { message: "Failed." } });
+
+  return false;
+}
+
+function ask(sessionId: string, turnId: string, emit: Emit): boolean {
+  emit({
+    type: "session.permission",
+    sessionId,
+    request: { id: `${turnId} permission`, name: "Bash", kind: "tool", title: "Run a command" },
+  });
+
+  return true;
+}
+
+function work(): boolean {
+  return true;
+}
+
+function end(sessionId: string, turnId: string, emit: Emit): boolean {
+  emit({
+    type: "timeline.item",
+    sessionId,
+    item: { type: "assistant_message", id: `${turnId} reply`, text: "Read." },
+  });
+  emit({ type: "session.turn", sessionId, turnId, state: "completed" });
+
+  return false;
+}
+
+const turnsAsked: readonly (readonly [string, Turn])[] = [
+  [failPrompt, fail],
+  [askPrompt, ask],
+  [workPrompt, work],
+];
+
+function turnOf(sent: Input<"session.prompt">["prompt"]): Turn {
+  return turnsAsked.find(([text]) => says(sent, text))?.[1] ?? end;
+}
+
 // Notes what the prompt says. Takes it into the turn the session's at work on, if it's steered
-// there, and else ends its turn at once, unless it asks for one that doesn't end.
+// there, and else starts a turn, which goes on as the prompt asks.
 function prompt(input: Input<"session.prompt">, emit: Emit, sessions: Sessions) {
   const { sessionId, prompt: sent } = input;
   const steered = steeredInto(input, sessions);
@@ -97,18 +157,9 @@ function prompt(input: Input<"session.prompt">, emit: Emit, sessions: Sessions) 
   });
   emit({ type: "session.turn", sessionId, turnId, state: "started" });
 
-  if (asksToWork(sent)) {
+  if (turnOf(sent)(sessionId, turnId, emit)) {
     sessions.working.set(sessionId, turnId);
-
-    return;
   }
-
-  emit({
-    type: "timeline.item",
-    sessionId,
-    item: { type: "assistant_message", id: `${turnId} reply`, text: "Read." },
-  });
-  emit({ type: "session.turn", sessionId, turnId, state: "completed" });
 }
 
 // What a request that isn't for a session to open or a prompt is answered with, by its type: no

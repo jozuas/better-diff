@@ -4,8 +4,8 @@ import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
 import { partlyStaged, restaged } from "../test/comments";
-import { placementOf, reviewOf } from "./attachment";
-import type { Placement } from "./attachment";
+import { placedByFile, reviewOf } from "./attachment";
+import type { PlacedComment } from "./attachment";
 import { shownOn, targetOf } from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import { numberLines } from "./lines";
@@ -271,8 +271,11 @@ function expectedOn(line: NumberedLine, way: Side | undefined, { head, worktree 
 
 // The lines the review sends a comment with whose numbers aren't those of the lines of HEAD and the
 // worktree that say what they say.
-function misnumbered(placement: Placement, { head, worktree }: Versions): unknown[] {
-  const lines = "sent" in placement ? placement.sent.context.lines : [];
+function misnumbered(
+  placement: PlacedComment["placement"] | undefined,
+  { head, worktree }: Versions,
+): unknown[] {
+  const lines = placement !== undefined && "sent" in placement ? placement.sent.context.lines : [];
 
   return lines.filter(
     ({ oldLineNumber, newLineNumber, content }) =>
@@ -294,6 +297,11 @@ function comment(target: CommentTarget): ReviewComment {
   return { ...target, id: 1, body: "" };
 }
 
+// Where the review places a comment on the target among the diffs.
+function placementIn(target: CommentTarget, diffs: Diffs): PlacedComment["placement"] | undefined {
+  return placedByFile([comment(target)], ({ diff }) => diffs[diff])[0]?.[1][0]?.placement;
+}
+
 test("a comment on a partly staged file is on the line of HEAD or the worktree that its line is, unless neither has it, and is sent there, with the lines around it numbered so", () => {
   fc.assert(
     fc.property(partlyStaged, ({ versions, diffs }) => {
@@ -306,7 +314,7 @@ test("a comment on a partly staged file is on the line of HEAD or the worktree t
       expect(made.map(({ target }) => target)).toStrictEqual(made.map(({ expected }) => expected));
 
       for (const { line, target } of commentedLines(diffs)) {
-        const placement = placementOf(comment(target), ({ diff }) => diffs[diff]);
+        const placement = placementIn(target, diffs);
 
         expect(placement).toMatchObject({
           located: { line: { text: line.text } },
@@ -353,9 +361,7 @@ test("a comment stays on its line as the file's index changes, as its hunks are 
 
         expect(shown.map(({ line: each }) => each.text)).toStrictEqual(shown.map(() => line.text));
         expect(shown.filter(({ way }) => way === undefined)).toStrictEqual(same);
-        expect(placementOf(comment(target), ({ diff }) => after.diffs[diff])).toMatchObject(
-          placedAmong(same, line, target),
-        );
+        expect(placementIn(target, after.diffs)).toMatchObject(placedAmong(same, line, target));
       }
     }),
   );

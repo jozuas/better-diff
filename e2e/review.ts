@@ -65,11 +65,18 @@ export function agentMenu(page: Page): Locator {
   return page.getByRole("menu", { name: "Choose an agent", exact: true });
 }
 
-// Sends the review to the agent with the name, chosen from the menu Send feedback opens, once the
+// The item of the menu of agents for the agent with the title, whatever it says the agent's doing.
+export function agentItem(page: Page, agent: string): Locator {
+  return agentMenu(page)
+    .getByRole("menuitem")
+    .filter({ has: page.getByText(agent, { exact: true }) });
+}
+
+// Sends the review to the agent with the title, chosen from the menu Send feedback opens, once the
 // review has found the workspace's agents.
 export async function sendTo(page: Page, opened: Locator, agent: string): Promise<void> {
   await sendButton(opened).click();
-  await agentMenu(page).getByRole("menuitem", { name: agent, exact: true }).click();
+  await agentItem(page, agent).click();
 }
 
 export function messageBox(scope: Locator): Locator {
