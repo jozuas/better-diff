@@ -124,8 +124,10 @@ function useBarStyles(theme: PluginTheme) {
           height: 1,
           backgroundColor: theme.colors.border,
         },
-        // Between the toggle and the hunk's actions, centred.
-        middle: { flex: 1, alignItems: "center" },
+        // Either side of the middle, as wide as each other, so the middle is in the bar's middle
+        // whatever is on them, until one needs more room than that and takes it from the other.
+        side: { flex: 1, flexDirection: "row", minWidth: "auto" },
+        end: { justifyContent: "flex-end" },
         // Over the line, which stops either side of what's on it while that shows.
         toggle: { paddingRight: 6 },
         actions: { flexDirection: "row", gap: 6, paddingLeft: 6 },
@@ -171,13 +173,15 @@ export function HunkBarContent({
   return (
     <>
       {separates ? <View role="separator" style={styles.line} /> : null}
-      <View style={[styles.toggle, masked]}>
-        <EntireFileToggle entire={entire} onPress={onToggle} hidden={!revealed} theme={theme} />
+      <View style={styles.side}>
+        <View style={[styles.toggle, masked]}>
+          <EntireFileToggle entire={entire} onPress={onToggle} hidden={!revealed} theme={theme} />
+        </View>
       </View>
-      <View style={styles.middle}>
-        <UnchangedLines count={leftOut} onPress={onOpen} theme={theme} />
+      <UnchangedLines count={leftOut} onPress={onOpen} theme={theme} />
+      <View style={[styles.side, styles.end]}>
+        <View style={[styles.actions, masked]}>{children}</View>
       </View>
-      <View style={[styles.actions, masked]}>{children}</View>
     </>
   );
 }

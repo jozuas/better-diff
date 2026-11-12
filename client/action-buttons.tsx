@@ -99,7 +99,11 @@ function ActionButton({
                 pressed={pressed}
                 filled={!armed}
               />
-              <Text selectable={false} style={[styles.text, { color: styles.labels[look] }]}>
+              <Text
+                selectable={false}
+                numberOfLines={1}
+                style={[styles.text, { color: styles.labels[look] }]}
+              >
                 {text}
               </Text>
             </View>

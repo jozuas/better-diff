@@ -148,6 +148,34 @@ test("while the unchanged lines before a hunk, after the hunk before it, are lef
   expect(after.y).toBe(before.y);
 });
 
+test("how many unchanged lines are left out before a hunk is in the middle of its bar, and in a narrow panel clear of what's either side of it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeLines(repository, [100]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  const count = countOn(page, 1, 96);
+  const bar = await box(hunkBar(page, "a.txt"));
+  const shown = await box(count);
+
+  expect(Math.abs(shown.x + shown.width / 2 - (bar.x + bar.width / 2))).toBeLessThanOrEqual(1);
+
+  await page.setViewportSize({ width: 1000, height: 720 });
+  await line(page, "a 100 changed").hover();
+  await expect(button(page, "Discard Hunk")).toHaveCSS("opacity", "1");
+
+  const narrow = await box(count);
+  const toggle = await box(button(page, "Show entire file"));
+  const actions = await box(button(page, "Discard Hunk"));
+
+  expect(toggle.x + toggle.width).toBeLessThanOrEqual(narrow.x);
+  expect(narrow.x + narrow.width).toBeLessThanOrEqual(actions.x);
+});
+
 test('"Show entire file" shows every unchanged line, though some already show, and "Show only modified hunks" then none of them', async ({
   app,
   page,
