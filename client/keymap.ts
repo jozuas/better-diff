@@ -42,6 +42,7 @@ const shiftUp = { ...up, shift: true } as const;
 const shiftEnter = { ...enter, shift: true } as const;
 const shiftBackspace = { ...backspace, shift: true } as const;
 const more = { key: "e" } as const;
+const moreFile = { ...more, shift: true } as const;
 const find = { key: "f", primary: true } as const;
 const findNext = { key: "g", primary: true, mac: true } as const;
 const findPrevious = { ...findNext, shift: true } as const;
@@ -85,6 +86,7 @@ const bindings = [
   { place: "bar", command: "stageFile", chords: [shiftEnter] },
   { place: "bar", command: "discardFile", chords: [shiftBackspace] },
   { place: "bar", command: "more", chords: [more] },
+  { place: "bar", command: "moreFile", chords: [moreFile] },
   { place: "lines", command: "down", chords: [down] },
   { place: "lines", command: "up", chords: [up] },
   { place: "lines", command: "extendDown", chords: [shiftDown] },
@@ -97,6 +99,7 @@ const bindings = [
   { place: "lines", command: "discardFile", chords: [shiftBackspace] },
   { place: "lines", command: "leave", chords: [escape] },
   { place: "lines", command: "more", chords: [more] },
+  { place: "lines", command: "moreFile", chords: [moreFile] },
   { place: "menu", command: "down", chords: [down] },
   { place: "menu", command: "up", chords: [up] },
   { place: "panel", command: "filter", chords: [{ key: "/" }] },
@@ -135,6 +138,7 @@ const once: ReadonlySet<Command | undefined> = new Set<Command | undefined>([
   "discardFile",
   "menu",
   "more",
+  "moreFile",
 ]);
 
 // Whether the key types letters, none of them Latin, as a key of a Cyrillic keyboard does.

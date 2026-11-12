@@ -114,3 +114,34 @@ test("the unchanged lines around a line commented on show, though they aren't as
   await expect(threeLeftOut(page)).toBeHidden();
   await expect(line(page, "a 96")).toBeHidden();
 });
+
+test("nothing hides a run of unchanged lines with a line commented on: its hunk's bar has nothing in its middle that does, and E doesn't", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeLines(repository, [100, 110]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await threeLeftOut(page).click();
+  await comment(page, "a 105", "Keep this");
+  await line(page, "a 110 changed").hover();
+
+  await expect(page.getByRole("button", { name: "Discard Hunk" }).last()).toHaveCSS("opacity", "1");
+  await expect(
+    hunkBar(page, "a.txt", 2).getByRole("button", { name: /unchanged lines?$/u }),
+  ).toHaveCount(0);
+
+  await hunkBar(page, "a.txt", 2).focus();
+  await page.keyboard.press("e");
+  await page.keyboard.press("Shift+E");
+
+  await expect(line(page, "a 200")).toBeVisible();
+
+  await page.keyboard.press("Shift+E");
+
+  await expect(line(page, "a 200")).toBeHidden();
+  await expect(line(page, "a 105")).toBeVisible();
+  await expect(line(page, "a 104")).toBeVisible();
+});

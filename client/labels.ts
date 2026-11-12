@@ -1,6 +1,7 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
+import type { RunShown } from "./lines";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -38,7 +39,24 @@ export function labelOf({
   return labels[kind];
 }
 
-// What a hunk's bar says of the unchanged lines the diff leaves out before the hunk.
-export function unchangedLabel(count: number): string {
-  return count === 1 ? "1 unchanged line" : `${count} unchanged lines`;
+// What a hunk's bar says of the unchanged lines before the hunk: how many the diff leaves out, or
+// while they show, that it hides them.
+function unchangedLabel(count: number, shown: boolean): string {
+  const lines = count === 1 ? "1 unchanged line" : `${count} unchanged lines`;
+
+  return shown ? `Hide ${lines}` : lines;
+}
+
+// What the middle of a hunk's bar shows of the `count` unchanged lines before the hunk: how many the
+// diff leaves out, which shows them, or while they're open, what hides them. Nothing while there
+// are none, or a comment on one of them keeps them shown.
+export function unchangedButton(
+  count: number,
+  shown: RunShown,
+): { label: string; hides: boolean } | undefined {
+  if (count === 0 || shown === "kept") {
+    return undefined;
+  }
+
+  return { label: unchangedLabel(count, shown === "open"), hides: shown === "open" };
 }

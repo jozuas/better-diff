@@ -1,7 +1,7 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
-import type { NumberedLine, Unchanged } from "./lines";
+import type { NumberedLine, RunShown, Unchanged } from "./lines";
 
 type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
 
@@ -65,6 +65,18 @@ export function openedAbove(shown: ShownRuns, index: number): ShownRuns {
   };
 }
 
+// Hides the run above the hunk at the index. While the entire file shows, the runs above the other
+// hunks stay shown, but not the lines after the last hunk, which show only with the entire file.
+export function closedAbove(shown: ShownRuns, index: number): ShownRuns {
+  return {
+    entire: false,
+    runs: shown.runs.map((run, at) => ({
+      ...run,
+      open: at !== index && (shown.entire || run.open),
+    })),
+  };
+}
+
 // Shows the entire file, or while it shows, none of the unchanged lines.
 export function toggledEntire(shown: ShownRuns): ShownRuns {
   return {
@@ -73,18 +85,43 @@ export function toggledEntire(shown: ShownRuns): ShownRuns {
   };
 }
 
+// What showing or hiding a run of unchanged lines does, by how it shows: shows it while it's hidden,
+// and hides it while it's open, but not while a comment keeps it shown.
+const actions = { hidden: "open", open: "close", kept: undefined } as const;
+
+// What showing or hiding the run of `unchanged` lines above a hunk does, by how it shows, and
+// nothing where there's none.
+export function unchangedAction(unchanged: number, shown: RunShown): "open" | "close" | undefined {
+  return unchanged === 0 ? undefined : actions[shown];
+}
+
 // None of the runs of unchanged lines.
 const noRuns: ReadonlySet<number> = new Set();
 
 // Whether the run of unchanged lines above the hunk at the index shows: while it's open, or the
 // entire file shows, or it's one of those commented on, by index, the run before the first hunk at
 // 0, and the one after the hunk at an index at the next.
-export function showsAbove(
+function showsAbove(
   shown: ShownRuns,
   index: number,
   commented: ReadonlySet<number> = noRuns,
 ): boolean {
   return shown.entire || shown.runs[index]?.open === true || commented.has(index);
+}
+
+// How the run of unchanged lines above the hunk at the index shows, of the runs `commented` says
+// have a line commented on: kept shown by the comment, open, as while the entire file shows, or
+// hidden.
+export function runShown(
+  shown: ShownRuns,
+  index: number,
+  commented: ReadonlySet<number>,
+): RunShown {
+  if (commented.has(index)) {
+    return "kept";
+  }
+
+  return showsAbove(shown, index) ? "open" : "hidden";
 }
 
 // Whether any of the file's unchanged lines show.
@@ -99,6 +136,11 @@ const noLines: NumberedLine[] = [];
 // The run's lines, if they show.
 function runIfShown(lines: NumberedLine[], shown: boolean): NumberedLine[] {
   return shown ? lines : noLines;
+}
+
+// The first of the unchanged lines that show above the hunk at the index, if any do.
+export function firstShownAbove(unchanged: Unchanged, index: number): NumberedLine | undefined {
+  return (index === 0 ? unchanged.before : unchanged.after[index - 1])?.[0];
 }
 
 // Those of the unchanged lines around the hunks that show: the run above each hunk while it's open,
@@ -128,4 +170,26 @@ export function commentedRuns(
       lines.some(commented) ? [index] : [],
     ),
   );
+}
+
+// Where a run of unchanged lines just shown above a hunk is in the view, from the view's top: the
+// top of its first line, unless that isn't rendered, and of the hunk's bar, under its last line,
+// where the bar is while it isn't stuck at the top. `ceiling` is how far down the bars stuck at the
+// view's top reach, and `middle` the view's middle.
+export interface RunInView {
+  first: number | undefined;
+  bar: number;
+  ceiling: number;
+  middle: number;
+}
+
+// How far up to scroll the view to show a run of unchanged lines just shown above a hunk, which the
+// hunk stayed in place for: none while any of its lines are in sight, and else as far as shows
+// them all, or as keeps the hunk's bar no lower than the view's middle.
+export function upToShow({ first, bar, ceiling, middle }: RunInView): number {
+  if (bar > ceiling) {
+    return 0;
+  }
+
+  return Math.max(0, Math.min(ceiling - (first ?? Number.NEGATIVE_INFINITY), middle - bar));
 }

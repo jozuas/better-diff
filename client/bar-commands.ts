@@ -38,8 +38,10 @@ export interface BarKeys {
   bars: Bars;
   // A hunk's bar's: selects the hunk's first changed line.
   onInto?: (() => void) | undefined;
-  // Shows more of the file: the entire file, or a collapsed diff's lines.
+  // Shows the unchanged lines above a hunk, or hides them, or shows a collapsed diff's lines.
   onMore?: (() => void) | undefined;
+  // A hunk's bar's: shows the entire file, or only its hunks.
+  onMoreFile?: (() => void) | undefined;
 }
 
 // A file's bar's actions, once its diff is read, as its buttons and keys run them, calling `onRun`
@@ -131,8 +133,8 @@ function moving(by: "toBarBy" | "toFileBy", step: 1 | -1) {
   };
 }
 
-// Does what the bar does with `onInto` or `onMore`, if it does anything.
-function calling(handler: "onInto" | "onMore") {
+// Does what the bar does with `onInto`, `onMore` or `onMoreFile`, if it does anything.
+function calling(handler: "onInto" | "onMore" | "onMoreFile") {
   return ({ keys }: BarContext): boolean => {
     keys[handler]?.();
 
@@ -159,6 +161,7 @@ const barCommands: Record<CommandIn<"bar">, (bar: BarContext) => boolean> = {
   },
   into: calling("onInto"),
   more: calling("onMore"),
+  moreFile: calling("onMoreFile"),
   stage: running("stage"),
   discard: running("discard"),
   stageFile: running("stageFile"),
@@ -166,8 +169,8 @@ const barCommands: Record<CommandIn<"bar">, (bar: BarContext) => boolean> = {
 };
 
 // Does what the command does with focus in the bar, and says whether it did anything: moves focus
-// on through the view's bars, or back to the file's row, runs the bars' actions, or what `onInto`
-// or `onMore` does.
+// on through the view's bars, or back to the file's row, runs the bars' actions, or what `onInto`,
+// `onMore` or `onMoreFile` does.
 export function barCommand(
   command: CommandIn<"bar">,
   own: boolean,
@@ -193,7 +196,10 @@ export interface LineKeys {
   level: (lines: readonly number[]) => number | undefined;
   // Clears the selection, leaving focus in the hunk's bar.
   onLeave: () => void;
+  // Shows the unchanged lines above the hunk, or hides them, and shows the entire file, or only its
+  // hunks.
   onMore: () => void;
+  onMoreFile: () => void;
 }
 
 // What keys in a hunk's selected lines act with.
@@ -275,6 +281,11 @@ const lineCommands: Record<CommandIn<"lines">, (lines: LineContext) => boolean> 
   },
   more: ({ keys }) => {
     keys.onMore();
+
+    return true;
+  },
+  moreFile: ({ keys }) => {
+    keys.onMoreFile();
 
     return true;
   },

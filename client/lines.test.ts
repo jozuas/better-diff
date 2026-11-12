@@ -3,7 +3,7 @@ import { expect, test } from "vitest";
 
 import { hunkLines } from "../test/hunk-lines";
 import { aboveHunks, lineKey, numberLines, unchangedLines } from "./lines";
-import type { NumberedLine } from "./lines";
+import type { NumberedLine, RunShown } from "./lines";
 
 type Kind = "context" | "removed" | "added";
 
@@ -229,27 +229,23 @@ test("the unchanged lines are those of both versions before the first hunk and a
   );
 });
 
-test("while the unchanged lines above each hunk are left out, its bar says how many, between it and the hunk before it, or the start of the file, and separates it from any of the file's lines above it", () => {
+// How each run of unchanged lines above a hunk shows, by the hunk's index, round the array.
+const runsShown = fc
+  .array(fc.constantFrom<RunShown>("kept", "open", "hidden"), { minLength: 1 })
+  .map((shown) => (index: number) => shown[index % shown.length] ?? "hidden");
+
+test("a hunk's bar says how many unchanged lines are above it, between it and the hunk before it, or the start of the file, how they show, and separates it from any of the file's lines above it, shown or not", () => {
   fc.assert(
-    fc.property(fileInHunks, ({ diff, found, above }) => {
+    fc.property(fileInHunks, runsShown, ({ diff, found, above }, shows) => {
       const gaps = [found.before, ...found.after].slice(0, diff.hunks.length);
 
-      expect(aboveHunks(diff.hunks, () => false)).toStrictEqual(
+      expect(aboveHunks(diff.hunks, shows)).toStrictEqual(
         gaps.map((lines, index) => ({
           hunk: diff.hunks[index],
-          leftOut: lines.length,
+          unchanged: lines.length,
+          shown: shows(index),
           separates: above[index],
         })),
-      );
-    }),
-  );
-});
-
-test("while the unchanged lines above each hunk show, its bar says none are left out, and still separates it from any of the file's lines above it", () => {
-  fc.assert(
-    fc.property(fileInHunks, ({ diff, above }) => {
-      expect(aboveHunks(diff.hunks, () => true)).toStrictEqual(
-        diff.hunks.map((hunk, index) => ({ hunk, leftOut: 0, separates: above[index] })),
       );
     }),
   );

@@ -9,7 +9,9 @@ import { Hoverable, TintLayer } from "./hoverable";
 import { IconButton } from "./icon-button";
 import { entireFileIcon, onlyHunksIcon } from "./icons";
 import { chordOf } from "./keymap";
-import { unchangedLabel } from "./labels";
+import { unchangedButton } from "./labels";
+import type { RunShown } from "./lines";
+import { ShortcutTip } from "./shortcut-tip";
 import { shortcutText } from "./shortcuts";
 import { onMac } from "./web";
 
@@ -27,7 +29,7 @@ interface EntireFileToggleProps {
   theme: PluginTheme;
 }
 
-// Sublime Merge's icon for what it shows the view instead, which E in the hunk's bar does too.
+// Sublime Merge's icon for what it shows the view instead, which Shift+E in the hunk's bar does too.
 function EntireFileToggle({ entire, onPress, hidden, theme }: EntireFileToggleProps): ReactElement {
   const toggle = entire ? toggles.hunks : toggles.entire;
 
@@ -36,7 +38,7 @@ function EntireFileToggle({ entire, onPress, hidden, theme }: EntireFileTogglePr
       label={toggle.label}
       icon={toggle.icon}
       onPress={onPress}
-      shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
+      shortcut={shortcutText(chordOf("bar", "moreFile", onMac()), onMac())}
       hidden={hidden}
       theme={theme}
     />
@@ -51,6 +53,7 @@ function useUnchangedStyles(theme: PluginTheme) {
       StyleSheet.create({
         // Rounded as its box is, for its focus ring.
         button: { borderRadius: 6 },
+        hidden: { opacity: 0 },
         // In the diff's background, over the line across the bar, which stops either side of it.
         box: {
           height: fonts.button,
@@ -69,45 +72,88 @@ function useUnchangedStyles(theme: PluginTheme) {
 }
 
 interface UnchangedLinesProps {
-  // How many unchanged lines the diff leaves out before the hunk.
+  // How many unchanged lines are before the hunk, after the hunk before it, and how they show.
   count: number;
+  shown: RunShown;
+  // Whether the hunk is revealed: what hides them shows only while it is.
+  revealed: boolean;
+  onPress: () => void;
+  theme: PluginTheme;
+}
+
+interface UnchangedButtonProps {
+  label: string;
+  // Whether it hides the lines, rather than shows them, and whether it's hidden itself.
+  hides: boolean;
+  hidden: boolean;
   onPress: () => void;
   theme: PluginTheme;
 }
 
 // Says how many unchanged lines are left out before the hunk, as Linear's PR review does with its
-// icon, and shows them, all at once rather than a few at a time as Linear's does. Nothing while
-// none are.
-function UnchangedLines({ count, onPress, theme }: UnchangedLinesProps): ReactElement | null {
+// icon, arrows pointing out from a line, and shows them, all at once rather than a few at a time as
+// Linear's does, or while they show and the hunk is revealed, hides them again, with arrows pointing
+// in to the line. E in the hunk's bar does too.
+function UnchangedButton({
+  label,
+  hides,
+  hidden,
+  onPress,
+  theme,
+}: UnchangedButtonProps): ReactElement {
   const styles = useUnchangedStyles(theme);
   const fonts = useContext(FontSizesContext);
-  const label = unchangedLabel(count);
-
-  if (count === 0) {
-    return null;
-  }
+  const icon = hides ? "FoldVertical" : "UnfoldVertical";
 
   return (
     <Hoverable
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={styles.button}
+      style={[styles.button, hidden && styles.hidden]}
       onPress={onPress}
     >
       {({ hovered, pressed }) => {
         const color = hovered ? theme.colors.foreground : theme.colors.foregroundMuted;
 
         return (
-          <View style={styles.box}>
-            <TintLayer color={color} hovered={hovered} pressed={pressed} />
-            <Icon name="UnfoldVertical" size={fonts.buttonIcon} color={color} />
-            <Text selectable={false} style={[styles.text, { color }]}>
-              {label}
-            </Text>
-          </View>
+          <>
+            <View style={styles.box}>
+              <TintLayer color={color} hovered={hovered} pressed={pressed} />
+              <Icon name={icon} size={fonts.buttonIcon} color={color} />
+              <Text selectable={false} style={[styles.text, { color }]}>
+                {label}
+              </Text>
+            </View>
+            <ShortcutTip
+              shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
+              resting={hovered && !pressed}
+              theme={theme}
+            />
+          </>
         );
       }}
     </Hoverable>
+  );
+}
+
+// What shows or hides the unchanged lines before the hunk: nothing while there are none, or a
+// comment keeps them shown.
+function UnchangedLines({
+  count,
+  shown,
+  revealed,
+  onPress,
+  theme,
+}: UnchangedLinesProps): ReactElement | null {
+  const button = unchangedButton(count, shown);
+
+  return button === undefined ? null : (
+    <UnchangedButton
+      {...button}
+      hidden={button.hides && !revealed}
+      onPress={onPress}
+      theme={theme}
+    />
   );
 }
 
@@ -140,30 +186,34 @@ function useBarStyles(theme: PluginTheme) {
 interface HunkBarContentProps {
   // Whether the view shows the entire file, rather than only its hunks.
   entire: boolean;
-  // Whether the toggle and the hunk's actions show.
+  // Whether the toggle, the hunk's actions, and what hides the unchanged lines above it show.
   revealed: boolean;
-  // How many unchanged lines are left out before the hunk, and whether a line across the bar
+  // How many unchanged lines are before the hunk, how they show, and whether a line across the bar
   // separates it from the file's lines above it.
-  leftOut: number;
+  unchanged: number;
+  unchangedShown: RunShown;
   separates: boolean;
-  // Shows the entire file, or only the hunks again, and the unchanged lines above the hunk.
+  // Shows the entire file, or only the hunks again, and the unchanged lines above the hunk, or
+  // hides them.
   onToggle: () => void;
-  onOpen: () => void;
+  onUnchanged: () => void;
   // The hunk's actions.
   children: ReactNode;
   theme: PluginTheme;
 }
 
 // What's on a hunk's bar: a line across it, as Linear's PR review separates hunks, with how many
-// unchanged lines are left out before the hunk in its middle, which shows them, the toggle between the entire file and
-// only the hunks on its left, and the hunk's actions on its right.
+// unchanged lines are left out before the hunk in its middle, which shows them, or while they show
+// and it's revealed, what hides them, the toggle between the entire file and only the hunks on its
+// left, and the hunk's actions on its right.
 export function HunkBarContent({
   entire,
   revealed,
-  leftOut,
+  unchanged,
+  unchangedShown,
   separates,
   onToggle,
-  onOpen,
+  onUnchanged,
   children,
   theme,
 }: HunkBarContentProps): ReactElement {
@@ -178,7 +228,13 @@ export function HunkBarContent({
           <EntireFileToggle entire={entire} onPress={onToggle} hidden={!revealed} theme={theme} />
         </View>
       </View>
-      <UnchangedLines count={leftOut} onPress={onOpen} theme={theme} />
+      <UnchangedLines
+        count={unchanged}
+        shown={unchangedShown}
+        revealed={revealed}
+        onPress={onUnchanged}
+        theme={theme}
+      />
       <View style={[styles.side, styles.end]}>
         <View style={[styles.actions, masked]}>{children}</View>
       </View>

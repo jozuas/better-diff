@@ -1,9 +1,7 @@
-import type { Locator, Page } from "@playwright/test";
-
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { hunkBar } from "./keyboard";
-import { changeLines } from "./numbered";
+import { changeLines, countOn, counts } from "./numbered";
 import { box, button, line, openFile, selectLines } from "./panel";
 
 function staged(repository: string): string {
@@ -104,18 +102,6 @@ test('"Show entire file" shows the unchanged lines around the hunks, and "Show o
 
   expect(hunks.y).toBe(before.y);
 });
-
-// The count on a hunk's bar of the unchanged lines left out before it.
-function countOn(page: Page, hunk: number, count: number): Locator {
-  return hunkBar(page, "a.txt", hunk).getByRole("button", {
-    name: `${String(count)} unchanged lines`,
-    exact: true,
-  });
-}
-
-function counts(page: Page): Locator {
-  return page.getByRole("button", { name: /^\d+ unchanged lines?$/u });
-}
 
 test("while the unchanged lines before a hunk, after the hunk before it, are left out, its bar says how many, and pressing that shows only them, leaving the hunk where it was", async ({
   app,
@@ -244,8 +230,8 @@ test("the unchanged lines shown before a hunk stay shown as lines are added abov
   await expect(line(page, "a 125")).toBeVisible();
   await expect(hunkBar(page, "a.txt", 3)).toBeVisible();
   await expect(
-    hunkBar(page, "a.txt", 3).getByRole("button", { name: /unchanged lines?$/u }),
-  ).toHaveCount(0);
+    hunkBar(page, "a.txt", 3).getByRole("button", { name: "Hide 43 unchanged lines", exact: true }),
+  ).toBeAttached();
   await expect(counts(page)).toHaveCount(1);
 });
 

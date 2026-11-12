@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 
 import type { NumberedLine } from "./lines";
-import { commentedRuns, openedAbove, showsAbove, shownLines } from "./runs";
+import { commentedRuns, openedAbove, runShown, shownLines } from "./runs";
 import type { ShownRuns } from "./runs";
 
 // Three hunks, the runs of unchanged lines above each closed.
@@ -52,10 +52,10 @@ test("a run of unchanged lines commented on shows, though it isn't open, and the
     before: unchanged.before,
     after: [unchanged.after[0], [], unchanged.after[2]],
   });
-  expect([0, 1, 2, 3].map((index) => showsAbove(closed, index, commented))).toStrictEqual([
-    true,
-    false,
-    false,
-    true,
+  expect([0, 1, 2, 3].map((index) => runShown(closed, index, commented))).toStrictEqual([
+    "kept",
+    "hidden",
+    "hidden",
+    "kept",
   ]);
 });

@@ -143,18 +143,23 @@ export function unchangedLines({ hunks, contents }: Pick<Diff, "hunks" | "conten
   };
 }
 
-// What a hunk's bar shows of the file above the hunk: how many unchanged lines are left out there,
-// after the hunk before it, if any, which none are while they show, and whether any of the file's
-// lines are above it, shown or not, which a line across the bar separates it from.
+// How a run of unchanged lines above a hunk shows: kept shown by a comment on one of its lines,
+// whatever's asked, open, as while the entire file shows, or hidden.
+export type RunShown = "kept" | "open" | "hidden";
+
+// What a hunk's bar shows of the file above the hunk: how many unchanged lines are there, after the
+// hunk before it, if any, how they show, and whether any of the file's lines are above it, shown or
+// not, which a line across the bar separates it from.
 export interface Above {
   hunk: Hunk;
-  leftOut: number;
+  unchanged: number;
+  shown: RunShown;
   separates: boolean;
 }
 
-// Each of the hunks with what's above it, by whether the run of unchanged lines above the hunk at
-// an index shows.
-export function aboveHunks(hunks: readonly Hunk[], shows: (index: number) => boolean): Above[] {
+// Each of the hunks with what's above it, by how the run of unchanged lines above the hunk at an
+// index shows.
+export function aboveHunks(hunks: readonly Hunk[], shows: (index: number) => RunShown): Above[] {
   let end = 0;
 
   return hunks.map((hunk, index) => {
@@ -163,6 +168,6 @@ export function aboveHunks(hunks: readonly Hunk[], shows: (index: number) => boo
 
     end = span.end.new;
 
-    return { hunk, leftOut: shows(index) ? 0 : gap, separates: index > 0 || gap > 0 };
+    return { hunk, unchanged: gap, shown: shows(index), separates: index > 0 || gap > 0 };
   });
 }

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { labelOf, unchangedLabel } from "./labels";
+import { labelOf, unchangedButton } from "./labels";
 
 test.each([
   ["unchanged", "No changes"],
@@ -48,5 +48,26 @@ test.each([
   [2, "2 unchanged lines"],
   [27, "27 unchanged lines"],
 ])("says %i of a hunk's unchanged lines left out before it as %j", (count, label) => {
-  expect(unchangedLabel(count)).toBe(label);
+  expect(unchangedButton(count, "hidden")).toStrictEqual({ label, hides: false });
+});
+
+test.each([
+  [1, "Hide 1 unchanged line"],
+  [27, "Hide 27 unchanged lines"],
+])(
+  "while %i of a hunk's unchanged lines before it show, says it hides them as %j",
+  (count, label) => {
+    expect(unchangedButton(count, "open")).toStrictEqual({ label, hides: true });
+  },
+);
+
+test("the middle of a hunk's bar shows how many unchanged lines are left out before it, which shows them, or while they're open, hides them, and nothing while there are none, or a comment keeps them shown", () => {
+  expect(unchangedButton(27, "hidden")).toStrictEqual({
+    label: "27 unchanged lines",
+    hides: false,
+  });
+  expect(unchangedButton(1, "open")).toStrictEqual({ label: "Hide 1 unchanged line", hides: true });
+  expect(unchangedButton(27, "kept")).toBeUndefined();
+  expect(unchangedButton(0, "hidden")).toBeUndefined();
+  expect(unchangedButton(0, "open")).toBeUndefined();
 });

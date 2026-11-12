@@ -2,10 +2,24 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { NumberedLine } from "./lines";
-import { carriedTo, openedAbove, showsAbove, showsAny, shownLines, toggledEntire } from "./runs";
+import {
+  carriedTo,
+  closedAbove,
+  firstShownAbove,
+  openedAbove,
+  runShown,
+  showsAny,
+  shownLines,
+  toggledEntire,
+  unchangedAction,
+  upToShow,
+} from "./runs";
 import type { ShownRuns } from "./runs";
 
 type Version = "oldStart" | "newStart";
+
+// No runs of unchanged lines with a line commented on.
+const none: ReadonlySet<number> = new Set();
 
 interface Run {
   oldStart: number;
@@ -145,7 +159,11 @@ const closed: ShownRuns = {
 test("opening the run of unchanged lines above a hunk shows it, and leaves the others as they were", () => {
   const opened = openedAbove(closed, 1);
 
-  expect([0, 1, 2].map((index) => showsAbove(opened, index))).toStrictEqual([false, true, false]);
+  expect([0, 1, 2].map((index) => runShown(opened, index, none))).toStrictEqual([
+    "hidden",
+    "open",
+    "hidden",
+  ]);
   expect(openedAbove(openedAbove(closed, 1), 2).runs.map(({ open }) => open)).toStrictEqual([
     false,
     true,
@@ -163,11 +181,11 @@ test("showing the entire file shows every run of unchanged lines, those after th
 
   expect(entire.entire).toBe(true);
   expect(entire.runs).toStrictEqual(opened.runs);
-  expect([0, 1, 2, 3].map((index) => showsAbove(entire, index))).toStrictEqual([
-    true,
-    true,
-    true,
-    true,
+  expect([0, 1, 2, 3].map((index) => runShown(entire, index, none))).toStrictEqual([
+    "open",
+    "open",
+    "open",
+    "open",
   ]);
 
   expect(showsAny(entire)).toBe(true);
@@ -178,6 +196,41 @@ test("showing only the hunks again closes every run of unchanged lines, those op
 
   expect(hunks).toStrictEqual(closed);
   expect(showsAny(hunks)).toBe(false);
+});
+
+// Runs of unchanged lines above hunks, some of them open, and the index of one of the hunks.
+const runAt = runs
+  .filter((hunks) => hunks.length > 0)
+  .chain((hunks) => fc.tuple(fc.constant(hunks), fc.nat({ max: hunks.length - 1 })));
+
+test("hiding the run of unchanged lines above a hunk hides only it, and hiding one just shown leaves the file as it was", () => {
+  fc.assert(
+    fc.property(runAt, ([hunks, index]) => {
+      const shown = { entire: false, runs: hunks };
+      const hidden = closedAbove(shown, index);
+
+      expect(hidden.entire).toBe(false);
+      expect(placesOf(hidden.runs)).toStrictEqual(placesOf(hunks));
+      expect(hidden.runs.map(({ open }) => open)).toStrictEqual(
+        hunks.map(({ open }) => open).with(index, false),
+      );
+      expect(closedAbove(openedAbove(hidden, index), index)).toStrictEqual(hidden);
+    }),
+  );
+});
+
+test("hiding the run of unchanged lines above a hunk while the entire file shows leaves the runs above the other hunks shown, but not the lines after the last hunk", () => {
+  fc.assert(
+    fc.property(runAt, ([hunks, index]) => {
+      const hidden = closedAbove({ entire: true, runs: hunks }, index);
+
+      expect(hidden.entire).toBe(false);
+      expect(hunks.map((_, at) => runShown(hidden, at, none))).toStrictEqual(
+        hunks.map(() => "open").with(index, "hidden"),
+      );
+      expect(runShown(hidden, hunks.length, none)).toBe("hidden");
+    }),
+  );
 });
 
 function lines(text: string): NumberedLine[] {
@@ -202,4 +255,92 @@ test("the unchanged lines that show are the runs above the hunks that are open, 
   });
 
   expect(shownLines(unchanged, toggledEntire(closed))).toStrictEqual(unchanged);
+});
+
+test("a run of unchanged lines shown above a hunk with some of its lines in sight leaves the view as it is", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 0, max: 100 }),
+      fc.integer({ min: 1, max: 1000 }),
+      fc.integer({ min: 1, max: 1000 }),
+      fc.integer({ min: 0, max: 1000 }),
+      (ceiling, below, tall, middle) => {
+        const bar = ceiling + below;
+
+        expect(upToShow({ first: bar - tall, bar, ceiling, middle })).toBe(0);
+        expect(upToShow({ first: undefined, bar, ceiling, middle })).toBe(0);
+      },
+    ),
+  );
+});
+
+test("a run of unchanged lines shown above a hunk out of sight scrolls into it, all of it under the bars at the view's top, or as much as fits with the hunk's bar no lower than the view's middle", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 0, max: 100 }),
+      fc.integer({ min: 0, max: 1000 }),
+      fc.integer({ min: 1, max: 2000 }),
+      fc.integer({ min: 0, max: 1000 }),
+      (ceiling, above, tall, lower) => {
+        const bar = ceiling - above;
+        const first = bar - tall;
+        const middle = ceiling + lower;
+        const up = upToShow({ first, bar, ceiling, middle });
+
+        expect(first + up).toBeLessThanOrEqual(ceiling);
+        expect(bar + up).toBeLessThanOrEqual(middle);
+        expect(Math.min(ceiling - first - up, middle - bar - up)).toBe(0);
+      },
+    ),
+  );
+});
+
+test("a run of unchanged lines shown above a hunk out of sight, whose first line isn't rendered, scrolls into sight with the hunk's bar at the view's middle", () => {
+  expect(upToShow({ first: undefined, bar: 30, ceiling: 40, middle: 300 })).toBe(270);
+  expect(upToShow({ first: -500, bar: 30, ceiling: 40, middle: 300 })).toBe(270);
+  expect(upToShow({ first: -100, bar: 40, ceiling: 40, middle: 300 })).toBe(140);
+});
+
+test("a view no taller than the bars at its top scrolls no way for a run of unchanged lines out of sight", () => {
+  expect(upToShow({ first: -100, bar: 40, ceiling: 40, middle: 20 })).toBe(0);
+});
+
+test("the first of the unchanged lines that show above a hunk is the first before the first hunk, or after the hunk before it, and none while none show", () => {
+  const before = lines("before the first");
+  const between = lines("after the first");
+  const after = lines("after the second");
+  const around = { before, after: [between, after] };
+
+  expect(firstShownAbove(around, 0)).toBe(before[0]);
+  expect(firstShownAbove(around, 1)).toBe(between[0]);
+  expect(firstShownAbove(around, 2)).toBe(after[0]);
+  expect(firstShownAbove({ before: [], after: [[], after] }, 1)).toBeUndefined();
+  expect(firstShownAbove(around, 3)).toBeUndefined();
+});
+
+test.each([
+  [27, "hidden", "open"],
+  [1, "hidden", "open"],
+  [27, "open", "close"],
+  [1, "open", "close"],
+  [27, "kept", undefined],
+  [0, "hidden", undefined],
+  [0, "open", undefined],
+] as const)(
+  "with %i unchanged lines above a hunk, %s, showing or hiding them does %j",
+  (count, shown, action) => {
+    expect(unchangedAction(count, shown)).toBe(action);
+  },
+);
+
+test("a run of unchanged lines with a line commented on is kept shown, and else is open while it shows, as while the entire file shows, and hidden while it doesn't", () => {
+  const opened = openedAbove(closed, 1);
+
+  expect([0, 1, 2].map((index) => runShown(opened, index, new Set([2])))).toStrictEqual([
+    "hidden",
+    "open",
+    "kept",
+  ]);
+  expect(runShown(toggledEntire(closed), 0, new Set())).toBe("open");
+  expect(runShown(toggledEntire(closed), 0, new Set([0]))).toBe("kept");
 });

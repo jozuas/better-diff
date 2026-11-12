@@ -72,13 +72,15 @@ interface Anchor {
 }
 
 // The place of the element with the id, which the diff shown at the container held for while it
-// showed what `file` says, and the view was scrolled down as far as `scrollTop` says.
+// showed what `file` says, and the view was scrolled down as far as `scrollTop` says, and what to do
+// once the view shows it there again.
 interface Held {
   container: string;
   id: string;
   offset: number;
   file: ShownFile | undefined;
   scrollTop: number;
+  onShown: (() => void) | undefined;
 }
 
 // Keeps what a view shows at its top in place as what it shows changes, as when an agent's change
@@ -93,8 +95,9 @@ export interface KeptPlace {
   // Holds the place of the element with the id in the diff shown at the container until the diff
   // shows something else, when the view scrolls to show it in the same place again, rather than
   // what it showed at its top. It's held until an action that's `busy` is done, so that an agent's
-  // change shown before the action's doesn't end it, unless the view is scrolled first.
-  hold: (container: string, id: string) => void;
+  // change shown before the action's doesn't end it, unless the view is scrolled first. Once the
+  // view shows it in the same place again, it calls `onShown`.
+  hold: (container: string, id: string, onShown?: () => void) => void;
   // Once the caller renders what the view shows, with whether an action is running, the view
   // shows what it showed at its top in the same place, or once that's gone, what takes its place,
   // unless the diff a place is held in shows something else, or the view was scrolled since. While
@@ -222,6 +225,7 @@ export function keptPlace(page: ViewPage, schedule: (task: () => void) => void):
 
     if (moved) {
       scrollTo(place.id, place.offset);
+      place.onShown?.();
     } else if (!busy && !wasBusy && anchor !== undefined && unscrolled(anchor)) {
       scrollTo(idOf(anchor), anchor.offset);
     }
@@ -249,13 +253,20 @@ export function keptPlace(page: ViewPage, schedule: (task: () => void) => void):
       starts = shown;
       changed();
     },
-    hold: (container, id) => {
+    hold: (container, id, onShown) => {
       const offset = page.offsetOf(id);
 
       held =
         offset === undefined
           ? undefined
-          : { container, id, offset, file: files.get(container), scrollTop: page.scrollTop() };
+          : {
+              container,
+              id,
+              offset,
+              file: files.get(container),
+              scrollTop: page.scrollTop(),
+              onShown,
+            };
     },
     settle: (running) => {
       busy = running;

@@ -63,7 +63,14 @@ function recorder() {
 }
 
 function barKeys(record: (name: string) => () => void): BarKeys {
-  return { file, at: barAt, bars, onInto: record("into"), onMore: record("more") };
+  return {
+    file,
+    at: barAt,
+    bars,
+    onInto: record("into"),
+    onMore: record("more"),
+    onMoreFile: record("moreFile"),
+  };
 }
 
 test.each<[CommandIn<"bar">, string]>([
@@ -74,6 +81,7 @@ test.each<[CommandIn<"bar">, string]>([
   ["out", "row a"],
   ["into", "into"],
   ["more", "more"],
+  ["moreFile", "moreFile"],
   ["stage", "press 1:hunk 1:stage"],
   ["discard", "press 1:hunk 1:discard"],
   ["stageFile", "press 1:file:stage"],
@@ -96,6 +104,7 @@ test("in a bar, Enter presses a button with focus inside it rather than run the 
         "out",
         "into",
         "more",
+        "moreFile",
         "discard",
         "stageFile",
         "discardFile",
@@ -118,11 +127,12 @@ test("in a bar, Enter presses a button with focus inside it rather than run the 
   expect(done).toStrictEqual([]);
 });
 
-test("a bar without something to move into, or more to show, does nothing with → or E", () => {
+test("a bar without something to move into, or more to show or hide, does nothing with →, E or Shift+E", () => {
   const { done, focus, controls } = recorder();
 
   expect(barCommand("into", true, { file, at: barAt, bars }, focus, controls)).toBe(false);
   expect(barCommand("more", true, { file, at: barAt, bars }, focus, controls)).toBe(false);
+  expect(barCommand("moreFile", true, { file, at: barAt, bars }, focus, controls)).toBe(false);
   expect(done).toStrictEqual([]);
 });
 
@@ -152,6 +162,7 @@ function lineKeys(
     },
     onLeave: record("leave"),
     onMore: record("more"),
+    onMoreFile: record("moreFile"),
   };
 }
 
@@ -172,6 +183,7 @@ test.each<[CommandIn<"lines">, Cursor, string[]]>([
   ["left", at(2, "new"), ["level of 0,1,3", "select 2-2 old"]],
   ["leave", at(1), ["leave"]],
   ["more", at(1), ["more"]],
+  ["moreFile", at(1), ["moreFile"]],
   ["stage", at(1), ["press 1:hunk 1:stage"]],
   ["discard", at(1), ["press 1:hunk 1:discard"]],
   ["stageFile", at(1), ["press 1:file:stage"]],
@@ -202,6 +214,7 @@ test("with lines selected, Enter presses a button with focus inside the bar rath
         "right",
         "leave",
         "more",
+        "moreFile",
         "discard",
         "stageFile",
         "discardFile",

@@ -133,7 +133,12 @@ export const keyList: readonly KeySection[] = [
       {
         place: "bar",
         commands: ["more"],
-        does: "Show the entire file, or only its modified hunks, or a collapsed diff",
+        does: "Show the unchanged lines above the hunk, or hide them, or show a collapsed diff",
+      },
+      {
+        place: "bar",
+        commands: ["moreFile"],
+        does: "Show the entire file, or only its modified hunks",
       },
     ],
   },
@@ -164,6 +169,11 @@ export const keyList: readonly KeySection[] = [
       {
         place: "lines",
         commands: ["more"],
+        does: "Show the unchanged lines above the hunk, or hide them",
+      },
+      {
+        place: "lines",
+        commands: ["moreFile"],
         does: "Show the entire file, or only its modified hunks",
       },
     ],

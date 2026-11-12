@@ -269,7 +269,7 @@ test("with Alt, a key gives another command or none, as it changes the character
   );
 });
 
-test.each<Command>(["stage", "discard", "stageFile", "discardFile", "menu", "more"])(
+test.each<Command>(["stage", "discard", "stageFile", "discardFile", "menu", "more", "moreFile"])(
   "%s runs once however long its key is held down",
   (command) => {
     expect(isHeld(command, { ...plain, key: "x", code: "KeyX", repeat: true })).toBe(true);

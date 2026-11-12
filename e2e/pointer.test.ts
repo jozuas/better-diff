@@ -205,7 +205,7 @@ test("the toggle's key, and those of the actions of a file's row and a group's h
 
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (2)", "a.txt");
-  await expectTip(page, button(page, "Show entire file").first(), /^E$/u);
+  await expectTip(page, button(page, "Show entire file").first(), /^(?:⇧E|Shift\+E)$/u);
   await expectShortcut(page, "Stage a.txt", /^(?:⇧↩|Shift\+Enter)$/u);
   await button(page, "MODIFIED FILES (2)").hover();
   await expectShortcut(page, "Discard All", /^(?:⇧⌫|Shift\+Backspace)$/u);

@@ -78,7 +78,7 @@ export function onMac(): boolean {
 
 // How far below the top of the element with the id `container` the top of the element with the id
 // `target` is, if both are on the page.
-function offsetIn(container: string, target: string): number | undefined {
+export function offsetIn(container: string, target: string): number | undefined {
   if (Platform.OS !== "web") {
     return undefined;
   }
@@ -95,7 +95,7 @@ function offsetIn(container: string, target: string): number | undefined {
 
 // Scrolls the element with the id `container` down by the distance, or up by a negative one, as
 // far as it goes.
-function scrollBy(container: string, distance: number): void {
+export function scrollBy(container: string, distance: number): void {
   const scroller =
     Platform.OS === "web" ? document.querySelector(`#${CSS.escape(container)}`) : null;
 

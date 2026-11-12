@@ -14,7 +14,6 @@ import { View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { barRequests } from "./bar-requests";
-import { commentedOn, commentedOutside } from "./commenting";
 import type { NumberedFile } from "./comments";
 import { useFindableLines } from "./find-page";
 import { groups } from "./groups";
@@ -25,16 +24,18 @@ import type { NumberedLine, Unchanged } from "./lines";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
 import { ReviewContext } from "./review-context";
-import { showsAny } from "./runs";
-import { fileId, hunkId, onSide, rangeInHunk } from "./selection";
+import { firstShownAbove, showsAny, upToShow } from "./runs";
+import { fileId, hunkId, onSide, rangeInHunk, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
 import { SelectionBarLayer } from "./selection-bar";
 import { useFocus } from "./text-selection";
 import { UnchangedLinesShown } from "./unchanged-shown";
-import type { CommentedLines, EntireQuery, UnchangedShown } from "./unchanged-shown";
+import type { EntireQuery, UnchangedShown } from "./unchanged-shown";
 import {
   KeptPlaceContext,
+  offsetIn,
   rectOf,
+  scrollBy,
   scrollToOffset,
   scrollToShow,
   stopScrollAnchoring,
@@ -73,7 +74,7 @@ export interface HunksProps {
 // What a diff's hunks' bars do, with their hunk's index, and how tall they are.
 interface BarActions {
   onToggleEntire: (hunk: number) => void;
-  onOpen: (hunk: number) => void;
+  onUnchanged: (hunk: number, action: "open" | "close" | undefined) => void;
   onHeight: (height: number) => void;
   onRun: (hunk: number) => void;
   onShow: (hunk: number) => void;
@@ -81,49 +82,77 @@ interface BarActions {
   barHeight: () => number;
 }
 
-// What the bars act with, as the latest render gives it.
+// What the bars act with, as the latest render gives it: what the diff shows of its unchanged lines,
+// and what shows or hides them.
 interface BarState {
-  // Whether any of the unchanged lines around the hunks show.
-  unchangedShown: boolean;
+  around: UnchangedShown;
   onHunkRun: HunksProps["onHunkRun"];
   view: string;
   barsBelow: number | undefined;
-  // Shows the entire file, from around the hunk at the index, or only the hunks again.
-  toggle: (hunk: number) => void;
-  // Shows the run of unchanged lines above the hunk at the index.
-  open: (hunk: number) => void;
 }
 
 // The bars' actions, the same each render, with what the latest render gives them, so that a change
 // that reaches only some hunks, as the selection's does, renders only their bars again. Toggling the
-// entire file keeps the hunk in place, as showing the run of unchanged lines above it does, and so
-// does an action on a hunk while any unchanged lines show, where the next hunk takes its place. Showing a hunk scrolls the view to its lines' start, under
-// its bar, and under the file's bar where that stays at the top too, and so does revealing a line,
-// if it has to.
+// entire file keeps the hunk in place, as showing or hiding the run of unchanged lines above it
+// does, but for showing it where none of it would then be in sight, as with the hunk's bar at the
+// top, where the view scrolls up to show it. An action on a hunk while any unchanged lines show
+// keeps the hunk's place too, where the next hunk takes its place. Showing a hunk scrolls the view
+// to its lines' start, under its bar, and under the file's bar where that stays at the top too, and
+// so does revealing a line, if it has to.
 function useBarActions(container: string, state: BarState): BarActions {
   const latest = useLatest(state);
   const barHeight = useRef(0);
   const kept = useContext(KeptPlaceContext);
 
-  return useMemo(
-    () => ({
+  return useMemo(() => {
+    // Scrolls the view up, if it has to, to show the run of unchanged lines above the hunk at the
+    // index, whose first line has the id.
+    function scrollToRun(hunk: number, first: string): void {
+      const { view, barsBelow } = latest.current;
+      const lines = offsetIn(view, hunkId(container, hunk)) ?? Number.POSITIVE_INFINITY;
+
+      const up = upToShow({
+        first: offsetIn(view, first),
+        bar: lines - barHeight.current,
+        ceiling: (barsBelow ?? 0) + barHeight.current,
+        middle: rectOf(view).height / 2,
+      });
+
+      scrollBy(view, -up);
+    }
+
+    // Once the hunk at the index is back in its place, shows the run of unchanged lines above it,
+    // if it shows.
+    function showRun(hunk: number): void {
+      const first = firstShownAbove(latest.current.around.unchanged, hunk);
+
+      if (first !== undefined) {
+        scrollToRun(hunk, unchangedLineId(container, first));
+      }
+    }
+
+    return {
       onToggleEntire: (hunk) => {
         kept.hold(container, hunkId(container, hunk));
-        latest.current.toggle(hunk);
+        latest.current.around.toggle(hunk);
       },
-      onOpen: (hunk) => {
-        kept.hold(container, hunkId(container, hunk));
-        latest.current.open(hunk);
+      onUnchanged: (hunk, action) => {
+        if (action !== undefined) {
+          kept.hold(container, hunkId(container, hunk), () => {
+            showRun(hunk);
+          });
+          latest.current.around[action](hunk);
+        }
       },
       onHeight: (height) => {
         barHeight.current = height;
       },
       onRun: (hunk) => {
-        const { unchangedShown, onHunkRun } = latest.current;
+        const { around, onHunkRun } = latest.current;
 
         onHunkRun(hunkId(container, hunk), barHeight.current);
 
-        if (unchangedShown) {
+        if (showsAny(around.shown)) {
           kept.hold(container, hunkId(container, hunk));
         }
       },
@@ -138,9 +167,8 @@ function useBarActions(container: string, state: BarState): BarActions {
         scrollToShow(view, line, barsBelow + barHeight.current);
       },
       barHeight: () => barHeight.current,
-    }),
-    [container, latest, kept],
-  );
+    };
+  }, [container, latest, kept]);
 }
 
 // Has the view keep the places of the lines it shows of the file at the path, at the container, and
@@ -186,9 +214,10 @@ const noLines: NumberedLine[] = [];
 // Each hunk's bar is followed by its lines. The pointer over either reveals the hunk's actions, and
 // the toggle that shows the entire file, with the unchanged lines around the hunks, once the diff
 // is read again with them, or only the hunks again, which keeps the hunk in place, as the bar's
-// count of the unchanged lines above the hunk does, which shows those. Each bar stays at the top
-// while its lines scroll under it, or under the file's bar while the hunks scroll with the view's
-// other diffs, until the next hunk's bar covers it or the file's diff ends. While any unchanged
+// count of the unchanged lines above the hunk does, which shows those, and what hides them again.
+// Each bar stays at the top while its lines scroll under it, or under the file's bar while the
+// hunks scroll with the view's other diffs, until the next hunk's bar covers it or the file's diff
+// ends. While any unchanged
 // lines show, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
 // again, and the selection changing only the hunks it leaves or reaches. Right-clicking its lines
@@ -207,21 +236,14 @@ function HunksShown({
   onFileRun,
   controls,
   theme,
-  shown: { shownDiff, shown: runs, window, showAround, unchanged, above, toggle, open },
+  shown: around,
 }: HunksProps & { shown: UnchangedShown }): ReactElement {
+  const { shownDiff, shown: runs, window, showAround, unchanged, above } = around;
   const pointed = useMemo(() => pointedHunk(), []);
   const requests = useMemo(() => barRequests(), []);
 
   const container = fileId(view, fileIndex);
-
-  const bars = useBarActions(container, {
-    unchangedShown: showsAny(runs),
-    onHunkRun,
-    view,
-    barsBelow,
-    toggle,
-    open,
-  });
+  const bars = useBarActions(container, { around, onHunkRun, view, barsBelow });
 
   useKeptLines(file.path, shownDiff.hunks, unchanged, container, controls);
 
@@ -251,7 +273,8 @@ function HunksShown({
     return rectOf(view).y + (barsBelow ?? 0) + bars.barHeight();
   }
 
-  const hunks = above.flatMap(({ hunk, leftOut, separates }, index) => {
+  const hunks = above.flatMap((each, index) => {
+    const { hunk } = each;
     const selected = rangeInHunk(range, index);
 
     return [
@@ -270,10 +293,11 @@ function HunksShown({
         requests={requests}
         controls={controls}
         entire={runs.entire}
-        leftOut={leftOut}
-        separates={separates}
+        unchanged={each.unchanged}
+        unchangedShown={each.shown}
+        separates={each.separates}
         onToggleEntire={bars.onToggleEntire}
-        onOpen={bars.onOpen}
+        onUnchanged={bars.onUnchanged}
         onHeight={bars.onHeight}
         onRun={bars.onRun}
         onFileRun={onFileRun}
@@ -338,34 +362,11 @@ function HunksShown({
   );
 }
 
-// Nothing commented on, as while lines can't be.
-const uncommented: CommentedLines = { commented: undefined, outside: false };
-
-// What's commented on among the diff's lines, while they can be commented on.
-function useCommentedLines(diff: Diff, file: NumberedFile | undefined): CommentedLines {
-  const review = useContext(ReviewContext);
-  const threads = review?.threads;
-  const editing = review?.editing;
-
-  return useMemo(
-    () =>
-      file === undefined || threads === undefined
-        ? uncommented
-        : {
-            commented: commentedOn(file, threads, editing),
-            outside: commentedOutside(file, diff.hunks, threads, editing),
-          },
-    [diff.hunks, file, threads, editing],
-  );
-}
-
 // The diff's hunks, with those of the unchanged lines around them that show, and those with a line
 // commented on, whether or not they're asked to show.
 export function Hunks(props: HunksProps): ReactElement {
-  const commented = useCommentedLines(props.diff, useNumbered(props.file));
-
   return (
-    <UnchangedLinesShown diff={props.diff} query={props.entireQuery} commented={commented}>
+    <UnchangedLinesShown diff={props.diff} query={props.entireQuery} file={useNumbered(props.file)}>
       {(shown) => <HunksShown {...props} shown={shown} />}
     </UnchangedLinesShown>
   );

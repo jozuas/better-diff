@@ -90,6 +90,44 @@ test("a place held is shown in the same place again once the diff shows somethin
   expect(offsetOfLine(page, changed, "between")).toBe(-5);
 });
 
+test("once a place held is shown in the same place again, what the hold asks next is done, once", () => {
+  const { page, kept, render, showing } = heldIn(["a", "b", "c", "d"], 2);
+  const offset = page.offsetOf("hunk 1");
+  const done: (number | undefined)[] = [];
+
+  kept.hold("view:0", "hunk 1", () => {
+    done.push(page.offsetOf("hunk 1"));
+  });
+  render();
+
+  expect(done).toStrictEqual([]);
+
+  showing(["above", "a", "b", "between", "c", "d"], 4);
+  render();
+
+  expect(done).toStrictEqual([offset]);
+
+  showing(["new", "above", "a", "b", "between", "c", "d"], 5);
+  render();
+
+  expect(done).toStrictEqual([offset]);
+});
+
+test("scrolling the view before the diff shows something else leaves undone what a hold asks next", () => {
+  const { page, kept, render, showing } = heldIn(["a", "b", "c", "d"], 2);
+  const done: string[] = [];
+
+  kept.hold("view:0", "hunk 1", () => {
+    done.push("then");
+  });
+  page.scrollBy(7);
+  kept.scrolled();
+  showing(["above", "a", "b", "between", "c", "d"], 4);
+  render();
+
+  expect(done).toStrictEqual([]);
+});
+
 test("a place held while an action runs is shown in the same place each time the diff shows something else, until the action is done", () => {
   const { page, kept, render, showing } = heldIn(["a", "b", "c", "d"], 2);
   const offset = page.offsetOf("hunk 1");
