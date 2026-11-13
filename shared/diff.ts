@@ -12,6 +12,15 @@ const run = z.tuple([z.int().positive(), z.string().nullable()]);
 // language the highlighter doesn't know, or too long to highlight.
 const runs = z.array(run);
 
+// What a submodule's diff, or a repository's inside the worktree, is of: a submodule's change of the
+// commit it's at, as to another, or its addition or deletion, which the plugin stages and unstages
+// whole, as `git add` and `git reset` do; changes only to a submodule's own files, which `git add`
+// doesn't stage; or a repository that isn't a submodule, which git status lists untracked, by its
+// directory. The plugin shows none with lines, and discards none.
+export const repositoryKinds = ["submodule", "submodule files", "repository"] as const;
+
+export type RepositoryKind = (typeof repositoryKinds)[number];
+
 // Whether to hide changes only to whitespace, as `git diff --ignore-all-space` hides them: a line
 // whose only change is to whitespace is unchanged, as the new version has it.
 const hideWhitespace = z.boolean().optional();
@@ -24,7 +33,8 @@ const diff = z.object({
   // lines: none, a rename on its own, a symlink's, a binary file's, a mode change on its own, or a
   // file with merge conflicts. A file that became a symlink, or stopped being one, is a symlink's.
   // A renamed file with other changes is what they are. With whitespace changes hidden, a text diff
-  // whose changes to lines are all to whitespace is a whitespace one, without lines.
+  // whose changes to lines are all to whitespace is a whitespace one, without lines. A submodule's,
+  // or a repository's inside the worktree, is what it's of.
   kind: z.enum([
     "text",
     "unchanged",
@@ -34,6 +44,7 @@ const diff = z.object({
     "mode",
     "unmerged",
     "whitespace",
+    ...repositoryKinds,
   ]),
   // The path the file had before the side's changes, if they rename it. On the unstaged side,
   // that's a deleted file git pairs with an untracked one, which isn't then listed as untracked.

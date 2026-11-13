@@ -11,7 +11,13 @@ import type { Changes } from "./file-changes";
 function changed(listed: Pick<Changes, "untracked" | "intentToAdd">): ChangedFile[] {
   return manyPaths.map((path) => ({
     path,
-    changes: { diff: Buffer.from("changes"), renamedFrom: undefined, paths: [path], ...listed },
+    changes: {
+      diff: Buffer.from("changes"),
+      renamedFrom: undefined,
+      paths: [path],
+      repository: undefined,
+      ...listed,
+    },
   }));
 }
 

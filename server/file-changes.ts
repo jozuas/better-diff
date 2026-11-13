@@ -1,9 +1,10 @@
 import type { RpcInput } from "@getpaseo/plugin";
 
-import type { diffRpc } from "../shared/diff";
+import type { RepositoryKind, diffRpc } from "../shared/diff";
 import { aloneIntentToAdd, readStatus, withIntentToAdd } from "./changes";
 import type { Entry } from "./changes";
 import { git } from "./git";
+import { repositoryOn } from "./grouping";
 import { isRename } from "./patch";
 import { symlinksAmong } from "./symlinks";
 import { versionOf } from "./version";
@@ -26,6 +27,8 @@ export interface Changes {
   // Whether the file isn't in the index, or is there intent-to-add.
   untracked: boolean;
   intentToAdd: boolean;
+  // Where it's a submodule, or a repository inside the worktree, what its diff is of.
+  repository: RepositoryKind | undefined;
 }
 
 // An untracked file's diff as a new file, as git diffs one added with --intent-to-add. `git diff
@@ -93,13 +96,20 @@ export interface Listing {
   original: string | undefined;
   untracked: boolean;
   intentToAdd: boolean;
+  repository: RepositoryKind | undefined;
 }
 
 export function listingOf(listed: readonly Entry[], side: Side): Listing {
+  const untracked = side === "unstaged" && listed.some((entry) => entry.untracked);
+  // The entry of the file the side shows: on the unstaged side, the untracked one, where git status
+  // lists a file twice, as deleted from the index and untracked.
+  const shown = listed.find((entry) => entry.untracked === untracked);
+
   return {
     original: listed[0]?.original,
-    untracked: side === "unstaged" && listed.some((entry) => entry.untracked),
+    untracked,
     intentToAdd: listed[0]?.intentToAdd === true,
+    repository: shown === undefined ? undefined : repositoryOn(shown, side),
   };
 }
 
@@ -108,7 +118,7 @@ export function changesFrom(
   diff: Buffer,
   path: string,
   renamedFrom: string | undefined,
-  { untracked, intentToAdd }: Listing,
+  { untracked, intentToAdd, repository }: Listing,
 ): Changes {
   return {
     diff,
@@ -116,6 +126,7 @@ export function changesFrom(
     paths: renamedFrom === undefined ? [path] : [renamedFrom, path],
     untracked,
     intentToAdd,
+    repository,
   };
 }
 
@@ -169,14 +180,13 @@ async function hiding(
   return { ...changes, withoutWhitespace };
 }
 
-// The file's changes on the side, as the entries git status lists it in say.
+// The file's changes on the side, as git status lists it.
 async function listedChanges(
   directory: string,
-  listed: readonly Entry[],
+  listing: Listing,
   path: string,
   side: Side,
 ): Promise<Changes> {
-  const listing = listingOf(listed, side);
   const { original, untracked } = listing;
 
   if (original !== undefined) {
@@ -193,7 +203,10 @@ async function listedChanges(
 }
 
 // The file's changes on the side, as the entries git status lists it in say, and their diff with
-// whitespace changes hidden where they're to be hidden.
+// whitespace changes hidden where they're to be hidden. A submodule's are what git diffs where its
+// path is named as a submodule's: its change of commit, which `git add` stages, or where its files
+// alone changed, that it's dirty, which `git add` leaves as it is. A repository inside the worktree
+// that isn't a submodule has none.
 export async function changesIn(
   directory: string,
   listed: readonly Entry[],
@@ -201,7 +214,15 @@ export async function changesIn(
   side: Side,
   hideWhitespace?: boolean,
 ): Promise<Changes> {
-  const changes = await listedChanges(directory, listed, path, side);
+  const listing = listingOf(listed, side);
+
+  if (listing.repository !== undefined) {
+    const diff = await git(directory, "diff", diffOptions[side], [path], { submodules: [path] });
+
+    return changesFrom(diff, path, undefined, listing);
+  }
+
+  const changes = await listedChanges(directory, listing, path, side);
   const shown = await hiding(directory, path, changes, side, hideWhitespace);
 
   return shown;

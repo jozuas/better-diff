@@ -54,9 +54,10 @@ const takesNoPaths = new Set<keyof typeof commandOptions>(["config"]);
 // The pathspecs that name exactly the file at the path: never a pattern, such as `*` or `:!x`, and
 // never the files in a directory of the same name, which git takes the path to name too, as where a
 // directory has replaced the file. A path ending in `/`, as git status names a repository inside
-// the repository, names the directory, and a symlink has no files in it to leave out.
-function pathspecsOf(path: string, symlink: boolean): string[] {
-  return path.endsWith("/") || symlink
+// the repository, names the directory, a symlink has no files in it to leave out, and leaving the
+// files in a submodule's directory out leaves the submodule out too.
+function pathspecsOf(path: string, alone: boolean): string[] {
+  return path.endsWith("/") || alone
     ? [`:(literal)${path}`]
     : [`:(literal)${path}`, `:(exclude,literal)${path}/`];
 }
@@ -91,6 +92,8 @@ interface Extras {
   index?: string | undefined;
   // Stops the command, which then fails.
   signal?: AbortSignal | undefined;
+  // The paths that are submodules'.
+  submodules?: readonly string[] | undefined;
 }
 
 // Runs a git command and returns what it prints, as bytes: files, and so diffs, needn't be UTF-8.
@@ -99,7 +102,7 @@ export async function git(
   command: keyof typeof commandOptions,
   options: readonly string[],
   paths: readonly string[] = [],
-  { input = new Uint8Array(), index, signal }: Extras = {},
+  { input = new Uint8Array(), index, signal, submodules }: Extras = {},
 ): Promise<Buffer> {
   const pathsOnInput = readsPaths.has(command);
   // `git diff --no-index` diffs files, which its paths name as they are.
@@ -108,7 +111,9 @@ export async function git(
 
   const pathspecs = noIndex
     ? paths
-    : paths.flatMap((path) => pathspecsOf(path, symlinks.has(path)));
+    : paths.flatMap((path) =>
+        pathspecsOf(path, symlinks.has(path) || submodules?.includes(path) === true),
+      );
 
   const child = spawnProcess(
     "git",

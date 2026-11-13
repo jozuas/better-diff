@@ -40,6 +40,9 @@ const otherKinds = [
   "mode",
   "unmerged",
   "whitespace",
+  "submodule",
+  "submodule files",
+  "repository",
 ] as const;
 
 test.each(otherKinds)(

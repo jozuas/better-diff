@@ -88,14 +88,16 @@ function expectedChanges(files: readonly Versions[]): Changes {
     ],
     untracked: paths(stayed, ({ index, worktree }) => index === null && worktree !== null),
     staged: paths(files, ({ head, index }) => head !== index),
+    repositories: { modified: [], untracked: [], staged: [] },
   };
 }
 
-function sorted({ modified, untracked, staged }: Changes): Changes {
+function sorted({ modified, untracked, staged, repositories }: Changes): Changes {
   return {
     modified: modified.toSorted(),
     untracked: untracked.toSorted(),
     staged: staged.toSorted(),
+    repositories,
   };
 }
 

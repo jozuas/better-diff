@@ -51,8 +51,13 @@ function changesLines(diff: Buffer): boolean {
 
 // What the changes' diff is, as shown, from what the diff shown is: with whitespace changes
 // hidden, what the diff that shows them is, but for a text diff whose changes to lines are all to
-// whitespace, which is a whitespace one.
-function kindShown({ diff, withoutWhitespace }: Changes, shown: Kind): Kind {
+// whitespace, which is a whitespace one. A submodule's, or a repository's inside the worktree, is
+// what it's of.
+function kindShown({ diff, withoutWhitespace, repository }: Changes, shown: Kind): Kind {
+  if (repository !== undefined) {
+    return repository;
+  }
+
   if (withoutWhitespace === undefined) {
     return shown;
   }
@@ -68,10 +73,12 @@ function text(content: Buffer): string {
   return content.toString("utf8");
 }
 
-// The diff of the changes, with whitespace changes hidden where they're hidden.
+// The diff of the changes, with whitespace changes hidden where they're hidden. A submodule's, which
+// names the commits it goes between as lines of text, shows without lines.
 export function diffOf(changes: Changes): UnhighlightedDiff {
-  const { diff, withoutWhitespace, renamedFrom } = changes;
-  const { kind: shownKind, header, hunks, lines } = parseDiff(withoutWhitespace ?? diff);
+  const { diff, withoutWhitespace, renamedFrom, repository } = changes;
+  const shown = repository === undefined ? (withoutWhitespace ?? diff) : Buffer.alloc(0);
+  const { kind: shownKind, header, hunks, lines } = parseDiff(shown);
   const changed = hunks.flatMap((hunk) => hunk.lines);
 
   return {
@@ -274,16 +281,17 @@ function deletes(operation: Action["operation"], { untracked, intentToAdd }: Cha
   return operation === "discard" && (untracked || intentToAdd);
 }
 
-// Runs the command on the paths, if there are any: with none, `git clean` and `git reset` act on
-// every file.
+// Runs the command on the paths, naming those that are submodules' as theirs, if there are any:
+// with none, `git clean` and `git reset` act on every file.
 async function gitOn(
   directory: string,
   command: "restore" | "rm" | "add" | "reset" | "clean",
   paths: readonly string[],
   options: readonly string[] = [],
+  submodules?: readonly string[],
 ): Promise<void> {
   if (paths.length > 0) {
-    await git(directory, command, options, paths);
+    await git(directory, command, options, paths, { submodules });
   }
 }
 
@@ -314,18 +322,30 @@ async function removedIn(
   return removed;
 }
 
+// Whether the operation acts on the changes: not where their diff has none, and never to discard a
+// submodule's, which with submodule.recurse set would check out the submodule's commit in it.
+function actsOn(operation: Action["operation"], { diff, repository }: Changes): boolean {
+  return diff.length > 0 && !(operation === "discard" && repository !== undefined);
+}
+
 // Stages, unstages or discards all of the files' changes, including those a patch can't make, such
-// as a binary file's or a mode change, and a rename, both of whose paths it acts on. A file whose
-// diff has no changes is left alone. A file discarding deletes goes with `git clean`, which never
-// touches a tracked file, once the file it was renamed from is back and it's out of the index.
-// Each command runs once for all the files it acts on, and `git clean` once for each hundred.
+// as a binary file's, a mode change or a submodule's, and a rename, both of whose paths it acts on.
+// A file whose diff has no changes, or a submodule to discard, is left alone. A file discarding
+// deletes goes with `git clean`, which never touches a tracked file, once the file it was renamed
+// from is back and it's out of the index. Each command runs once for all the files it acts on, and
+// `git clean` once for each hundred.
 export async function applyChanges(
   directory: string,
   operation: Action["operation"],
   files: readonly ChangedFile[],
 ): Promise<void> {
   const changed = files.flatMap(({ path, changes }) =>
-    changes.diff.length > 0 ? [{ path, ...changes }] : [],
+    actsOn(operation, changes) ? [{ path, ...changes }] : [],
+  );
+
+  const submodules = changed.flatMap(({ path, repository }) =>
+    // Stryker disable next-line ArrayDeclaration: a path among the submodules' that none of the files has names none of them.
+    repository === "submodule" ? [path] : [],
   );
 
   const deleted = changed.filter((file) => deletes(operation, file));
@@ -353,6 +373,8 @@ export async function applyChanges(
     directory,
     fileCommands[operation],
     kept.filter((path) => !removed.has(path)),
+    [],
+    submodules,
   );
   await cleanEach(
     directory,

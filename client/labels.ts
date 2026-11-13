@@ -14,6 +14,9 @@ const labels: Record<Exclude<Diff["kind"], "text">, string | undefined> = {
   mode: undefined,
   unmerged: "Merge conflicts",
   whitespace: "Only whitespace changes",
+  submodule: "Submodule",
+  "submodule files": "Submodule's files changed",
+  repository: "Git repository",
 };
 
 const collapsedLabels: Record<NonNullable<Diff["collapsed"]>, string> = {

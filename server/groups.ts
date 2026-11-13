@@ -1,25 +1,19 @@
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
-import type { applyGroupRpc, diffRpc, groupRpc } from "../shared/diff";
+import type { applyGroupRpc, groupRpc } from "../shared/diff";
 import { batchedChanges, readEach } from "./batches";
-import { groupsOf, readStatus } from "./changes";
+import { readStatus } from "./changes";
 import type { Entry } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
 import { applyChanges, diffOf, inTurn } from "./diff";
 import type { ChangedFile } from "./diff";
 import { changesIn } from "./file-changes";
 import type { Changes } from "./file-changes";
+import { groupSides, groupsOf } from "./grouping";
 import { highlightedTogether } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
 
 type Group = RpcInput<typeof groupRpc>["group"];
-
-// The diff each group's files are shown with.
-const groupSides: Record<Group, RpcInput<typeof diffRpc>["side"]> = {
-  modified: "unstaged",
-  untracked: "unstaged",
-  staged: "staged",
-};
 
 interface GroupFile {
   shown: (UnhighlightedDiff & { path: string }) | { path: string; error: string };

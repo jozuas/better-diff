@@ -182,6 +182,7 @@ export function Sidebar({
           {(data) => (
             <FileList
               groups={sidebarGroups(data, filter)}
+              repositories={data.repositories}
               open={open}
               onOpen={onOpen}
               onOpenGroup={(group) => {

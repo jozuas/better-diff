@@ -1,7 +1,7 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "../shared/diff";
-import { fileActions, fileBarOf, hunkActions, hunkLines, lineActions } from "./actions";
+import { fileActionsOf, fileBarOf, hunkActions, hunkLines, lineActions } from "./actions";
 import type { Controls, IconAction } from "./actions";
 import { fileBar } from "./focus";
 import type { BarAt, KeyboardFocus } from "./focus";
@@ -45,16 +45,16 @@ export interface BarKeys {
 }
 
 // A file's bar's actions, once its diff is read, as its buttons and keys run them, calling `onRun`
-// just before one runs.
+// just before one runs: those on a file whose diff is of its kind.
 export function fileBarActions(
   file: OpenFile,
-  diff: Pick<Diff, "version"> | undefined,
+  diff: (Pick<Diff, "version"> & Partial<Pick<Diff, "kind">>) | undefined,
   onRun: () => void,
 ): Bar | undefined {
   return diff === undefined
     ? undefined
     : {
-        actions: fileActions[file.group],
+        actions: fileActionsOf(file.group, diff.kind),
         bar: fileBarOf(diff.version),
         target: { file, version: diff.version },
         onRun,

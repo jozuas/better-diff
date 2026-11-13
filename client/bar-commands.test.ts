@@ -243,6 +243,15 @@ test("with lines selected, Enter presses a button with focus inside the bar rath
   expect(done).toStrictEqual([]);
 });
 
+test("a file's bar has the actions on a file whose diff is of its kind", () => {
+  expect(fileBarActions(file, { version: "2", kind: "submodule" }, onRun)?.actions).toStrictEqual([
+    { operation: "stage", label: "Stage", icon: "Plus" },
+  ]);
+  expect(fileBarActions(file, { version: "2", kind: "repository" }, onRun)?.actions).toStrictEqual(
+    [],
+  );
+});
+
 test("a file's bar acts on all of the file once its diff is read, and shows a collapsed diff's lines with E", () => {
   const read = { version: "2", hunks: [], collapsed: "large" as const };
   const actions = fileBarActions(file, read, onRun);

@@ -4,7 +4,11 @@ import type { changesRpc } from "../shared/changes";
 import type { diffRpc, groupRpc } from "../shared/diff";
 
 // The files changes.list lists in each group.
-type Changes = Omit<RpcOutput<typeof changesRpc>, "version">;
+type Changes = Omit<RpcOutput<typeof changesRpc>, "repositories" | "version">;
+
+// Each group's files that are submodules, or repositories inside the worktree, with the kinds of
+// their diffs there.
+export type Repositories = RpcOutput<typeof changesRpc>["repositories"];
 
 type Diff = RpcOutput<typeof diffRpc>;
 

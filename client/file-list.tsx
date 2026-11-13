@@ -19,9 +19,8 @@ import { FileMenu } from "./file-menu";
 import { FilterInput } from "./filter-input";
 import { KeyboardFocusContext } from "./focus";
 import { GroupSection } from "./group-section";
-import type { StopHandlers } from "./group-section";
 import { listedBy, selectedTo } from "./groups";
-import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
+import type { GroupName, Open, OpenFile, OpenFiles, Repositories, SidebarGroup } from "./groups";
 import type { IgnorePlace } from "./ignore";
 import { IgnorePrompt } from "./ignore-prompt";
 import type { Ignoring } from "./ignore-prompt";
@@ -31,6 +30,7 @@ import { passing } from "./passing";
 import type { Passing } from "./passing";
 import { filterKey, headingKey, listed, rowKey, settledStop } from "./sidebar-keys";
 import type { SidebarList } from "./sidebar-keys";
+import type { StopHandlers } from "./sidebar-rows";
 import { indexOfStop, sidebarStops } from "./sidebar-stops";
 import { nothingFocused, useLatest } from "./web";
 
@@ -41,6 +41,8 @@ const styles = StyleSheet.create({
 
 interface FileListProps {
   groups: SidebarGroup[];
+  // Each group's files that are submodules, or repositories inside the worktree.
+  repositories: Repositories;
   open: Open | undefined;
   onOpen: (open: OpenFile | OpenFiles) => void;
   onOpenGroup: (group: GroupName) => void;
@@ -155,6 +157,7 @@ function useListedFiles(list: ListState): void {
 // where the menu was.
 export function FileList({
   groups,
+  repositories,
   open,
   onOpen,
   onOpenGroup,
@@ -204,6 +207,7 @@ export function FileList({
           <GroupSection
             key={group.name}
             group={group}
+            repositories={repositories[group.name]}
             open={open}
             onOpenGroup={() => {
               onOpenGroup(group.name);

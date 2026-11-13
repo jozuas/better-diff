@@ -1,7 +1,8 @@
-import { groupsOf, readStatus } from "../server/changes";
+import { readStatus } from "../server/changes";
 import type { Entry } from "../server/changes";
 import { changesIn } from "../server/file-changes";
 import type { Changes, Side } from "../server/file-changes";
+import { groupsOf } from "../server/grouping";
 
 export type Group = "modified" | "untracked" | "staged";
 

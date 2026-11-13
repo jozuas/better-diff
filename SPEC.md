@@ -168,6 +168,8 @@ As in Paseo's own diff, lines are commented on, and the comments sent to an agen
 - Deleted file: show the whole old file as removed lines.
 - New or deleted empty file: show "Empty file".
 - A file in a directory that's become a symlink is a deleted file, as `git status` shows it: git never looks beyond a symlink. The symlink in the directory's place is an untracked file until it's staged. It can be staged and unstaged, whole or in part. Discarding it puts the directory back in place of the symlink, as `git restore` does. Discarding a hunk or lines changes nothing, and says why: git won't write a file beyond a symlink, so `git restore -p` and Magit refuse to as well.
+- Submodule: listed as `git status` lists it, in MODIFIED once its commit or its files change, and in STAGED once its commit change is staged, showing "Submodule" instead of the diff, or in MODIFIED, while only its files changed, "Submodule's files changed". Its commit change, to another commit, or its addition or deletion, is staged and unstaged whole, as `git add` and `git reset` do: its file bar and row have Stage in MODIFIED and Unstage in STAGED, which their keys run, and staging or unstaging its group or the files selected includes it. Better Diff never discards it, which would check out another commit in it, nor its files' changes (see Out of scope): its file bar and row have no Discard, Backspace does nothing there, discarding its group or the files selected leaves it out, and while only its files changed, it has no buttons.
+- A repository inside the worktree that isn't a submodule, which `git status` lists as untracked by its directory, as `vendor/`: in UNTRACKED, showing "Git repository". Better Diff leaves it as it is: its file bar and row have no buttons, the keys that run a file's actions do nothing there, and an action on its group or on the files selected leaves it out. Its menu has the places a rule ignoring it can go, as an untracked file's has.
 - Generated file, and a diff of more than 1,000 changed lines: collapsed, as GitHub collapses them, to "Generated file" or "Large diff" and a "Show diff" button. Its file actions work while it's collapsed. A file is generated if its `linguist-generated` attribute is set, as on GitHub, or, where the attribute isn't specified, if it's a lockfile such as `package-lock.json` or `mix.lock`.
 
 ### File sidebar (left)
@@ -254,7 +256,7 @@ Plugins can't read Paseo's own font size settings, so the plugin has two of its 
 ### Out of scope
 
 - Merge conflicts: a file with them shows "Merge conflicts" instead of its diff.
-- Submodules.
+- Submodules beyond their commit changes: showing a submodule's commit change, discarding it, or showing, staging or discarding the changes to its own files. Its commit change is only staged and unstaged whole (see Special file states).
 
 ### Open questions
 

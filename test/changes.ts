@@ -32,7 +32,9 @@ export const hidden: fc.Arbitrary<Hidden> = fc.record({
 });
 
 // The changes of only modified files, at the paths.
-export function modified(...paths: string[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
+export function modified(
+  ...paths: string[]
+): Omit<RpcOutput<typeof changesRpc>, "repositories" | "version"> {
   return { modified: paths, untracked: [], staged: [] };
 }
 

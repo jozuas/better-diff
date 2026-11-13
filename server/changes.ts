@@ -6,7 +6,9 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 
 import { changesRpc } from "../shared/changes";
 import type { releaseRpc, versionRpc, waitRpc } from "../shared/changes";
+import type { RepositoryKind } from "../shared/diff";
 import { git } from "./git";
+import { groupsOf, repositoriesOf } from "./grouping";
 import { versionOf } from "./version";
 import { changeFrom, release } from "./wait";
 import { watchRepository } from "./watch";
@@ -16,6 +18,9 @@ export interface Entry {
   path: string;
   // Not in the index. One git status pairs with a deleted file is also modified, as renamed.
   untracked: boolean;
+  // Where it's a submodule, or a repository inside the worktree, what its diff in the worktree is
+  // of.
+  repository: RepositoryKind | undefined;
   // In the index intent-to-add, as `git add -N` leaves a file new in the worktree.
   intentToAdd: boolean;
   staged: boolean;
@@ -30,6 +35,9 @@ function untrackedEntry(path: string): Entry {
   return {
     path,
     untracked: true,
+    // With --untracked-files=all, git status lists an untracked directory, rather than each file in
+    // it, only where it's a repository.
+    repository: path.endsWith("/") ? "repository" : undefined,
     intentToAdd: false,
     staged: false,
     modified: false,
@@ -37,6 +45,17 @@ function untrackedEntry(path: string): Entry {
     deleted: false,
     original: undefined,
   };
+}
+
+// What a submodule's diff in the worktree is of, by the field after git status's: it starts with S
+// for a submodule, in any of its versions, then has C where the worktree has another commit checked
+// out. A submodule the worktree modifies at the same commit has only its files changed.
+function submoduleOf(field: string): RepositoryKind | undefined {
+  if (field.charAt(5) !== "S") {
+    return undefined;
+  }
+
+  return field.charAt(3) === "M" && field.charAt(6) !== "C" ? "submodule files" : "submodule";
 }
 
 // The files git status's fields list.
@@ -59,6 +78,7 @@ export function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
       yield {
         path,
         untracked: false,
+        repository: submoduleOf(field),
         // The worktree adds, renames or copies only a file the index has intent-to-add.
         intentToAdd: ["A", "R", "C"].includes(field.charAt(3)),
         staged: field.charAt(2) !== ".",
@@ -312,14 +332,6 @@ export async function readStatus(directory: string): Promise<Entry[]> {
   return entries;
 }
 
-export function groupsOf(entries: readonly Entry[]): Omit<RpcOutput<typeof changesRpc>, "version"> {
-  return {
-    modified: pathsOf(entries, ({ modified }) => modified),
-    untracked: pathsOf(entries, ({ untracked, modified }) => untracked && !modified),
-    staged: pathsOf(entries, ({ staged }) => staged),
-  };
-}
-
 // Changes whenever the files listed, or their diffs, could have: with what git status says, or the
 // content of a file it lists. Not with the config, such as diff.algorithm.
 async function versionFrom(directory: string, status: Status): Promise<string> {
@@ -385,5 +397,9 @@ export async function listChanges({
   const version = await versionFrom(directory, status);
   const entries = await renamedIn(directory, status);
 
-  return { ...groupsOf(entries), version };
+  return {
+    ...groupsOf(entries),
+    repositories: repositoriesOf(entries),
+    version,
+  };
 }

@@ -69,7 +69,7 @@ paseo plugin add https://github.com/jozuas/better-diff
 - No history, branches or other git operations beyond staging: planned for v2. Commit from Paseo itself.
 - No GitHub pull request reviews: planned for v3.
 - Merge conflicts aren't handled: a conflicted file shows "Merge conflicts" instead of its diff.
-- Submodules aren't supported.
+- Submodules are only staged and unstaged whole, to the commit they're at: one shows "Submodule" instead of its diff, and can't be discarded.
 
 ## Inspiration / credits
 

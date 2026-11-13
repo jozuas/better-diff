@@ -1,6 +1,12 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 
+import { repositoryKinds } from "./diff";
+
+// A group's files that are submodules, or repositories inside the worktree, each by its path, with
+// what its diff on the group's side is of.
+const repositories = z.array(z.tuple([z.string(), z.enum(repositoryKinds)]));
+
 export const changesRpc = defineRpc({
   name: "changes.list",
   input: z.object({ directory: z.string() }),
@@ -10,6 +16,13 @@ export const changesRpc = defineRpc({
     modified: z.array(z.string()),
     untracked: z.array(z.string()),
     staged: z.array(z.string()),
+    // A path can be a submodule in one group and an ordinary file in another, as where a file has
+    // replaced a submodule the index no longer has.
+    repositories: z.object({
+      modified: repositories,
+      untracked: repositories,
+      staged: repositories,
+    }),
     // The version changes.wait answers with while the files are as listed.
     version: z.string(),
   }),

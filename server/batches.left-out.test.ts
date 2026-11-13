@@ -118,6 +118,7 @@ test("reads with renames off a deleted file and an added one that git status, wi
 const unmerged: Entry = {
   path: "b",
   untracked: false,
+  repository: undefined,
   intentToAdd: false,
   staged: true,
   modified: true,

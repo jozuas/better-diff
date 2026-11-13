@@ -8,7 +8,9 @@ import type { GroupName, Open, OpenFile } from "./groups";
 
 type Operation = RpcInput<typeof applyFileRpc>["operation"];
 
-type Line = RpcOutput<typeof diffRpc>["hunks"][number]["lines"][number];
+type Diff = RpcOutput<typeof diffRpc>;
+
+type Line = Diff["hunks"][number]["lines"][number];
 
 type Selection = RpcInput<typeof applyLinesRpc>["lines"];
 
@@ -95,8 +97,19 @@ const selectionActions: Record<GroupName, IconAction[]> = {
   staged: [{ operation: "unstage", label: "Unstage Selected", icon: "Minus" }],
 };
 
+// The actions on all of a file in the group whose diff is of the kind: a submodule's change of
+// commit is staged and unstaged but not discarded, and a submodule whose files alone changed, or a
+// repository inside the worktree, has none.
+export function fileActionsOf(group: GroupName, kind?: Diff["kind"]): IconAction[] {
+  if (kind === "submodule") {
+    return fileActions[group].filter(({ operation }) => operation !== "discard");
+  }
+
+  return kind === "submodule files" || kind === "repository" ? [] : fileActions[group];
+}
+
 // A file's row's actions, and what they act on: all the files selected, if it's one of them, or
-// else the file, as shown if its diff is.
+// else the file, whose diff is of the kind, as shown if its diff is.
 export interface RowActions {
   actions: IconAction[];
   target: Target;
@@ -107,7 +120,11 @@ export interface RowActions {
   path?: string;
 }
 
-export function rowActions(open: Open | undefined, file: OpenFile): RowActions {
+export function rowActions(
+  open: Open | undefined,
+  file: OpenFile,
+  kind?: Diff["kind"],
+): RowActions {
   const { group, path } = file;
 
   if (open !== undefined && "paths" in open && isOpen(open, group, path)) {
@@ -119,7 +136,7 @@ export function rowActions(open: Open | undefined, file: OpenFile): RowActions {
   }
 
   return {
-    actions: fileActions[group],
+    actions: fileActionsOf(group, kind),
     target: { file, shown: isShown(open, group, path) },
     row: `file:${group}:${path}`,
     path,

@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
 
+import { diffRpc } from "../shared/diff";
 import type { Action, ButtonLook, TextLook } from "./actions";
 import {
   buttonLook,
   buttonOf,
   buttonText,
   fileActions,
+  fileActionsOf,
   fileBarOf,
   groupActions,
   hunkActions,
@@ -97,6 +99,61 @@ test("a file's row acts on its file, which its buttons name, as shown while it's
   expect(rowActions(file, file).target).toStrictEqual({ file, shown: true });
   expect(rowActions({ group: "modified" }, file).target).toStrictEqual({ file, shown: true });
   expect(rowActions(undefined, file).target).toStrictEqual({ file, shown: false });
+});
+
+test.each(["modified", "untracked", "staged"] as const)(
+  "in %s, a file of any kind but a submodule or a repository inside the worktree has all of a file's actions",
+  (group) => {
+    const kinds = diffRpc.output.shape.kind.options.filter(
+      (kind) => fileActionsOf(group, kind) === fileActions[group],
+    );
+
+    expect(kinds).toStrictEqual([
+      "text",
+      "unchanged",
+      "renamed",
+      "symlink",
+      "binary",
+      "mode",
+      "unmerged",
+      "whitespace",
+    ]);
+    expect(fileActionsOf(group)).toBe(fileActions[group]);
+  },
+);
+
+test("a submodule's change of commit is staged and unstaged, but not discarded", () => {
+  expect(fileActionsOf("modified", "submodule")).toStrictEqual([
+    { operation: "stage", label: "Stage", icon: "Plus" },
+  ]);
+  expect(fileActionsOf("staged", "submodule")).toStrictEqual([
+    { operation: "unstage", label: "Unstage", icon: "Minus" },
+  ]);
+});
+
+test.each(["submodule files", "repository"] as const)(
+  "a file whose diff is of %s has no actions",
+  (kind) => {
+    expect(fileActionsOf("modified", kind)).toStrictEqual([]);
+    expect(fileActionsOf("untracked", kind)).toStrictEqual([]);
+  },
+);
+
+test("a submodule's row has its actions, unless it's selected, as its group's other files' actions act on the files selected", () => {
+  const file = { group: "modified", path: "sub" } as const;
+
+  expect(rowActions(undefined, file, "submodule files")).toStrictEqual({
+    actions: [],
+    target: { file, shown: false },
+    row: "file:modified:sub",
+    path: "sub",
+  });
+  expect(rowActions(undefined, file, "submodule").actions).toStrictEqual(
+    fileActionsOf("modified", "submodule"),
+  );
+  expect(
+    rowActions({ group: "modified", paths: ["a", "sub"] }, file, "submodule files").actions,
+  ).toStrictEqual(selectionActionsOf("modified"));
 });
 
 test("a selected file's row acts on all the files selected, and its buttons name none", () => {
