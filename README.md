@@ -2,18 +2,54 @@
 
 A [Paseo](https://paseo.sh) plugin: a Sublime Merge-style diff and staging view for a workspace's worktree, made for reviewing what agents change.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/side-by-side-dark.png">
+  <img alt="Better Diff in Paseo: the worktree's modified, untracked and staged files on the left, and a TypeScript file's diff side by side on the right, syntax highlighted, with changed words highlighted within lines" src="docs/screenshots/side-by-side-light.png">
+</picture>
+
 > [!WARNING]
 > This project is completely vibe coded. It's checked by property tests against real git, mutation testing in which a test has to catch every mutant, end-to-end tests in Paseo's UI, and strict type checking and linting.
 
 ## Features
 
-- Stage, unstage and discard whole files, hunks or selected lines.
-- Inline or side-by-side diffs, picked by the panel's width or set in the settings.
-- Syntax highlighting, with changed words highlighted within lines.
-- Comments on lines, sent to an agent in the workspace as one review.
-- Refreshes as agents change the worktree, without moving the view.
-- Works from the keyboard as well as the pointer. Its page under Settings → Plugins lists the keys.
-- Hide whitespace changes, find in the diff, and show unchanged lines around a hunk or the entire file.
+### Read every change
+
+Diffs are syntax highlighted, with the words that changed within a line highlighted, as delta does. They're side by side where the panel has room for your line length, and inline where it hasn't, or always one or the other, as you set it. The panel refreshes as agents change the worktree, without moving the view.
+
+### Stage exactly what you mean to
+
+Stage, unstage and discard whole files, hunks or selected lines. Select lines with the pointer or the keyboard, and their actions show in a bar right over them.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/lines-dark.png">
+  <img alt="Two added lines selected in an inline diff, with a bar over them of Discard, Stage, Comment and Copy, and Stage Lines named above it with its key, Return" src="docs/screenshots/lines-light.png">
+</picture>
+
+### Review what agents change
+
+Comment on a line, or on several, as you read. Comments stay pending, as in a GitHub review, until you look them over and send them, with a message of your own, to an agent in the workspace, or to a new one.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/review-dark.png">
+  <img alt="A review of three pending comments on two files, each with the line it's on, a message for the agent above them, and Send feedback" src="docs/screenshots/review-light.png">
+</picture>
+
+### Find in the diff
+
+⌘F, or Ctrl+F off a Mac, finds in the open file's diff, or in all of a group's, lines the view hasn't rendered yet included. Smart case, as in ripgrep.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/find-dark.png">
+  <img alt="The find bar under a diff, finding clock, with its 13 matches highlighted and the third of them current" src="docs/screenshots/find-light.png">
+</picture>
+
+### Keyboard first
+
+Everything works from the keyboard as well as the pointer: the arrows move between files, hunks and lines, Enter stages, Backspace discards, and Shift widens either to the whole file. Rest the pointer on a button for a second to see its key. Better Diff's page under Settings → Plugins lists them all.
+
+### Even more
+
+- Hide whitespace changes, and show unchanged lines around a hunk or the entire file.
 - Handles renames, mode changes, binary files and symlinks. Generated files and large diffs are collapsed.
 - Ignores untracked files in a `.gitignore`, `.git/info/exclude` or your global excludes file.
 
