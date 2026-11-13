@@ -13,6 +13,7 @@ import { covers, widened, windowAround } from "./rendering";
 import type { LineWindow } from "./rendering";
 import { ReviewContext } from "./review-context";
 import {
+  carriedOver,
   carriedTo,
   closedAbove,
   commentedRuns,
@@ -23,7 +24,7 @@ import {
   shownLines,
   toggledEntire,
 } from "./runs";
-import type { ShownRuns } from "./runs";
+import type { CarriedRuns, ShownRuns } from "./runs";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -78,22 +79,26 @@ function useEntireDiff(diff: Diff, query: EntireQuery, wanted: boolean): Diff {
   return shown ?? diff;
 }
 
-// What's shown of the runs of unchanged lines around the hunks, carried over to them each time they
-// change, and what shows the entire file, or none of them, and shows or hides the run above the
-// hunk at an index.
-function useShownRuns(hunks: Diff["hunks"]) {
-  const [state, setState] = useState(() => ({
-    hunks,
-    shown: carriedTo({ entire: false, runs: [] }, hunks),
+// The diff to show, as useEntireDiff has it, with every line of the file while any of its runs of
+// unchanged lines show, or `outside` asks for them, and what's shown of those runs, carried over to
+// its hunks each time they change, so that a run stays open above the hunk it was open above,
+// whichever of the diff and the entire file is read first after a change. And what shows the
+// entire file, or none of them, and shows or hides the run above the hunk at an index.
+function useShownRuns(diff: Diff, query: EntireQuery, outside: boolean) {
+  const [state, setState] = useState<CarriedRuns<Diff["hunks"]>>(() => ({
+    hunks: diff.hunks,
+    shown: carriedTo({ entire: false, runs: [] }, diff.hunks),
   }));
 
-  const current = state.hunks === hunks ? state : { hunks, shown: carriedTo(state.shown, hunks) };
+  const shownDiff = useEntireDiff(diff, query, showsAny(state.shown) || outside);
+  const current = carriedOver(state, shownDiff.hunks);
 
   if (current !== state) {
     setState(current);
   }
 
   return {
+    shownDiff,
     shown: current.shown,
     toggle: () => {
       setState((now) => ({ hunks: now.hunks, shown: toggledEntire(now.shown) }));
@@ -149,8 +154,8 @@ function useUnchangedShown(
   query: EntireQuery,
   { commented, outside }: CommentedLines,
 ): UnchangedShown {
-  const runs = useShownRuns(diff.hunks);
-  const shownDiff = useEntireDiff(diff, query, showsAny(runs.shown) || outside);
+  const runs = useShownRuns(diff, query, outside);
+  const { shownDiff } = runs;
   const whole = shownDiff !== diff;
   const [window, showAround] = useLineWindow(whole ? shownDiff.contents.length : undefined);
   const all = useMemo(() => (whole ? unchangedLines(shownDiff) : none), [shownDiff, whole]);

@@ -105,6 +105,30 @@ export function clipboardOf(page: Page): () => Promise<string> {
   return async () => z.string().parse(await page.evaluate("navigator.clipboard.readText()"));
 }
 
+// From now on, watches whether the line leaves the page, as the diff rendered again without it
+// takes it, if only until the next render. What's returned says whether it has. A boolean, since
+// the tests typecheck without the DOM library.
+export async function watchLine(page: Page, text: string): Promise<() => Promise<boolean>> {
+  const shown = await page.evaluate(`(() => {
+    const shown = () => [...document.querySelectorAll("*")].some(
+      (element) => element.childElementCount === 0 && element.textContent === ${JSON.stringify(text)},
+    );
+
+    window.lineLeft = false;
+    new MutationObserver(() => {
+      window.lineLeft ||= !shown();
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+
+    return shown();
+  })()`);
+
+  if (shown !== true) {
+    throw new Error(`The line ${text} isn't shown.`);
+  }
+
+  return async () => z.boolean().parse(await page.evaluate("window.lineLeft"));
+}
+
 export function findInput(page: Page): Locator {
   return page.getByRole("textbox", { name: "Find in diff", exact: true });
 }

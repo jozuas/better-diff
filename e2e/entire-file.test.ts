@@ -2,7 +2,7 @@ import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { hunkBar } from "./keyboard";
 import { changeLines, countOn, counts } from "./numbered";
-import { box, button, line, openFile, selectLines } from "./panel";
+import { box, button, line, openFile, selectLines, watchLine } from "./panel";
 
 function staged(repository: string): string {
   return runGit(repository, ["diff", "--cached"]);
@@ -222,6 +222,7 @@ test("the unchanged lines shown before a hunk stay shown as lines are added abov
   await countOn(page, 2, 43).click();
   await expect(line(page, "a 125")).toBeVisible();
 
+  const left = await watchLine(page, "a 125");
   const changed = linesOf("a").with(99, "a first").with(149, "a second");
 
   writeFile(repository, "a.txt", `${["a added", ...changed].join("\n")}\n`);
@@ -233,6 +234,7 @@ test("the unchanged lines shown before a hunk stay shown as lines are added abov
     hunkBar(page, "a.txt", 3).getByRole("button", { name: "Hide 43 unchanged lines", exact: true }),
   ).toBeAttached();
   await expect(counts(page)).toHaveCount(1);
+  expect(await left()).toBe(false);
 });
 
 test("the unchanged lines shown before a hunk don't carry over to the next file", async ({

@@ -57,6 +57,21 @@ export function carriedTo(shown: ShownRuns, hunks: readonly Place[]): ShownRuns 
   };
 }
 
+// What's shown of the runs of unchanged lines around the hunks they were carried over to last.
+export interface CarriedRuns<Hunks extends readonly Place[]> {
+  hunks: Hunks;
+  shown: ShownRuns;
+}
+
+// The runs carried over to the hunks, or as they are while those are the hunks they were carried
+// over to last, so that what's rendered with them isn't rendered again.
+export function carriedOver<Hunks extends readonly Place[]>(
+  runs: CarriedRuns<Hunks>,
+  hunks: Hunks,
+): CarriedRuns<Hunks> {
+  return runs.hunks === hunks ? runs : { hunks, shown: carriedTo(runs.shown, hunks) };
+}
+
 // Shows the run above the hunk at the index, too.
 export function openedAbove(shown: ShownRuns, index: number): ShownRuns {
   return {
