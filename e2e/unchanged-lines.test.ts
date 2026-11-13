@@ -1,6 +1,6 @@
 import { expect, test } from "./fixtures";
 import { hunkBar } from "./keyboard";
-import { changeLines, countOn, counts } from "./numbered";
+import { changeLines, countOn, counts, writeChanged } from "./numbered";
 import { box, button, line, openFile } from "./panel";
 
 test('once the unchanged lines before a hunk show, the middle of its bar hides them again while the pointer is over the hunk, as "Hide 3 unchanged lines", leaving the hunk where it was', async ({
@@ -91,4 +91,29 @@ test("E shows under the middle of a hunk's bar once the pointer rests on it, whi
   const shown = await box(tip);
 
   expect(shown.y).toBeGreaterThanOrEqual(under.y + under.height);
+});
+
+test("unchanged lines shown after their file changed while they were hidden are the file's lines as they are then, so the bar of a hunk the change added keeps focus as E shows the lines above it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeLines(repository, [100, 150]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await countOn(page, 2, 43).click();
+  await expect(line(page, "a 125")).toBeVisible();
+  await line(page, "a 150 changed").hover();
+  await button(page, "Hide 43 unchanged lines").click();
+  await expect(line(page, "a 125")).toBeHidden();
+
+  writeChanged(repository, [100, 150, 180]);
+
+  await line(page, "a 180 changed").click();
+  await expect(hunkBar(page, "a.txt", 3)).toBeFocused();
+  await page.keyboard.press("e");
+
+  await expect(line(page, "a 165")).toBeVisible();
+  await expect(hunkBar(page, "a.txt", 3)).toBeFocused();
 });

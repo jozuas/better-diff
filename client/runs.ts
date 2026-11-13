@@ -129,6 +129,19 @@ export function showsAny(shown: ShownRuns): boolean {
   return shown.entire || shown.runs.some((run) => run.open);
 }
 
+// The read of the entire file to show, if any, while some of its unchanged lines are asked for: one
+// of the version of the diff shown, or once one shows, the one read last, so that a read again
+// after the file changes doesn't hide them until it's done. A read kept from before the file
+// changed while none were asked for doesn't show, nor do its hunks, which the diff may no longer
+// have.
+export function entireShown<Read extends { version: string }>(
+  read: Read | undefined,
+  version: string,
+  showing: boolean,
+): Read | undefined {
+  return showing || read?.version === version ? read : undefined;
+}
+
 // The unchanged lines before a run's hunk, or after the last, while they show, the same each time,
 // so the hunk's lines rendered again with them aren't rendered again for them.
 const noLines: NumberedLine[] = [];

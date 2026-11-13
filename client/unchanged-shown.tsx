@@ -16,6 +16,7 @@ import {
   carriedTo,
   closedAbove,
   commentedRuns,
+  entireShown,
   openedAbove,
   runShown,
   showsAny,
@@ -57,12 +58,24 @@ function useLineWindow(total: number | undefined): [LineWindow, (line: number) =
   return [window, around];
 }
 
-// The diff to show: read again with every line of the file while any of its unchanged lines are
-// asked for, once that's read, and else as it is.
-function useEntireDiff(diff: Diff, query: EntireQuery, wanted: boolean): Diff {
+// The diff read with every line of the file, while it's wanted, once it's read.
+function useEntireRead(query: EntireQuery, wanted: boolean): Diff | undefined {
   const whole = useQuery({ ...query, enabled: wanted });
 
-  return wanted ? (whole.data ?? diff) : diff;
+  return wanted ? whole.data : undefined;
+}
+
+// The diff to show: read again with every line of the file while any of its unchanged lines are
+// asked for, once that's read, as entireShown has it, and else as it is.
+function useEntireDiff(diff: Diff, query: EntireQuery, wanted: boolean): Diff {
+  const [showing, setShowing] = useState(false);
+  const shown = entireShown(useEntireRead(query, wanted), diff.version, showing);
+
+  if ((shown !== undefined) !== showing) {
+    setShowing(!showing);
+  }
+
+  return shown ?? diff;
 }
 
 // What's shown of the runs of unchanged lines around the hunks, carried over to them each time they
