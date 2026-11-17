@@ -12,7 +12,6 @@ import {
   shownLines,
   toggledEntire,
   unchangedAction,
-  upToShow,
 } from "./runs";
 import type { ShownRuns } from "./runs";
 
@@ -98,12 +97,12 @@ const changed = fc
     ({ fits, moved, starts, version }) => fits && moved.every((run) => !starts.has(run[version])),
   );
 
-test("a hunk's run of unchanged lines stays open, and the others' closed, as another hunk goes and those after it move in one version", () => {
+test("a hunk's run of unchanged lines stays open, and the others' closed, as another hunk goes and those after it move in one version, and the run after the last hunk stays as it was", () => {
   fc.assert(
-    fc.property(changed, ({ before, after }) => {
-      const carried = carriedTo({ entire: false, runs: before }, placesOf(after));
+    fc.property(changed, fc.boolean(), ({ before, after }, end) => {
+      const carried = carriedTo({ entire: false, runs: before, after: end }, placesOf(after));
 
-      expect(carried).toStrictEqual({ entire: false, runs: after });
+      expect(carried).toStrictEqual({ entire: false, runs: after, after: end });
     }),
   );
 });
@@ -121,7 +120,7 @@ test("a hunk that wasn't there before has its run of unchanged lines closed", ()
   ];
 
   expect(
-    carriedTo({ entire: false, runs: before }, after).runs.map(({ open }) => open),
+    carriedTo({ entire: false, runs: before, after: false }, after).runs.map(({ open }) => open),
   ).toStrictEqual([true, false, true]);
 });
 
@@ -132,17 +131,20 @@ test("where as many hunks start where they did in either version, a run stays op
   ];
 
   expect(
-    carriedTo({ entire: false, runs: before }, [{ oldStart: 31, newStart: 10 }]),
+    carriedTo({ entire: false, runs: before, after: false }, [{ oldStart: 31, newStart: 10 }]),
   ).toStrictEqual({
     entire: false,
     runs: [{ oldStart: 31, newStart: 10, open: false }],
+    after: false,
   });
 });
 
 test("the entire file stays shown as the hunks change", () => {
   fc.assert(
     fc.property(runs, runs, (before, after) => {
-      expect(carriedTo({ entire: true, runs: before }, placesOf(after)).entire).toBe(true);
+      expect(carriedTo({ entire: true, runs: before, after: false }, placesOf(after)).entire).toBe(
+        true,
+      );
     }),
   );
 });
@@ -154,14 +156,16 @@ const closed: ShownRuns = {
     { oldStart: 50, newStart: 50, open: false },
     { oldStart: 90, newStart: 90, open: false },
   ],
+  after: false,
 };
 
 test("opening the run of unchanged lines above a hunk shows it, and leaves the others as they were", () => {
   const opened = openedAbove(closed, 1);
 
-  expect([0, 1, 2].map((index) => runShown(opened, index, none))).toStrictEqual([
+  expect([0, 1, 2, 3].map((index) => runShown(opened, index, none))).toStrictEqual([
     "hidden",
     "open",
+    "hidden",
     "hidden",
   ]);
   expect(openedAbove(openedAbove(closed, 1), 2).runs.map(({ open }) => open)).toStrictEqual([
@@ -175,12 +179,25 @@ test("opening the run of unchanged lines above a hunk shows it, and leaves the o
   expect(showsAny(opened)).toBe(true);
 });
 
+test("opening the run of unchanged lines after the last hunk shows it, and leaves the others as they were, and it stays shown as another is opened", () => {
+  const opened = openedAbove(closed, 3);
+
+  expect(opened.runs).toStrictEqual(closed.runs);
+  expect([0, 1, 2, 3].map((index) => runShown(opened, index, none))).toStrictEqual([
+    "hidden",
+    "hidden",
+    "hidden",
+    "open",
+  ]);
+  expect(showsAny(opened)).toBe(true);
+  expect(runShown(openedAbove(opened, 1), 3, none)).toBe("open");
+});
+
 test("showing the entire file shows every run of unchanged lines, those after the last hunk too, and leaves those opened as they were", () => {
-  const opened = openedAbove(closed, 1);
+  const opened = openedAbove(openedAbove(closed, 1), 3);
   const entire = toggledEntire(opened);
 
-  expect(entire.entire).toBe(true);
-  expect(entire.runs).toStrictEqual(opened.runs);
+  expect(entire).toStrictEqual({ entire: true, runs: opened.runs, after: true });
   expect([0, 1, 2, 3].map((index) => runShown(entire, index, none))).toStrictEqual([
     "open",
     "open",
@@ -192,43 +209,45 @@ test("showing the entire file shows every run of unchanged lines, those after th
 });
 
 test("showing only the hunks again closes every run of unchanged lines, those opened before the entire file showed too", () => {
-  const hunks = toggledEntire(toggledEntire(openedAbove(closed, 1)));
+  const hunks = toggledEntire(toggledEntire(openedAbove(openedAbove(closed, 1), 3)));
 
   expect(hunks).toStrictEqual(closed);
   expect(showsAny(hunks)).toBe(false);
 });
 
-// Runs of unchanged lines above hunks, some of them open, and the index of one of the hunks.
-const runAt = runs
-  .filter((hunks) => hunks.length > 0)
-  .chain((hunks) => fc.tuple(fc.constant(hunks), fc.nat({ max: hunks.length - 1 })));
+// Runs of unchanged lines above hunks, some of them open, whether the run after the last hunk is,
+// and the index of one of the runs, that one's after the hunks'.
+const runAt = fc
+  .tuple(runs, fc.boolean())
+  .chain(([hunks, after]) =>
+    fc.tuple(fc.constant(hunks), fc.constant(after), fc.nat({ max: hunks.length })),
+  );
 
-test("hiding the run of unchanged lines above a hunk hides only it, and hiding one just shown leaves the file as it was", () => {
+test("hiding the run of unchanged lines above a hunk, or after the last, hides only it, and hiding one just shown leaves the file as it was", () => {
   fc.assert(
-    fc.property(runAt, ([hunks, index]) => {
-      const shown = { entire: false, runs: hunks };
+    fc.property(runAt, ([hunks, after, index]) => {
+      const shown = { entire: false, runs: hunks, after };
       const hidden = closedAbove(shown, index);
 
       expect(hidden.entire).toBe(false);
       expect(placesOf(hidden.runs)).toStrictEqual(placesOf(hunks));
-      expect(hidden.runs.map(({ open }) => open)).toStrictEqual(
-        hunks.map(({ open }) => open).with(index, false),
+      expect([...hidden.runs.map(({ open }) => open), hidden.after]).toStrictEqual(
+        [...hunks.map(({ open }) => open), after].with(index, false),
       );
       expect(closedAbove(openedAbove(hidden, index), index)).toStrictEqual(hidden);
     }),
   );
 });
 
-test("hiding the run of unchanged lines above a hunk while the entire file shows leaves the runs above the other hunks shown, but not the lines after the last hunk", () => {
+test("hiding the run of unchanged lines above a hunk, or after the last, while the entire file shows leaves the other runs shown", () => {
   fc.assert(
-    fc.property(runAt, ([hunks, index]) => {
-      const hidden = closedAbove({ entire: true, runs: hunks }, index);
+    fc.property(runAt, ([hunks, after, index]) => {
+      const hidden = closedAbove({ entire: true, runs: hunks, after }, index);
 
       expect(hidden.entire).toBe(false);
-      expect(hunks.map((_, at) => runShown(hidden, at, none))).toStrictEqual(
-        hunks.map(() => "open").with(index, "hidden"),
+      expect([...hunks, "after"].map((_, at) => runShown(hidden, at, none))).toStrictEqual(
+        [...hunks, "after"].map(() => "open").with(index, "hidden"),
       );
-      expect(runShown(hidden, hunks.length, none)).toBe("hidden");
     }),
   );
 });
@@ -242,7 +261,7 @@ const unchanged = {
   after: [lines("after the first"), lines("after the second"), lines("after the last")],
 };
 
-test("the unchanged lines that show are the runs above the hunks that are open, and those after the last only while the entire file shows", () => {
+test("the unchanged lines that show are the runs above the hunks, and the one after the last, that are open, and all of them while the entire file shows", () => {
   expect(shownLines(unchanged, closed)).toStrictEqual({ before: [], after: [[], [], []] });
   expect(shownLines(unchanged, openedAbove(closed, 0))).toStrictEqual({
     before: unchanged.before,
@@ -254,55 +273,12 @@ test("the unchanged lines that show are the runs above the hunks that are open, 
     after: [[], unchanged.after[1], []],
   });
 
+  expect(shownLines(unchanged, openedAbove(closed, 3))).toStrictEqual({
+    before: [],
+    after: [[], [], unchanged.after[2]],
+  });
+
   expect(shownLines(unchanged, toggledEntire(closed))).toStrictEqual(unchanged);
-});
-
-test("a run of unchanged lines shown above a hunk with some of its lines in sight leaves the view as it is", () => {
-  fc.assert(
-    fc.property(
-      fc.integer({ min: 0, max: 100 }),
-      fc.integer({ min: 1, max: 1000 }),
-      fc.integer({ min: 1, max: 1000 }),
-      fc.integer({ min: 0, max: 1000 }),
-      (ceiling, below, tall, middle) => {
-        const bar = ceiling + below;
-
-        expect(upToShow({ first: bar - tall, bar, ceiling, middle })).toBe(0);
-        expect(upToShow({ first: undefined, bar, ceiling, middle })).toBe(0);
-      },
-    ),
-  );
-});
-
-test("a run of unchanged lines shown above a hunk out of sight scrolls into it, all of it under the bars at the view's top, or as much as fits with the hunk's bar no lower than the view's middle", () => {
-  fc.assert(
-    fc.property(
-      fc.integer({ min: 0, max: 100 }),
-      fc.integer({ min: 0, max: 1000 }),
-      fc.integer({ min: 1, max: 2000 }),
-      fc.integer({ min: 0, max: 1000 }),
-      (ceiling, above, tall, lower) => {
-        const bar = ceiling - above;
-        const first = bar - tall;
-        const middle = ceiling + lower;
-        const up = upToShow({ first, bar, ceiling, middle });
-
-        expect(first + up).toBeLessThanOrEqual(ceiling);
-        expect(bar + up).toBeLessThanOrEqual(middle);
-        expect(Math.min(ceiling - first - up, middle - bar - up)).toBe(0);
-      },
-    ),
-  );
-});
-
-test("a run of unchanged lines shown above a hunk out of sight, whose first line isn't rendered, scrolls into sight with the hunk's bar at the view's middle", () => {
-  expect(upToShow({ first: undefined, bar: 30, ceiling: 40, middle: 300 })).toBe(270);
-  expect(upToShow({ first: -500, bar: 30, ceiling: 40, middle: 300 })).toBe(270);
-  expect(upToShow({ first: -100, bar: 40, ceiling: 40, middle: 300 })).toBe(140);
-});
-
-test("a view no taller than the bars at its top scrolls no way for a run of unchanged lines out of sight", () => {
-  expect(upToShow({ first: -100, bar: 40, ceiling: 40, middle: 20 })).toBe(0);
 });
 
 test("the first of the unchanged lines that show above a hunk is the first before the first hunk, or after the hunk before it, and none while none show", () => {

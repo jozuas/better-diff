@@ -99,6 +99,7 @@ export const diffHunks: fc.Arbitrary<{ diff: Diff; numbered: NumberedLine[][] }>
         removed: 0,
         hunks,
         contents: [],
+        newLines: 0,
         review: reviewed,
       },
       numbered: hunks.map(numberLines),

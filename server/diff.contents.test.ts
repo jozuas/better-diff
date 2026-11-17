@@ -161,21 +161,23 @@ test.each([
 });
 
 test.each(sides)(
-  "%s diff: has every line of the version a text diff goes to, once it's asked for them",
+  "%s diff: has every line of the version a text diff goes to, once it's asked for them, and says how many it has, asked for or not",
   async (side) => {
     await fc.assert(
       fc.asyncProperty(file, async ({ path, versions }) => {
         await inRepository(async (repository) => {
           setUp(repository, [{ path, versions }], "myers");
 
-          const { kind, contents } = await readDiff({
-            directory: repository,
-            path,
-            side,
-            entire: true,
-          });
+          const read = { directory: repository, path, side };
+          const { kind, contents, newLines } = await readDiff({ ...read, entire: true });
+          const expected = expectedContents(kind, side, versions);
 
-          expect(contents).toStrictEqual(expectedContents(kind, side, versions));
+          expect(contents).toStrictEqual(expected);
+          expect(newLines).toBe(expected.length);
+          await expect(readDiff(read)).resolves.toMatchObject({
+            contents: [],
+            newLines: expected.length,
+          });
         });
       }),
       { numRuns: 30 },

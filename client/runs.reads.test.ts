@@ -48,7 +48,7 @@ const before = [
 
 const openAbove50 = {
   hunks: before,
-  shown: openedAbove(carriedTo({ entire: false, runs: [] }, before), 1),
+  shown: openedAbove(carriedTo({ entire: false, runs: [], after: false }, before), 1),
 };
 
 test("runs carried over to the hunks they were carried over to last stay as they are, so what's rendered with them isn't rendered again", () => {

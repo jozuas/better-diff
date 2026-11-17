@@ -12,6 +12,7 @@ const closed: ShownRuns = {
     { oldStart: 50, newStart: 50, open: false },
     { oldStart: 90, newStart: 90, open: false },
   ],
+  after: false,
 };
 
 function lines(...texts: string[]): NumberedLine[] {

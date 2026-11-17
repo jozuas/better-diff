@@ -22,7 +22,7 @@ type Runs = Line["runs"];
 
 // A diff as the plugin shows it, before `highlighted` gives its lines their runs: with every line of
 // both versions, which highlighting them takes.
-export interface UnhighlightedDiff extends Omit<Diff, "hunks" | "contents"> {
+export interface UnhighlightedDiff extends Omit<Diff, "hunks" | "contents" | "newLines"> {
   hunks: (Omit<Hunk, "lines"> & { lines: Omit<Line, "runs">[] })[];
   contents: { old: string[]; new: string[] };
 }
@@ -233,11 +233,12 @@ function withRuns(
 }
 
 type Highlighted<D extends UnhighlightedDiff> = Omit<D, "hunks" | "contents"> &
-  Pick<Diff, "hunks" | "contents">;
+  Pick<Diff, "hunks" | "contents" | "newLines">;
 
 // The diff of the file at the path with its hunks' lines highlighted, the old version as the file it
 // was renamed from, if it was, and with every line of the new version, if it's to be shown entire,
-// or else none, as one of the read's diffs, adding its versions to the read's before it first waits.
+// or else none, and with how many it has, as one of the read's diffs, adding its versions to the
+// read's before it first waits.
 // The old version is highlighted only if the diff removes lines, since only removed lines are shown
 // from it.
 async function highlightedIn<D extends UnhighlightedDiff>(
@@ -257,6 +258,7 @@ async function highlightedIn<D extends UnhighlightedDiff>(
     contents: entire
       ? contents.new.map((text, line) => ({ text, runs: runsAt(changed, line) }))
       : [],
+    newLines: contents.new.length,
   };
 }
 

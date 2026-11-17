@@ -268,6 +268,7 @@ function diffVersioned(version: string): Diff {
     removed: 0,
     hunks: [],
     contents: [],
+    newLines: 0,
   };
 }
 

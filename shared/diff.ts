@@ -94,6 +94,9 @@ const diff = z.object({
   // version without the file. Only removed lines are shown from the version the diff goes from,
   // and the hunks have them all.
   contents: z.array(z.object({ text: z.string(), runs })),
+  // How many lines that version has, whether or not contents has them, by which a view says how
+  // many unchanged lines are after the last hunk. None for a collapsed diff.
+  newLines: index,
   // None where the file's two diffs were read of different lines of the index, or of other lines
   // than git status listed the file with, each time, or the other can't be read.
   review: review.optional(),

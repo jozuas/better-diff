@@ -2,7 +2,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { hunkLines } from "../test/hunk-lines";
-import { aboveHunks, lineKey, numberLines, unchangedLines } from "./lines";
+import { aboveHunks, belowHunks, lineKey, numberLines, unchangedLines } from "./lines";
 import type { NumberedLine, RunShown } from "./lines";
 
 type Kind = "context" | "removed" | "added";
@@ -131,7 +131,8 @@ function foundIn(lines: readonly FileLine[], gap: number): unknown[] {
 
 // A file's lines, some in hunks and the rest unchanged, around them, the diff of the file, its
 // versions, the unchanged lines before the first hunk and after each one, each with the text of
-// each version where it is, and whether any of the file's lines are above each hunk. Each line has
+// each version where it is, whether any of the file's lines are above each hunk, and the texts of
+// the lines after the last hunk, if there's one. Each line has
 // text no other line has, so a number can only find it where it is, and runs no other line has.
 // Hunks often have none of a version's lines, as where they only add or remove lines.
 const fileInHunks = fc
@@ -198,6 +199,9 @@ const fileInHunks = fc
         after: sections.map((_, hunk) => foundIn(lines, hunk + 1)),
       },
       above: sections.map((_, hunk) => lines.findIndex((line) => line.hunk === hunk) > 0),
+      below: lines.flatMap(({ gap, text }) =>
+        sections.length > 0 && gap === sections.length ? [text] : [],
+      ),
     };
   });
 
@@ -248,6 +252,21 @@ test("a hunk's bar says how many unchanged lines are above it, between it and th
         })),
       );
     }),
+  );
+});
+
+test("the bar at the end of a diff says how many unchanged lines are after its last hunk, which the new version has from the first of them on, and how they show, and none for a diff without hunks", () => {
+  fc.assert(
+    fc.property(
+      fileInHunks,
+      fc.constantFrom<RunShown>("kept", "open", "hidden"),
+      ({ diff, versions, below }, shown) => {
+        const { first, ...end } = belowHunks(diff.hunks, diff.contents.length, shown);
+
+        expect(end).toStrictEqual({ unchanged: below.length, shown });
+        expect(versions.new.slice(first - 1)).toStrictEqual(below);
+      },
+    ),
   );
 });
 

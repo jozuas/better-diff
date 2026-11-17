@@ -14,17 +14,16 @@ import { View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { barRequests } from "./bar-requests";
+import { EndBar } from "./end-bar";
 import { useFindableLines } from "./find-page";
-import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { HunkArea, LinesBefore } from "./hunk-area";
 import { HunkBar } from "./hunk-bar";
+import { unchangedButton } from "./labels";
 import type { NumberedLine, Unchanged } from "./lines";
-import type { CommentedFile } from "./numbering";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
-import { ReviewContext } from "./review-context";
-import { firstShownAbove, showsAny, upToShow } from "./runs";
+import { firstShownAbove, showsAny, unchangedAction, upToShow } from "./runs";
 import { fileId, hunkId, onSide, rangeInHunk, unchangedLineId } from "./selection";
 import type { LineRange } from "./selection";
 import { SelectionBarLayer } from "./selection-bar";
@@ -75,6 +74,7 @@ export interface HunksProps {
 interface BarActions {
   onToggleEntire: (hunk: number) => void;
   onUnchanged: (hunk: number, action: "open" | "close" | undefined) => void;
+  onAfter: () => void;
   onHeight: (height: number) => void;
   onRun: (hunk: number) => void;
   onShow: (hunk: number) => void;
@@ -95,7 +95,8 @@ interface BarState {
 // that reaches only some hunks, as the selection's does, renders only their bars again. Toggling the
 // entire file keeps the hunk in place, as showing or hiding the run of unchanged lines above it
 // does, but for showing it where none of it would then be in sight, as with the hunk's bar at the
-// top, where the view scrolls up to show it. An action on a hunk while any unchanged lines show
+// top, where the view scrolls up to show it. Showing or hiding the run after the last hunk keeps
+// that hunk in place. An action on a hunk while any unchanged lines show
 // keeps the hunk's place too, where the next hunk takes its place. Showing a hunk scrolls the view
 // to its lines' start, under its bar, and under the file's bar where that stays at the top too, and
 // so does revealing a line, if it has to.
@@ -142,6 +143,16 @@ function useBarActions(container: string, state: BarState): BarActions {
             showRun(hunk);
           });
           latest.current.around[action](hunk);
+        }
+      },
+      onAfter: () => {
+        const { around } = latest.current;
+        const hunks = around.shownDiff.hunks.length;
+        const action = unchangedAction(around.below.unchanged, around.below.shown);
+
+        if (action !== undefined) {
+          kept.hold(container, hunkId(container, hunks - 1));
+          around[action](hunks);
         }
       },
       onHeight: (height) => {
@@ -195,16 +206,6 @@ function useKeptLines(
   });
 }
 
-// The diff of the file a group lists, while its lines can be commented on.
-function useCommented({ group, path }: OpenFile): CommentedFile | undefined {
-  const commented = useContext(ReviewContext) !== undefined;
-
-  return useMemo(
-    () => (commented ? { diff: groups[group].side, path } : undefined),
-    [commented, group, path],
-  );
-}
-
 // The lines outside a hunk while none show, the same each time, so the hunk's lines rendered again
 // with them aren't rendered again for them.
 const noLines: NumberedLine[] = [];
@@ -215,7 +216,8 @@ const noLines: NumberedLine[] = [];
 // count of the unchanged lines above the hunk does, which shows those, and what hides them again.
 // Each bar stays at the top while its lines scroll under it, or under the file's bar while the
 // hunks scroll with the view's other diffs, until the next hunk's bar covers it or the file's diff
-// ends. While any unchanged
+// ends. After the last hunk's lines, a bar says how many unchanged lines the diff leaves out after
+// them, which shows those, and hides them again. While any unchanged
 // lines show, the next hunk takes the place of one an action is run on. Side by side, the selection
 // is in the side with focus. The pointer moving from one hunk to another renders only their bars
 // again, and the selection changing only the hunks it leaves or reaches. Right-clicking its lines
@@ -237,6 +239,7 @@ function HunksShown({
   shown: around,
 }: HunksProps & { shown: UnchangedShown }): ReactElement {
   const { shownDiff, file: commented, shown: runs, window, showAround, unchanged, above } = around;
+  const end = unchangedButton(around.below.unchanged, around.below.shown);
   const pointed = useMemo(() => pointedHunk(), []);
   const requests = useMemo(() => barRequests(), []);
 
@@ -340,6 +343,9 @@ function HunksShown({
       theme={theme}
     />,
     ...hunks,
+    ...(end === undefined
+      ? []
+      : [<EndBar key="end" path={file.path} {...end} onPress={bars.onAfter} theme={theme} />]),
   ];
 
   return scrolls ? (
@@ -362,11 +368,7 @@ function HunksShown({
 // commented on, whether or not they're asked to show.
 export function Hunks(props: HunksProps): ReactElement {
   return (
-    <UnchangedLinesShown
-      diff={props.diff}
-      query={props.entireQuery}
-      commented={useCommented(props.file)}
-    >
+    <UnchangedLinesShown diff={props.diff} query={props.entireQuery} file={props.file}>
       {(shown) => <HunksShown {...props} shown={shown} />}
     </UnchangedLinesShown>
   );

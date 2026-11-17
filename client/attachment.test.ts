@@ -138,6 +138,7 @@ test("a line is sent with its numbers in each version it's in, and whether it's 
       },
     ],
     contents: [],
+    newLines: 0,
   };
 
   expect(contextOf(diff, { ...file, side: "new", line: 8 })).toStrictEqual({
@@ -176,6 +177,7 @@ test("a review is of the worktree's uncommitted changes, as Paseo's own diff sen
     removed: 0,
     hunks: [{ oldStart: 0, newStart: 1, lines: linesOf(["added"]) }],
     contents: [],
+    newLines: 0,
   };
 
   expect(

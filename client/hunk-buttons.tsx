@@ -86,18 +86,39 @@ interface UnchangedButtonProps {
   // Whether it hides the lines, rather than shows them, and whether it's hidden itself.
   hides: boolean;
   hidden: boolean;
+  // Whether E does what it does, as in a hunk's bar, which then shows under it once the pointer
+  // rests on it.
+  keyed: boolean;
   onPress: () => void;
   theme: PluginTheme;
 }
 
-// Says how many unchanged lines are left out before the hunk, as Linear's PR review does with its
-// icon, arrows pointing out from a line, and shows them, all at once rather than a few at a time as
-// Linear's does, or while they show and the hunk is revealed, hides them again, with arrows pointing
-// in to the line. E in the hunk's bar does too.
-function UnchangedButton({
+interface MoreTipProps {
+  hovered: boolean;
+  pressed: boolean;
+  theme: PluginTheme;
+}
+
+// E, under a button it presses, once the pointer rests on the button.
+function MoreTip({ hovered, pressed, theme }: MoreTipProps): ReactElement {
+  return (
+    <ShortcutTip
+      shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
+      resting={hovered && !pressed}
+      theme={theme}
+    />
+  );
+}
+
+// Says how many unchanged lines are left out before the hunk, or after the last, as Linear's PR
+// review does with its icon, arrows pointing out from a line, and shows them, all at once rather
+// than a few at a time as Linear's does, or while they show and the hunk is revealed, hides them
+// again, with arrows pointing in to the line. E in the hunk's bar does too.
+export function UnchangedButton({
   label,
   hides,
   hidden,
+  keyed,
   onPress,
   theme,
 }: UnchangedButtonProps): ReactElement {
@@ -124,11 +145,7 @@ function UnchangedButton({
                 {label}
               </Text>
             </View>
-            <ShortcutTip
-              shortcut={shortcutText(chordOf("bar", "more", onMac()), onMac())}
-              resting={hovered && !pressed}
-              theme={theme}
-            />
+            {keyed ? <MoreTip hovered={hovered} pressed={pressed} theme={theme} /> : null}
           </>
         );
       }}
@@ -151,6 +168,7 @@ function UnchangedLines({
     <UnchangedButton
       {...button}
       hidden={button.hides && !revealed}
+      keyed
       onPress={onPress}
       theme={theme}
     />

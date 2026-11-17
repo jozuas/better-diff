@@ -15,10 +15,12 @@ interface Run extends Place {
 }
 
 // Which of a file's runs of unchanged lines show: all of them, as while the entire file shows, and
-// else those of the hunks' runs that are open, which the hunks were at the places of when last read.
+// else those of the hunks' runs that are open, which the hunks were at the places of when last read,
+// and the one after the last hunk while it's open.
 export interface ShownRuns {
   entire: boolean;
   runs: readonly Run[];
+  after: boolean;
 }
 
 type Version = keyof Place;
@@ -42,7 +44,7 @@ function keptVersion(before: readonly Run[], hunks: readonly Place[]): Version {
 // What's shown of the file's runs of unchanged lines once its hunks are those, which were before as
 // `shown` has them: each hunk's run is open while the hunk starts where an open one did in the
 // version where they start as before, so it stays open as other hunks are staged or discarded, or
-// lines are added or removed above it.
+// lines are added or removed above it, and the run after the last hunk stays as it was.
 export function carriedTo(shown: ShownRuns, hunks: readonly Place[]): ShownRuns {
   const version = keptVersion(shown.runs, hunks);
   const open = new Set(shown.runs.filter((run) => run.open).map((run) => run[version]));
@@ -54,6 +56,7 @@ export function carriedTo(shown: ShownRuns, hunks: readonly Place[]): ShownRuns 
       newStart,
       open: open.has({ oldStart, newStart }[version]),
     })),
+    after: shown.after,
   };
 }
 
@@ -72,16 +75,18 @@ export function carriedOver<Hunks extends readonly Place[]>(
   return runs.hunks === hunks ? runs : { hunks, shown: carriedTo(runs.shown, hunks) };
 }
 
-// Shows the run above the hunk at the index, too.
+// Shows the run above the hunk at the index, too, or the one after the last hunk, at the index
+// after the hunks'.
 export function openedAbove(shown: ShownRuns, index: number): ShownRuns {
   return {
     entire: shown.entire,
     runs: shown.runs.map((run, at) => (at === index ? { ...run, open: true } : run)),
+    after: shown.after || index === shown.runs.length,
   };
 }
 
-// Hides the run above the hunk at the index. While the entire file shows, the runs above the other
-// hunks stay shown, but not the lines after the last hunk, which show only with the entire file.
+// Hides the run above the hunk at the index, or the one after the last hunk, at the index after the
+// hunks'. While the entire file shows, the other runs stay shown.
 export function closedAbove(shown: ShownRuns, index: number): ShownRuns {
   return {
     entire: false,
@@ -89,6 +94,7 @@ export function closedAbove(shown: ShownRuns, index: number): ShownRuns {
       ...run,
       open: at !== index && (shown.entire || run.open),
     })),
+    after: index !== shown.runs.length && (shown.entire || shown.after),
   };
 }
 
@@ -97,6 +103,7 @@ export function toggledEntire(shown: ShownRuns): ShownRuns {
   return {
     entire: !shown.entire,
     runs: shown.entire ? shown.runs.map((run) => ({ ...run, open: false })) : shown.runs,
+    after: !shown.entire && shown.after,
   };
 }
 
@@ -104,8 +111,8 @@ export function toggledEntire(shown: ShownRuns): ShownRuns {
 // and hides it while it's open, but not while a comment keeps it shown.
 const actions = { hidden: "open", open: "close", kept: undefined } as const;
 
-// What showing or hiding the run of `unchanged` lines above a hunk does, by how it shows, and
-// nothing where there's none.
+// What showing or hiding the run of `unchanged` lines above a hunk, or after the last, does, by how
+// it shows, and nothing where there's none.
 export function unchangedAction(unchanged: number, shown: RunShown): "open" | "close" | undefined {
   return unchanged === 0 ? undefined : actions[shown];
 }
@@ -113,20 +120,27 @@ export function unchangedAction(unchanged: number, shown: RunShown): "open" | "c
 // None of the runs of unchanged lines.
 const noRuns: ReadonlySet<number> = new Set();
 
-// Whether the run of unchanged lines above the hunk at the index shows: while it's open, or the
-// entire file shows, or it's one of those commented on, by index, the run before the first hunk at
-// 0, and the one after the hunk at an index at the next.
+// Whether the run at the index is open: the one above the hunk there, or the one after the last
+// hunk, at the index after the hunks'.
+function isOpen(shown: ShownRuns, index: number): boolean {
+  return shown.runs[index]?.open ?? shown.after;
+}
+
+// Whether the run of unchanged lines above the hunk at the index shows, or the one after the last
+// hunk, at the index after the hunks': while it's open, or the entire file shows, or it's one of
+// those commented on, by index, the run before the first hunk at 0, and the one after the hunk at
+// an index at the next.
 function showsAbove(
   shown: ShownRuns,
   index: number,
   commented: ReadonlySet<number> = noRuns,
 ): boolean {
-  return shown.entire || shown.runs[index]?.open === true || commented.has(index);
+  return shown.entire || isOpen(shown, index) || commented.has(index);
 }
 
-// How the run of unchanged lines above the hunk at the index shows, of the runs `commented` says
-// have a line commented on: kept shown by the comment, open, as while the entire file shows, or
-// hidden.
+// How the run of unchanged lines above the hunk at the index shows, or the one after the last hunk,
+// at the index after the hunks', of the runs `commented` says have a line commented on: kept shown
+// by the comment, open, as while the entire file shows, or hidden.
 export function runShown(
   shown: ShownRuns,
   index: number,
@@ -141,7 +155,7 @@ export function runShown(
 
 // Whether any of the file's unchanged lines show.
 export function showsAny(shown: ShownRuns): boolean {
-  return shown.entire || shown.runs.some((run) => run.open);
+  return shown.entire || shown.after || shown.runs.some((run) => run.open);
 }
 
 // The read of the entire file to show, if any, while some of its unchanged lines are asked for: one
@@ -171,8 +185,8 @@ export function firstShownAbove(unchanged: Unchanged, index: number): NumberedLi
   return (index === 0 ? unchanged.before : unchanged.after[index - 1])?.[0];
 }
 
-// Those of the unchanged lines around the hunks that show: the run above each hunk while it's open,
-// and those after the last only while the entire file shows, or else those of them commented on, by
+// Those of the unchanged lines around the hunks that show: the run above each hunk, and the one
+// after the last, while it's open or the entire file shows, or else those of them commented on, by
 // index, the run before the first hunk at 0, and the one after the hunk at an index at the next.
 export function shownLines(
   unchanged: Unchanged,

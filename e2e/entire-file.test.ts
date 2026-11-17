@@ -1,7 +1,7 @@
 import { commitAll, runGit, writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { hunkBar } from "./keyboard";
-import { changeLines, countOn, counts } from "./numbered";
+import { changeLines, countOn, counts, endBar } from "./numbered";
 import { box, button, line, openFile, selectLines, watchLine } from "./panel";
 
 function staged(repository: string): string {
@@ -116,7 +116,7 @@ test("while the unchanged lines before a hunk, after the hunk before it, are lef
   await expect(countOn(page, 1, 96)).toBeVisible();
   await expect(countOn(page, 2, 3)).toBeVisible();
   await expect(countOn(page, 3, 13)).toBeVisible();
-  await expect(counts(page)).toHaveCount(6);
+  await expect(counts(page)).toHaveCount(7);
 
   const before = await box(hunkBar(page, "a.txt", 2));
 
@@ -126,7 +126,7 @@ test("while the unchanged lines before a hunk, after the hunk before it, are lef
   await expect(line(page, "a 106")).toBeVisible();
   await expect(line(page, "a 96")).toBeHidden();
   await expect(line(page, "a 120")).toBeHidden();
-  await expect(counts(page)).toHaveCount(5);
+  await expect(counts(page)).toHaveCount(6);
   await expect(button(page, "Show entire file")).toHaveCount(6);
 
   const after = await box(hunkBar(page, "a.txt", 2));
@@ -185,7 +185,7 @@ test('"Show entire file" shows every unchanged line, though some already show, a
 
   await expect(line(page, "a 125")).toBeHidden();
   await expect(line(page, "a 50")).toBeHidden();
-  await expect(counts(page)).toHaveCount(2);
+  await expect(counts(page)).toHaveCount(3);
 });
 
 test("the unchanged lines shown before a hunk stay shown as a hunk above it is staged", async ({
@@ -233,7 +233,7 @@ test("the unchanged lines shown before a hunk stay shown as lines are added abov
   await expect(
     hunkBar(page, "a.txt", 3).getByRole("button", { name: "Hide 43 unchanged lines", exact: true }),
   ).toBeAttached();
-  await expect(counts(page)).toHaveCount(1);
+  await expect(counts(page)).toHaveCount(2);
   expect(await left()).toBe(false);
 });
 
@@ -338,6 +338,29 @@ test("in a group's view, \"Show entire file\" shows the entire file of only the 
   const after = await box(button(page, "Show only modified hunks").first());
 
   expect(after.y).toBe(before.y);
+});
+
+test("in a group's view, the bar at the end of a file's diff shows the unchanged lines after the last hunk of only that file", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeTwoHunks(repository, ["a", "b"]);
+
+  await app.openPanel();
+  await button(page, "MODIFIED FILES (2)").click();
+
+  const left = { name: "47 unchanged lines", exact: true };
+
+  await endBar(page, "a.txt").getByRole("button", left).click();
+
+  await expect(line(page, "a 200")).toBeVisible();
+  await expect(line(page, "a 125")).toBeHidden();
+  await expect(line(page, "b 200")).toBeHidden();
+  await expect(endBar(page, "b.txt").getByRole("button", left)).toBeVisible();
+  await expect(
+    endBar(page, "a.txt").getByRole("button", { name: "Hide 47 unchanged lines", exact: true }),
+  ).toBeAttached();
 });
 
 test("while the entire file shows, a selection reaching into a hunk from the unchanged lines before it selects only the hunk's lines", async ({

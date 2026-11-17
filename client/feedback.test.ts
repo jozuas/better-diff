@@ -140,6 +140,7 @@ const diff: Diff = {
     { oldStart: 0, newStart: 1, lines: [{ kind: "added", text: "", newline: true, runs: [] }] },
   ],
   contents: [],
+  newLines: 0,
   review: reviewed,
 };
 

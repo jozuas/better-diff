@@ -143,8 +143,8 @@ export function unchangedLines({ hunks, contents }: Pick<Diff, "hunks" | "conten
   };
 }
 
-// How a run of unchanged lines above a hunk shows: kept shown by a comment on one of its lines,
-// whatever's asked, open, as while the entire file shows, or hidden.
+// How a run of unchanged lines above a hunk, or after the last, shows: kept shown by a comment on
+// one of its lines, whatever's asked, open, as while the entire file shows, or hidden.
 export type RunShown = "kept" | "open" | "hidden";
 
 // What a hunk's bar shows of the file above the hunk: how many unchanged lines are there, after the
@@ -170,4 +170,21 @@ export function aboveHunks(hunks: readonly Hunk[], shows: (index: number) => Run
 
     return { hunk, unchanged: gap, shown: shows(index), separates: index > 0 || gap > 0 };
   });
+}
+
+// What the bar at the end of a file's diff shows of the file after the last hunk: how many unchanged
+// lines are there, how they show, and the number of the first of them in the new version.
+export interface Below {
+  unchanged: number;
+  shown: RunShown;
+  first: number;
+}
+
+// What's below the last of the hunks, of a new version of `total` lines, by how the run of unchanged
+// lines there shows: no lines where there are no hunks, as a diff without any shows none.
+export function belowHunks(hunks: readonly Hunk[], total: number, shown: RunShown): Below {
+  const last = hunks.at(-1);
+  const end = last === undefined ? total : spanOf(last).end.new;
+
+  return { unchanged: total - end, shown, first: end + 1 };
 }

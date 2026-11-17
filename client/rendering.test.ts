@@ -121,6 +121,7 @@ const diff: Omit<Diff, "hunks"> = {
   added: 0,
   removed: 0,
   contents: [],
+  newLines: 0,
 };
 
 test("a file's diff shows its hunks' lines, or one line in their place", () => {

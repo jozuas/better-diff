@@ -3,7 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { writeFile } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { hunkBar } from "./keyboard";
-import { changeLines } from "./numbered";
+import { changeLines, countAtEnd, endBar } from "./numbered";
 import { line, openFile } from "./panel";
 import {
   comment,
@@ -144,4 +144,29 @@ test("nothing hides a run of unchanged lines with a line commented on: its hunk'
   await expect(line(page, "a 200")).toBeHidden();
   await expect(line(page, "a 105")).toBeVisible();
   await expect(line(page, "a 104")).toBeVisible();
+});
+
+test("while a line after the last hunk is commented on, the lines there stay shown, and the diff has no bar at its end to hide them", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeLines(repository, [100]);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await countAtEnd(page, 97).click();
+  await comment(page, "a 105", "Keep this");
+
+  await expect(endBar(page)).toHaveCount(0);
+
+  await line(page, "a 100 changed").hover();
+  await page.getByRole("button", { name: "Show entire file", exact: true }).click();
+  await expect(line(page, "a 50")).toBeVisible();
+  await page.getByRole("button", { name: "Show only modified hunks", exact: true }).click();
+
+  await expect(line(page, "a 50")).toBeHidden();
+  await expect(line(page, "a 200")).toBeVisible();
+  await expectBetween(page, "Keep this", "a 105", "a 106");
+  await expect(endBar(page)).toHaveCount(0);
 });

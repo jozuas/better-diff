@@ -7,8 +7,10 @@ import { startTransition, useCallback, useContext, useEffect, useMemo, useState 
 import type { diffRpc } from "../shared/diff";
 import { hasComments, linesCommented } from "./commenting";
 import type { NumberedFile } from "./comments";
-import { aboveHunks, unchangedLines } from "./lines";
-import type { Above, Unchanged } from "./lines";
+import { groups } from "./groups";
+import type { OpenFile } from "./groups";
+import { aboveHunks, belowHunks, unchangedLines } from "./lines";
+import type { Above, Below, Unchanged } from "./lines";
 import { reviewedFile } from "./numbering";
 import type { CommentedFile } from "./numbering";
 import { covers, widened, windowAround } from "./rendering";
@@ -85,11 +87,12 @@ function useEntireDiff(diff: Diff, query: EntireQuery, wanted: boolean): Diff {
 // unchanged lines show, or `commented` asks for them, and what's shown of those runs, carried over to
 // its hunks each time they change, so that a run stays open above the hunk it was open above,
 // whichever of the diff and the entire file is read first after a change. And what shows the
-// entire file, or none of them, and shows or hides the run above the hunk at an index.
+// entire file, or none of them, and shows or hides the run above the hunk at an index, or the one
+// after the last hunk, at the index after the hunks'.
 function useShownRuns(diff: Diff, query: EntireQuery, commented: boolean) {
   const [state, setState] = useState<CarriedRuns<Diff["hunks"]>>(() => ({
     hunks: diff.hunks,
-    shown: carriedTo({ entire: false, runs: [] }, diff.hunks),
+    shown: carriedTo({ entire: false, runs: [], after: false }, diff.hunks),
   }));
 
   const shownDiff = useEntireDiff(diff, query, showsAny(state.shown) || commented);
@@ -129,11 +132,14 @@ export interface UnchangedShown {
   // The lines it renders of the file's new version, and what renders them around a line first.
   window: LineWindow;
   showAround: (line: number) => void;
-  // The unchanged lines that show around the hunks, and each hunk with what's above it.
+  // The unchanged lines that show around the hunks, each hunk with what's above it, and what's
+  // below the last.
   unchanged: Unchanged;
   above: Above[];
+  below: Below;
   // Shows the entire file, or only the hunks again, and the run above the hunk at the index, from
-  // around it, and hides that run.
+  // around it, or the one after the last hunk, at the index after the hunks', from its start, and
+  // hides that run.
   toggle: (hunk: number) => void;
   open: (hunk: number) => void;
   close: (hunk: number) => void;
@@ -161,8 +167,9 @@ function useNumbered(commented: CommentedFile | undefined, diff: Diff): Numbered
 }
 
 // The runs of unchanged lines around the diff's hunks that show, which the diff with every line of
-// the file is read for: none until asked for, then the run above a hunk once its bar asks, until it
-// asks to hide it, or the entire file once the toggle does, and whatever's asked, those with a line
+// the file is read for: none until asked for, then the run above a hunk once its bar asks, or the
+// one after the last once the bar at the diff's end does, until it asks to hide it, or the entire
+// file once the toggle does, and whatever's asked, those with a line
 // commented on. The diff's read for while a comment's on the file, or being written on it, so that
 // the hunks show from the read that the comments are placed on the lines of, which the review reads
 // too.
@@ -198,8 +205,18 @@ function useUnchangedShown(
     [shownDiff.hunks, whole, runs.shown, kept],
   );
 
+  const below = useMemo(
+    () =>
+      belowHunks(
+        shownDiff.hunks,
+        shownDiff.newLines,
+        whole ? runShown(runs.shown, shownDiff.hunks.length, kept) : "hidden",
+      ),
+    [shownDiff.hunks, shownDiff.newLines, whole, runs.shown, kept],
+  );
+
   function showAroundHunk(hunk: number): void {
-    showAround(shownDiff.hunks[hunk]?.newStart ?? 1);
+    showAround(shownDiff.hunks[hunk]?.newStart ?? below.first);
   }
 
   return {
@@ -210,6 +227,7 @@ function useUnchangedShown(
     showAround,
     unchanged: shownAround,
     above,
+    below,
     toggle: (hunk) => {
       runs.toggle();
       showAroundHunk(hunk);
@@ -222,11 +240,21 @@ function useUnchangedShown(
   };
 }
 
+// The diff of the file a group lists, while its lines can be commented on.
+function useCommented({ group, path }: OpenFile): CommentedFile | undefined {
+  const commented = useContext(ReviewContext) !== undefined;
+
+  return useMemo(
+    () => (commented ? { diff: groups[group].side, path } : undefined),
+    [commented, group, path],
+  );
+}
+
 interface UnchangedLinesShownProps {
   diff: Diff;
   query: EntireQuery;
-  // The file's diff, while its lines can be commented on.
-  commented: CommentedFile | undefined;
+  // The file whose diff it is, as its group lists it.
+  file: OpenFile;
   children: (shown: UnchangedShown) => ReactElement;
 }
 
@@ -235,8 +263,8 @@ interface UnchangedLinesShownProps {
 export function UnchangedLinesShown({
   diff,
   query,
-  commented,
+  file,
   children,
 }: UnchangedLinesShownProps): ReactElement {
-  return <>{children(useUnchangedShown(diff, query, commented))}</>;
+  return <>{children(useUnchangedShown(diff, query, useCommented(file)))}</>;
 }

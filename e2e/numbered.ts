@@ -31,6 +31,28 @@ export function countOn(page: Page, hunk: number, count: number): Locator {
   });
 }
 
+// The bar at the end of the file's diff, after its last hunk.
+export function endBar(page: Page, path = "a.txt"): Locator {
+  return page.getByRole("group", { name: `End of ${path}`, exact: true });
+}
+
+// The count on the bar at the end of the diff of the unchanged lines left out after the last hunk.
+export function countAtEnd(page: Page, count: number): Locator {
+  return endBar(page).getByRole("button", {
+    name: `${String(count)} unchanged lines`,
+    exact: true,
+  });
+}
+
+// What hides the unchanged lines after the last hunk again, on the bar at the end of the diff.
+export function hideAtEnd(page: Page, count: number): Locator {
+  return endBar(page).getByRole("button", {
+    name: `Hide ${String(count)} unchanged lines`,
+    exact: true,
+  });
+}
+
+// Every count of unchanged lines left out, on the hunks' bars and the bar at the end of the diff.
 export function counts(page: Page): Locator {
   return page.getByRole("button", { name: /^\d+ unchanged lines?$/u });
 }
