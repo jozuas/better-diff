@@ -178,6 +178,7 @@ test("reads a collapsed diff's hunks and contents when asked to expand it, and i
         },
       ],
       contents: [{ text: "b", runs: [] }],
+      review: { other: [] },
     });
     await expect(readDiff({ ...read, expand: false })).resolves.toStrictEqual(collapsed);
   });

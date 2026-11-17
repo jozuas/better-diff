@@ -2,17 +2,21 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 
 import type { diffRpc } from "../shared/diff";
+import { placedIn, versionsOf } from "./anchors";
+import type { Versions } from "./anchors";
 import { rangeLabel } from "./comments";
-import type { CommentTarget, ReviewComment } from "./comments";
+import type { CommentTarget, NumberedFile, ReviewComment } from "./comments";
 import { numberLines, unchangedLines } from "./lines";
 import type { NumberedLine } from "./lines";
-import { numbered, numberingOf } from "./numbering";
+import { numbered, reviewedFile } from "./numbering";
 import type { CommentedFile, Numbering } from "./numbering";
 import type { Side } from "./side-by-side";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
 type Hunk = Diff["hunks"][number];
+
+type LineOnSide = Pick<CommentTarget, "side" | "line">;
 
 type SendOptions = NonNullable<
   Parameters<ReturnType<PluginCommandCapabilities["paseo"]["agents"]["ref"]>["send"]>[1]
@@ -92,11 +96,13 @@ function contextLine(line: NumberedLine, review: Numbering): ContextLine {
 // as many as git shows around a change.
 const around = 3;
 
-// Where a comment's line is in one of its file's diffs: the diff, the section of the diff it's in,
-// its hunk, or undefined for a run of unchanged lines, and where that comes in the file, the
-// section's lines, and the line at its index among them, the index of the first of the comment's
-// lines, and how the review numbers the diff's lines.
+// Where a comment's line is in one of its file's diffs: the comment, on the lines its lines are in
+// the file's versions now, the diff, the section of the diff it's in, its hunk, or undefined for a
+// run of unchanged lines, and where that comes in the file, the section's lines, and the line at its
+// index among them, the index of the first of the comment's lines, and how the review numbers the
+// diff's lines.
 interface Located {
+  target: ReviewComment;
   diff: CommentedFile["diff"];
   hunk: Hunk | undefined;
   section: number;
@@ -107,18 +113,20 @@ interface Located {
   numbering: Numbering;
 }
 
+// Whether the line of the file's diff is the one on the side, as the review numbers it.
+function isLine(file: NumberedFile, line: NumberedLine, on: LineOnSide): boolean {
+  return numbered(line, on.side, file.numbering) === on.line;
+}
+
 // The index among the section's lines of the first of the comment's lines, of a comment on several,
 // where the section has it before the line at the index `at`, which the comment's on, and else `at`.
 function startIn(
   lines: readonly NumberedLine[],
   at: number,
   { start }: CommentTarget,
-  numbering: Numbering,
+  file: NumberedFile,
 ): number {
-  const from =
-    start === undefined
-      ? at
-      : lines.findIndex((line) => numbered(line, start.side, numbering) === start.line);
+  const from = start === undefined ? at : lines.findIndex((line) => isLine(file, line, start));
 
   return from === -1 ? at : Math.min(from, at);
 }
@@ -143,29 +151,29 @@ function sectionsOf({ hunks, contents = [] }: ReadDiff): Section[] {
   ];
 }
 
-// Where the comment's line is in the file's diff, as the review numbers it by the file's other
-// diff, if the diff has it.
-function locate(
-  diff: CommentedFile["diff"],
-  read: ReadDiff,
-  other: Pick<Diff, "hunks">,
-  target: CommentTarget,
-): Located | undefined {
-  const numbering = numberingOf(diff, other);
+// A file's diff as read now, and how the review numbers its lines, by what it was read with.
+interface ReviewedDiff {
+  diff: CommentedFile["diff"];
+  read: ReadDiff;
+  file: NumberedFile;
+}
 
+// Where the comment's line is in the file's diff, as the review numbers it, if the diff has it.
+function locate({ diff, read, file }: ReviewedDiff, target: ReviewComment): Located | undefined {
   for (const { lines, ...section } of sectionsOf(read)) {
-    const at = lines.findIndex((line) => numbered(line, target.side, numbering) === target.line);
+    const at = lines.findIndex((line) => isLine(file, line, target));
     const line = lines[at];
 
     if (line !== undefined) {
       return {
+        target,
         diff,
         ...section,
         lines,
         at,
         line,
-        from: startIn(lines, at, target, numbering),
-        numbering,
+        from: startIn(lines, at, target, file),
+        numbering: file.numbering,
       };
     }
   }
@@ -204,13 +212,14 @@ function sentBody(comment: ReviewComment): string {
   return lines === undefined ? comment.body : `${lines}: ${comment.body}`;
 }
 
-// Why a comment pending isn't sent: its line is in neither of its file's diffs, or one of them can't
-// be read.
+// Why a comment pending isn't sent: its line is in neither of its file's diffs, as they are now, or
+// one of them can't be read, or was read of other lines of the index than the other each time.
 export type Unsent = "gone" | "unread";
 
-// A diff of a file comments are on, as read now: its hunks, and where it's read with them, every line
-// of the version it goes to.
-type ReadDiff = Pick<Diff, "hunks"> & Partial<Pick<Diff, "contents">>;
+// A diff of a file comments are on, as read now: its hunks, what the review numbers their lines by,
+// unless it was read of other lines of the index than the other, and where it's read with them,
+// every line of the version it goes to.
+type ReadDiff = Pick<Diff, "hunks" | "review"> & Partial<Pick<Diff, "contents">>;
 
 // The diff of a file comments are on, as read now, or undefined where it can't be read.
 type DiffOf = (file: CommentedFile) => ReadDiff | undefined;
@@ -221,20 +230,55 @@ type SentComment = ReviewAttachment["comments"][number];
 // the comment, or why it doesn't.
 type Placement = { located: undefined; unsent: Unsent } | { located: Located; sent: SentComment };
 
-// Where the comment's line is in the diffs of its file, the unstaged one's or else the staged one's,
-// but one that changes the line before one that has it unchanged, and what the review sends of it.
-function placementOf(comment: ReviewComment, diffOf: DiffOf): Placement {
-  const unstaged = diffOf({ diff: "unstaged", path: comment.path });
-  const staged = diffOf({ diff: "staged", path: comment.path });
+// The file's diff as read now, and how the review numbers its lines, unless it can't be read, or was
+// read without what numbers them.
+function reviewedIn(
+  diffOf: DiffOf,
+  diff: CommentedFile["diff"],
+  path: string,
+): ReviewedDiff | undefined {
+  const read = diffOf({ diff, path });
 
+  if (read === undefined) {
+    return undefined;
+  }
+
+  const file = reviewedFile({ diff, path }, read);
+
+  return file === undefined ? undefined : { diff, read, file };
+}
+
+// A file's diffs as read now: the unstaged one and the staged one, and how the review numbers their
+// lines, unless either can't be read, or was read without what numbers them, and the file's versions,
+// as they have them.
+interface FileRead {
+  unstaged: ReviewedDiff | undefined;
+  staged: ReviewedDiff | undefined;
+  versions: Versions | undefined;
+}
+
+function fileRead(diffOf: DiffOf, path: string): FileRead {
+  return {
+    unstaged: reviewedIn(diffOf, "unstaged", path),
+    staged: reviewedIn(diffOf, "staged", path),
+    versions: versionsOf(diffOf({ diff: "unstaged", path }), diffOf({ diff: "staged", path })),
+  };
+}
+
+// Where the comment's line is in the diffs of its file, the unstaged one's or else the staged one's,
+// but one that changes the line before one that has it unchanged, its lines placed on those their
+// lines are in its file's versions now, and what the review sends of it.
+function placementOf(comment: ReviewComment, { unstaged, staged, versions }: FileRead): Placement {
   if (unstaged === undefined || staged === undefined) {
     return { located: undefined, unsent: "unread" };
   }
 
-  const found = [
-    locate("unstaged", unstaged, staged, comment),
-    locate("staged", staged, unstaged, comment),
-  ].flatMap((each) => (each === undefined ? [] : [each]));
+  const target = placedIn(comment, versions);
+
+  const found =
+    target === undefined
+      ? []
+      : [unstaged, staged].flatMap((reviewed) => locate(reviewed, target) ?? []);
 
   const located = found.find(({ line }) => line.kind !== "context") ?? found[0];
 
@@ -244,9 +288,9 @@ function placementOf(comment: ReviewComment, diffOf: DiffOf): Placement {
         located,
         sent: {
           filePath: comment.path,
-          side: comment.side,
-          lineNumber: comment.line,
-          body: sentBody(comment),
+          side: located.target.side,
+          lineNumber: located.target.line,
+          body: sentBody(located.target),
           context: contextOf(located),
         },
       };
@@ -278,38 +322,42 @@ function byOrder([diff, hunk, at]: Order, [otherDiff, otherHunk, otherAt]: Order
 }
 
 // Each by path.
-function byPath([path]: readonly [string, unknown], [other]: readonly [string, unknown]): number {
+function byPath(path: string, other: string): number {
   // Stryker disable next-line EqualityOperator: no two files listed have the same path.
   return path < other ? -1 : 1;
 }
 
 // The comments pending, by the file each is on, with where each one's line is in the file's diffs,
-// as read now: each file by path, and each file's comments in the order of their lines in its
-// unstaged diff and then its staged one, comments on one line in the order they were made, and after
-// them those on lines neither diff has, or whose diffs can't be read, in the order they were made.
+// as read now, its lines placed on those their lines are in its file's versions now: each file by
+// path, and each file's comments in the order of their lines in its unstaged diff and then its staged
+// one, comments on one line in the order they were made, and after them those on lines neither diff
+// has, or whose diffs can't be read, in the order they were made.
 export function placedByFile(
   comments: readonly ReviewComment[],
   diffOf: DiffOf,
 ): [string, PlacedComment[]][] {
-  const files = new Map<string, { placed: PlacedComment; order: Order }[]>();
+  const paths = [...new Set(comments.map(({ path }) => path))].toSorted(byPath);
 
-  for (const comment of comments) {
-    const placement = placementOf(comment, diffOf);
+  return paths.map((path): [string, PlacedComment[]] => {
+    const read = fileRead(diffOf, path);
 
-    files.set(comment.path, [
-      ...(files.get(comment.path) ?? []),
-      { placed: { comment, placement }, order: orderOf(placement) },
-    ]);
-  }
+    const placings = comments.flatMap((comment) => {
+      if (comment.path !== path) {
+        return [];
+      }
 
-  return [...files.entries()]
-    .map(([path, placings]): [string, PlacedComment[]] => [
+      const placement = placementOf(comment, read);
+
+      return [{ placed: { comment, placement }, order: orderOf(placement) }];
+    });
+
+    return [
       path,
       placings
         .toSorted(({ order }, { order: other }) => byOrder(order, other))
         .map(({ placed }) => placed),
-    ])
-    .toSorted(byPath);
+    ];
+  });
 }
 
 // What a review sends: an attachment of the comments it sends, if any, those comments, and why each
@@ -321,9 +369,10 @@ export interface Reviewed {
 }
 
 // What reviewing the worktree in the directory sends of the comments, as Paseo's own diff sends a
-// review of its uncommitted changes, by the diffs of the files they're on, as they are now: the
-// comments on lines it has, with the lines around them, in the order the review lists them, and why
-// each of the others isn't sent. No attachment where it has none of them.
+// review of its uncommitted changes, by the diffs of the files they're on, as they are now, each
+// comment's lines placed on those their lines are in its file's versions now: the comments on lines
+// it has, with the lines around them, in the order the review lists them, and why each of the others
+// isn't sent. No attachment where it has none of them.
 export function reviewOf(
   directory: string,
   comments: readonly ReviewComment[],

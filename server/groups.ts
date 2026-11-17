@@ -12,14 +12,15 @@ import type { Changes } from "./file-changes";
 import { groupSides, groupsOf } from "./grouping";
 import { highlightedTogether } from "./highlight";
 import type { UnhighlightedDiff } from "./highlight";
+import { others, readOtherChanges, reviewIn, withOtherChanges } from "./review";
 
 type Group = RpcInput<typeof groupRpc>["group"];
 
-interface GroupFile {
-  shown: (UnhighlightedDiff & { path: string }) | { path: string; error: string };
-  // Undefined where the changes can't be read.
-  changed: ChangedFile | undefined;
-}
+type GroupFile =
+  // With the entries git status listed the file in, which its changes were read by.
+  | { shown: UnhighlightedDiff & { path: string }; changed: ChangedFile; listed: readonly Entry[] }
+  // Where the changes can't be read.
+  | { shown: { path: string; error: string }; changed: undefined };
 
 // The file, with its changes, as a diff of several read them, or else as its own diff reads them,
 // or why they can't be read, which leaves the group's other files to be read: git can't open a file
@@ -39,7 +40,7 @@ async function readFile(
 
     const diff = diffOf(changes);
 
-    return { shown: Object.assign(diff, { path }), changed: { path, changes } };
+    return { shown: Object.assign(diff, { path }), changed: { path, changes }, listed };
   } catch (error) {
     return { shown: { path, error: String(error) }, changed: undefined };
   }
@@ -62,22 +63,26 @@ function groupPaths(
   return grouped.filter((path) => wanted.has(path));
 }
 
-// The group's files at the paths, as git status lists them, each with the entries that list it:
-// two for a file deleted from the index and untracked, and with whitespace changes hidden where
-// they're to be hidden.
-async function filesOf(
-  directory: string,
-  entries: readonly Entry[],
-  group: Group,
-  read: readonly string[],
-  hideWhitespace?: boolean,
-): Promise<GroupFile[]> {
+// The files at the paths, each with the entries git status lists it in: two for a file deleted from
+// the index and untracked.
+function listingsOf(entries: readonly Entry[], read: readonly string[]): Map<string, Entry[]> {
   const listings = new Map<string, Entry[]>(read.map((path) => [path, []]));
 
   for (const entry of entries) {
     listings.get(entry.path)?.push(entry);
   }
 
+  return listings;
+}
+
+// The group's files, as git status lists them, each by the entries that list it, with whitespace
+// changes hidden where they're to be hidden.
+async function filesOf(
+  directory: string,
+  listings: ReadonlyMap<string, readonly Entry[]>,
+  group: Group,
+  hideWhitespace?: boolean,
+): Promise<GroupFile[]> {
   const batched = await batchedChanges(directory, listings, groupSides[group], hideWhitespace);
 
   const files = await readEach([...listings], async ([path, listed]) => {
@@ -89,6 +94,29 @@ async function filesOf(
   return files;
 }
 
+// The changes on the other side from the group's of each of its files that has some there, as git
+// status lists them, as a diff of several reads them, or else as its own diff reads them, by path,
+// or null where they can't be read. A file with none there has none.
+async function otherChangesOf(
+  directory: string,
+  listings: ReadonlyMap<string, readonly Entry[]>,
+  group: Group,
+  hideWhitespace: boolean | undefined,
+): Promise<Map<string, Changes | null>> {
+  const side = groupSides[group];
+  const changed = withOtherChanges(listings, side);
+  const batched = await batchedChanges(directory, changed, others[side], hideWhitespace);
+
+  const read = await readEach([...changed], async ([path, listed]) => {
+    const changes =
+      batched.get(path) ?? (await readOtherChanges(directory, listed, path, side, hideWhitespace));
+
+    return [path, changes] as const;
+  });
+
+  return new Map(read);
+}
+
 export async function readGroup({
   directory,
   group,
@@ -96,14 +124,12 @@ export async function readGroup({
   hideWhitespace,
 }: RpcInput<typeof groupRpc>): Promise<RpcOutput<typeof groupRpc>> {
   const entries = await readStatus(directory);
+  const listings = listingsOf(entries, groupPaths(entries, group, paths));
 
-  const files = await filesOf(
-    directory,
-    entries,
-    group,
-    groupPaths(entries, group, paths),
-    hideWhitespace,
-  );
+  const [files, otherSides] = await Promise.all([
+    filesOf(directory, listings, group, hideWhitespace),
+    otherChangesOf(directory, listings, group, hideWhitespace),
+  ]);
 
   const generated = await generatedPaths(
     directory,
@@ -111,12 +137,16 @@ export async function readGroup({
   );
 
   const shown = await highlightedTogether((highlight) =>
-    files.map(async ({ shown: file }) => {
-      if ("error" in file) {
-        return file;
+    files.map(async (groupFile) => {
+      if (groupFile.changed === undefined) {
+        return groupFile.shown;
       }
 
-      const read = await highlight(collapsed(file, generated.has(file.path)), file.path, false);
+      const { shown: file, changed, listed } = groupFile;
+      const other = otherSides.get(changed.path);
+      const review = reviewIn(groupSides[group], listed, changed.changes, other);
+      const reviewed = review === undefined ? file : { ...file, review };
+      const read = await highlight(collapsed(reviewed, generated.has(file.path)), file.path, false);
 
       return read;
     }),
@@ -141,7 +171,7 @@ export async function applyGroup({
       return { status: "stale" } as const;
     }
 
-    const files = await filesOf(directory, entries, group, read);
+    const files = await filesOf(directory, listingsOf(entries, read), group);
 
     await applyChanges(
       directory,

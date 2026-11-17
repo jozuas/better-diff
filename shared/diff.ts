@@ -25,6 +25,21 @@ export type RepositoryKind = (typeof repositoryKinds)[number];
 // whose only change is to whitespace is unchanged, as the new version has it.
 const hideWhitespace = z.boolean().optional();
 
+const lineKind = z.enum(["context", "removed", "added"]);
+
+// How the review the agent reads, of the worktree's uncommitted changes, numbers a diff's lines, as
+// read with them: by the hunks of the file's other diff, by the kind of each line, which number a
+// line of the index in HEAD or the worktree.
+const review = z.object({
+  other: z.array(
+    z.object({
+      oldStart: index,
+      newStart: index,
+      lines: z.array(z.object({ kind: lineKind })),
+    }),
+  ),
+});
+
 const diff = z.object({
   // Changes whenever the diff does, so an action can tell the diff it was chosen from is out of
   // date, and with whitespace changes hidden or shown, which shows other lines.
@@ -65,7 +80,7 @@ const diff = z.object({
       newStart: index,
       lines: z.array(
         z.object({
-          kind: z.enum(["context", "removed", "added"]),
+          kind: lineKind,
           text: z.string(),
           // False only for a file's last line, when the file doesn't end with a newline.
           newline: z.boolean(),
@@ -79,6 +94,9 @@ const diff = z.object({
   // version without the file. Only removed lines are shown from the version the diff goes from,
   // and the hunks have them all.
   contents: z.array(z.object({ text: z.string(), runs })),
+  // None where the file's two diffs were read of different lines of the index, or of other lines
+  // than git status listed the file with, each time, or the other can't be read.
+  review: review.optional(),
 });
 
 export const diffRpc = defineRpc({

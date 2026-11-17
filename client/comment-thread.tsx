@@ -65,13 +65,13 @@ function useStyles(theme: PluginTheme) {
 type Styles = ReturnType<typeof useStyles>;
 
 interface RangeLabelProps {
-  target: CommentTarget | undefined;
+  target: CommentTarget;
   styles: Styles;
 }
 
 // Which lines a comment on several is on, as Linear says it, and nothing for one on one line.
 function RangeLabel({ target, styles }: RangeLabelProps): ReactElement | null {
-  const label = target === undefined ? undefined : rangeLabel(target);
+  const label = rangeLabel(target);
 
   return label === undefined ? null : (
     <Text selectable={false} style={styles.range}>
@@ -82,6 +82,8 @@ function RangeLabel({ target, styles }: RangeLabelProps): ReactElement | null {
 
 interface CommentEditorProps {
   review: Review;
+  // The lines the comment written is on now, where it's written.
+  target: CommentTarget;
   theme: PluginTheme;
 }
 
@@ -89,7 +91,7 @@ interface CommentEditorProps {
 // saves it, unless it's only whitespace, and Cancel, or Escape, as in Paseo's own diff, leaves it. It starts
 // with what's written of the comment, which is what the comment edited says, or nothing for a new
 // one, until something else is written.
-export function CommentEditor({ review, theme }: CommentEditorProps): ReactElement {
+export function CommentEditor({ review, target, theme }: CommentEditorProps): ReactElement {
   const styles = useStyles(theme);
   const [text, setText] = useState(review.written);
   const [focused, setFocused] = useState(false);
@@ -119,7 +121,7 @@ export function CommentEditor({ review, theme }: CommentEditorProps): ReactEleme
 
   return (
     <View nativeID={id} style={[styles.box, focused && styles.focused]}>
-      <RangeLabel target={review.editing?.target} styles={styles} />
+      <RangeLabel target={target} styles={styles} />
       <TextInput
         accessibilityLabel="Review comment"
         placeholder="Leave a comment"
@@ -233,19 +235,21 @@ interface ThreadCommentProps extends PendingCommentProps {
 // The comment, or where it's edited, while it is.
 function ThreadComment({ comment, editing, ...shown }: ThreadCommentProps): ReactElement {
   return editing?.id === comment.id ? (
-    <CommentEditor review={shown.review} theme={shown.theme} />
+    <CommentEditor review={shown.review} target={editing.target} theme={shown.theme} />
   ) : (
     <PendingComment comment={comment} {...shown} />
   );
 }
 
-interface NewCommentProps extends CommentEditorProps {
+interface NewCommentProps extends Omit<CommentEditorProps, "target"> {
   editing: Editing | undefined;
 }
 
 // Where a new comment is written on the line, while one is.
 function NewComment({ editing, ...shown }: NewCommentProps): ReactElement | null {
-  return editing === undefined || editing.id !== undefined ? null : <CommentEditor {...shown} />;
+  return editing === undefined || editing.id !== undefined ? null : (
+    <CommentEditor target={editing.target} {...shown} />
+  );
 }
 
 interface CommentThreadProps {

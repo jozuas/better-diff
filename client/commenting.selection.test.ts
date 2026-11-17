@@ -1,18 +1,19 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { asNumbered } from "../test/comments";
+import { numberedFile } from "../test/comments";
 import { hunkLines } from "../test/hunk-lines";
 import { startedOn } from "./commenting";
 import { targetOf } from "./comments";
 import type { CommentTarget, NumberedFile } from "./comments";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
+import { numbered as reviewNumber } from "./numbering";
 import type { Numbering } from "./numbering";
 import type { LineRange } from "./selection";
 import type { Side } from "./side-by-side";
 
-const file = { path: "a.txt", numbering: asNumbered };
+const file = numberedFile("a.txt");
 
 const sides = fc.constantFrom<Side | undefined>(undefined, "old", "new");
 
@@ -75,14 +76,50 @@ function selectionModel(
   return end;
 }
 
-test("a comment on selected lines is on those from the first that can be commented on to the last, wherever the pointer is", () => {
+// A line on its side, without what tells it apart from the others of its version.
+function lineOnly({ side, line }: { side: Side; line: number }) {
+  return { side, line };
+}
+
+// The target, without what tells its lines apart from the others of their versions.
+function unanchored(target: CommentTarget | undefined): CommentTarget | undefined {
+  if (target === undefined) {
+    return undefined;
+  }
+
+  const { path, start } = target;
+
+  return start === undefined
+    ? { path, ...lineOnly(target) }
+    : { path, ...lineOnly(target), start: lineOnly(start) };
+}
+
+// The texts of what tells the target's lines apart from the others of their versions, and of the
+// lines among the lines that the review numbers as they are.
+function anchorTexts(
+  target: CommentTarget | undefined,
+  lines: readonly NumberedLine[],
+  numbering: Numbering,
+): [(string | undefined)[], (string | undefined)[]] {
+  const on = [target, target?.start].flatMap((each) => each ?? []);
+
+  return [
+    on.map(({ anchor }) => anchor?.text),
+    on.map(
+      ({ side, line }) => lines.find((each) => reviewNumber(each, side, numbering) === line)?.text,
+    ),
+  ];
+}
+
+test("a comment on selected lines is on those from the first that can be commented on to the last, wherever the pointer is, with what tells them apart", () => {
   fc.assert(
     fc.property(selectedLines, leavingOut, pointedAt, ({ lines, range }, numbering, pointed) => {
-      const numbered: NumberedFile = { path: "a.txt", numbering };
+      const numberedIn: NumberedFile = { path: "a.txt", numbering };
+      const started = startedOn(numberedIn, lines, range, pointed);
+      const [texts, ofLines] = anchorTexts(started, lines, numbering);
 
-      expect(startedOn(numbered, lines, range, pointed)).toStrictEqual(
-        selectionModel(numbered, lines, range),
-      );
+      expect(unanchored(started)).toStrictEqual(selectionModel(numberedIn, lines, range));
+      expect(texts).toStrictEqual(ofLines);
     }),
   );
 });
@@ -103,18 +140,25 @@ test("inline, a comment on selected lines starts on the side of the line it's on
     path: "a.txt",
     side: "new",
     line: 7,
-    start: { side: "old", line: 4 },
+    anchor: { text: "context", before: ["added"], after: [] },
+    start: { side: "old", line: 4, anchor: { text: "removed", before: [], after: ["context"] } },
   });
   expect(startedOn(file, linesFrom(["context", "context", "removed"]), all)).toStrictEqual({
     path: "a.txt",
     side: "old",
     line: 6,
-    start: { side: "old", line: 4 },
+    anchor: { text: "removed", before: ["context", "context"], after: [] },
+    start: {
+      side: "old",
+      line: 4,
+      anchor: { text: "context", before: [], after: ["context", "removed"] },
+    },
   });
   expect(startedOn(file, linesFrom(["added", "context"]), { ...all, last: 0 })).toStrictEqual({
     path: "a.txt",
     side: "new",
     line: 6,
+    anchor: { text: "added", before: [], after: ["context"] },
   });
 });
 
@@ -132,11 +176,13 @@ test("a comment on no lines selected is on the line the pointer is over, if it c
     path: "a.txt",
     side: "new",
     line: 6,
+    anchor: { text: "kept", before: [], after: [] },
   });
   expect(startedOn(file, lines, undefined, { index: 1, side: "old" })).toStrictEqual({
     path: "a.txt",
     side: "old",
     line: 5,
+    anchor: { text: "kept", before: ["old"], after: [] },
   });
   expect(startedOn(file, lines, undefined, { index: 0, side: "new" })).toBeUndefined();
   expect(startedOn(file, lines, undefined, { index: 2, side: undefined })).toBeUndefined();

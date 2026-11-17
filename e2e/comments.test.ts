@@ -109,7 +109,7 @@ test("a press in a comment's box stays in it, and a right click there opens the 
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
 
-test("what's written of a comment stays as its file changes, under the line that then has its number", async ({
+test("what's written of a comment stays as its file changes, under its line, which it follows, and shows nowhere while its line is changed", async ({
   app,
   page,
   repository,
@@ -121,19 +121,100 @@ test("what's written of a comment stays as its file changes, under the line that
   await startComment(page, "BRAVO");
   await editor(page).fill("Why uppercase?");
 
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBravo\ncharlie\ndelta\n");
+
+  await expect(line(page, "Bravo")).toBeVisible();
+  await expect(editor(page)).toBeHidden();
+
   writeFile(repository, "a.txt", "first\nkept\nalpha\nBRAVO\ncharlie\ndelta\n");
 
-  await expect(line(page, "first")).toBeVisible();
   await expect(editor(page)).toHaveValue("Why uppercase?");
 
   await button(page, "Save review comment").click();
 
   const under = await box(pending(page, "Why uppercase?"));
-  const alpha = await box(line(page, "alpha"));
   const bravo = await box(line(page, "BRAVO"));
+  const charlie = await box(line(page, "charlie"));
 
-  expect(under.y).toBeGreaterThan(alpha.y);
-  expect(under.y).toBeLessThan(bravo.y);
+  expect(under.y).toBeGreaterThan(bravo.y);
+  expect(under.y).toBeLessThan(charlie.y);
+});
+
+test("while a comment being written shows nowhere, as its line is changed, the bar under the diff says it's no longer in its diffs, beside Discard comment, which leaves it", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeA(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await startComment(page, "BRAVO");
+  await editor(page).fill("Why uppercase?");
+
+  const note = page.getByText("The comment being written is no longer in its diffs", {
+    exact: true,
+  });
+
+  await expect(note).toBeHidden();
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBravo\ncharlie\ndelta\n");
+
+  await expect(note).toBeVisible();
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBRAVO\ncharlie\ndelta\n");
+
+  await expect(editor(page)).toHaveValue("Why uppercase?");
+  await expect(note).toBeHidden();
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBravo\ncharlie\ndelta\n");
+
+  await expect(note).toBeVisible();
+  await button(page, "Discard comment").click();
+  await expect(note).toBeHidden();
+  await expect(button(page, "Discard comment")).toBeHidden();
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBRAVO\ncharlie\ndelta\n");
+
+  await expect(line(page, "BRAVO")).toBeVisible();
+  await expect(editor(page)).toBeHidden();
+  await expect(pending(page, "Why uppercase?")).toBeHidden();
+});
+
+test("while an edit of a comment saved shows nowhere, as its line is changed, the bar under the diff says the comment being edited is no longer in its diffs, beside Discard edit, which leaves the comment as it was saved, still pending", async ({
+  app,
+  page,
+  repository,
+}) => {
+  changeA(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  await comment(page, "BRAVO", "Why uppercase?");
+
+  await pending(page, "Why uppercase?")
+    .getByRole("button", { name: "Edit review comment" })
+    .click();
+
+  await editor(page).fill("Keep it lowercase.");
+
+  const note = page.getByText("The comment being edited is no longer in its diffs", {
+    exact: true,
+  });
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBravo\ncharlie\ndelta\n");
+
+  await expect(note).toBeVisible();
+  await expect(button(page, "Discard comment")).toBeHidden();
+  await button(page, "Discard edit").click();
+  await expect(note).toBeHidden();
+  await expect(button(page, "Review (1)")).toBeVisible();
+
+  writeFile(repository, "a.txt", "first\nkept\nalpha\nBRAVO\ncharlie\ndelta\n");
+
+  await expect(pending(page, "Why uppercase?")).toBeVisible();
+  await expect(pending(page, "Keep it lowercase.")).toBeHidden();
+  await expect(editor(page)).toBeHidden();
 });
 
 test("pending comments and their message stay once Paseo reloads", async ({

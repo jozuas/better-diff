@@ -4,7 +4,7 @@ import type { diffRpc } from "../shared/diff";
 import { placedByFile } from "./attachment";
 import type { PlacedComment, Unsent } from "./attachment";
 import { rangeNumbers } from "./comments";
-import type { ReviewComment } from "./comments";
+import type { CommentTarget, ReviewComment } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
 import type { NumberedLine } from "./lines";
 import { numberIn } from "./numbering";
@@ -27,8 +27,11 @@ export function placedLine(placed: Placed): PlacedLine | undefined {
   return placed === "gone" || placed === "unread" ? undefined : placed;
 }
 
+// A comment the review lists, the lines it's on now, as its file's diffs place it, or where they
+// don't, as it was made, and where its line is in them.
 export interface ListedComment {
   comment: ReviewComment;
+  target: CommentTarget;
   placed: Placed;
 }
 
@@ -43,12 +46,16 @@ function listedOf({ comment, placement }: PlacedComment): ListedComment {
   const { located } = placement;
 
   return located === undefined
-    ? { comment, placed: placement.unsent }
-    : { comment, placed: { line: located.line, diff: located.diff } };
+    ? { comment, target: comment, placed: placement.unsent }
+    : { comment, target: located.target, placed: { line: located.line, diff: located.diff } };
 }
 
-// The diff of a file, as read now, if it is.
-type DiffOf = (file: CommentedFile) => Pick<Diff, "hunks"> | undefined;
+// The diff of a file, as read now, if it is, with what the review numbers its lines by, unless it was
+// read of other lines of the index than the other, and where it's read with them, every line of the
+// version it goes to.
+type DiffOf = (
+  file: CommentedFile,
+) => (Pick<Diff, "hunks" | "review"> & Partial<Pick<Diff, "contents">>) | undefined;
 
 // The comments pending, by the file each is on, with where each one's line is in the file's diffs,
 // as read now, if they are, in the order the review sends them: each file by path, and each file's
@@ -74,18 +81,12 @@ export function openFileOf(
   return group === undefined ? undefined : { group, path };
 }
 
-// The files partly staged: those both MODIFIED and STAGED list, whose diffs number each other's
-// lines in the review.
-export function partlyStaged(listed: Readonly<Record<GroupName, readonly string[]>>): string[] {
-  return listed.staged.filter((path) => listed.modified.includes(path));
-}
-
 // The number a comment's line is labelled with: its number in the diff that has it, on the comment's
 // side, or else the number the review has it at.
-function lineNumberOf({ comment, placed }: ListedComment): number {
+function lineNumberOf({ target, placed }: ListedComment): number {
   const shown = placedLine(placed);
 
-  return (shown === undefined ? undefined : numberIn(shown.line, comment.side)) ?? comment.line;
+  return (shown === undefined ? undefined : numberIn(shown.line, target.side)) ?? target.line;
 }
 
 // How many comments are pending on each file, by its path.
@@ -111,7 +112,7 @@ const marks = { context: "", removed: "\u2212", added: "+" };
 // lines, their numbers as the review has them, and whether the diff is the staged one.
 export function lineLabel(listed: ListedComment): string {
   const placed = placedLine(listed.placed);
-  const range = rangeNumbers(listed.comment);
+  const range = rangeNumbers(listed.target);
   const number = String(lineNumberOf(listed));
 
   if (placed === undefined) {
@@ -123,7 +124,7 @@ export function lineLabel(listed: ListedComment): string {
 
 // What the button that shows a comment in its diff is called: by its line, or its lines.
 export function linkLabel(listed: ListedComment): string {
-  const range = rangeNumbers(listed.comment);
+  const range = rangeNumbers(listed.target);
   const lines = range === undefined ? `line ${String(lineNumberOf(listed))}` : `lines ${range}`;
 
   return `Show ${lines} of ${listed.comment.path}`;

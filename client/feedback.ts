@@ -5,9 +5,17 @@ import type { diffRpc } from "../shared/diff";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Reviewed, Unsent } from "./attachment";
 import { bodyOf, recipientsOf, reviewPrompt, templateOf } from "./comments";
-import type { AgentState, ListedAgent, NewAgent, Recipient, ReviewComment } from "./comments";
+import type {
+  AgentState,
+  ListedAgent,
+  NewAgent,
+  Recipient,
+  ReviewComment,
+  SentReview,
+} from "./comments";
 import { fileKey } from "./numbering";
 import type { CommentedFile } from "./numbering";
+import type { WrittenNowhere } from "./placing";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -152,8 +160,9 @@ export function agentState({ state, active }: Recipient, now: number): string {
 }
 
 // Sends an agent the comments the review sends, by the diffs of their files as read now, with the
-// lines around them, and asks it what the prompt does, unless there are none to send. A diff that
-// can't be read has none of them. Gives the comments sent, and why each of the others wasn't.
+// lines around them, and asks it what the prompt does, unless there are none to send. Each comment's
+// lines are placed on those their lines are in its file's versions as those diffs have them. A diff
+// that can't be read has none of them. Gives the comments sent, and why each of the others wasn't.
 async function sendReview(
   directory: string,
   comments: readonly ReviewComment[],
@@ -280,6 +289,35 @@ export function agentsNotice({
 // What the button that opens the review says: how many comments are pending.
 export function reviewLabel(pending: number): string {
   return `Review (${pending})`;
+}
+
+// What the bar under the diff has: the comments pending, the review last sent, while it can be
+// restored, and what's being written under a line while it shows under none, if anything.
+export interface BarContents {
+  comments: readonly ReviewComment[];
+  restorable: SentReview | undefined;
+  writtenNowhere: WrittenNowhere | undefined;
+}
+
+// Whether the bar under the diff has anything: while comments are pending, or a review sent can be
+// restored, or what's being written under a line shows under none.
+export function barShows({ comments, restorable, writtenNowhere }: BarContents): boolean {
+  return comments.length > 0 || restorable !== undefined || writtenNowhere !== undefined;
+}
+
+// What the bar says while what's being written under a line shows under none, and what the button
+// beside it that leaves it, as Cancel does, says: a new comment is discarded, and an edit of one
+// saved is, the comment staying pending as it was saved.
+const nowhereSaid: Record<WrittenNowhere, { note: string; discard: string }> = {
+  comment: {
+    note: "The comment being written is no longer in its diffs",
+    discard: "Discard comment",
+  },
+  edit: { note: "The comment being edited is no longer in its diffs", discard: "Discard edit" },
+};
+
+export function writtenNowhereSaid(written: WrittenNowhere): { note: string; discard: string } {
+  return nowhereSaid[written];
 }
 
 // What the button that sends feedback says, and while it's being sent.

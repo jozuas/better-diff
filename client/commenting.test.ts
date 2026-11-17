@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test, vi } from "vitest";
 
-import { asNumbered, reviewComments } from "../test/comments";
+import { numberedFile, reviewComments } from "../test/comments";
 import { hunkLines } from "../test/hunk-lines";
 import { commentedBy, commentsOn, pointedIn, subscribeToPointed } from "./commenting";
 import type { Commented, Commenting } from "./commenting";
@@ -14,12 +14,19 @@ import type { Review } from "./review-context";
 import { rowsOf, shows } from "./side-by-side";
 import type { Side } from "./side-by-side";
 
-const file = { path: "a.txt", numbering: asNumbered };
+const file = numberedFile("a.txt");
 
+// Nothing under any line.
+const nothingShown = { threads: new Map(), editing: undefined };
+
+// The view's review, with the comments, and the one being written, if any, under the lines of the
+// file's diffs, and nothing under any other file's.
 function reviewOf(comments: readonly ReviewComment[], editing?: Editing): Review {
+  const shown = { threads: threadsOf(comments), editing };
+
   return {
-    numbering: vi.fn<Review["numbering"]>(),
-    threads: threadsOf(comments),
+    commentsIn: (path) => (path === file.path ? shown : nothingShown),
+    commentedOn: (path) => comments.some((comment) => comment.path === path),
     editing,
     revealing: undefined,
     onStart: vi.fn<Review["onStart"]>(),
@@ -32,8 +39,8 @@ function reviewOf(comments: readonly ReviewComment[], editing?: Editing): Review
   };
 }
 
-function commentingOf(): Commenting {
-  return { file, pointed: pointedLine() };
+function commentingOf(lines: readonly NumberedLine[] = []): Commenting {
+  return { file, lines, pointed: pointedLine() };
 }
 
 test("lines are commented on only where they can be, in a view that reviews", () => {
@@ -43,6 +50,8 @@ test("lines are commented on only where they can be, in a view that reviews", ()
 
   expect(commentedBy(review, commenting, pointed)).toStrictEqual({
     file,
+    lines: commenting.lines,
+    shown: review.commentsIn(file.path),
     pointer: commenting.pointed.pointer,
     pointed,
     review,
@@ -86,7 +95,7 @@ function expectedParts(
       pointer: shown,
       starts: shown && pointed?.index === index && pointed.side === side,
       thread: shown
-        ? threadAt(commented.review.threads, commented.review.editing, shownOn(file, line, side))
+        ? threadAt(commented.shown.threads, commented.shown.editing, shownOn(file, line, side))
         : undefined,
     };
   });
@@ -95,9 +104,17 @@ function expectedParts(
 test("a line shown can be commented on: it hears the pointer, starts a comment while the pointer's over it, and shows its comments", () => {
   fc.assert(
     fc.property(hunkLines, sides, pointedAt, reviewComments, (lines, side, pointed, comments) => {
-      const commenting = commentingOf();
+      const commenting = commentingOf(lines);
       const review = reviewOf(comments.map((comment) => ({ ...comment, path: file.path })));
-      const commented = { file, pointer: commenting.pointed.pointer, pointed, review };
+
+      const commented = {
+        file,
+        lines,
+        shown: review.commentsIn(file.path),
+        pointer: commenting.pointed.pointer,
+        pointed,
+        review,
+      };
 
       expect(partsOf(commented, lines, side)).toStrictEqual(
         expectedParts(commented, lines, side, pointed),
@@ -106,28 +123,39 @@ test("a line shown can be commented on: it hears the pointer, starts a comment w
   );
 });
 
-test("the button over a line starts a comment on it", () => {
-  const commenting = commentingOf();
+// An unchanged line, saying its number in HEAD, which is one less than its number in the worktree.
+function unchangedLine(text: string, oldNumber: number): NumberedLine {
+  return { kind: "context", text, newline: true, runs: [], oldNumber, newNumber: oldNumber + 1 };
+}
+
+const three = unchangedLine("three", 3);
+const unchangedLines = [unchangedLine("two", 2), three, unchangedLine("four", 4)];
+
+test("the button over a line starts a comment on it, with what tells it apart from the other lines of its version", () => {
+  const commenting = commentingOf(unchangedLines);
   const review = reviewOf([]);
 
-  const line: NumberedLine = {
-    kind: "context",
-    text: "kept",
-    newline: true,
-    runs: [],
-    oldNumber: 2,
-    newNumber: 3,
-  };
-
   const comments = commentsOn(
-    { file, pointer: commenting.pointed.pointer, pointed: { index: 0, side: "old" }, review },
-    { index: 0, line },
+    {
+      file,
+      lines: commenting.lines,
+      shown: review.commentsIn(file.path),
+      pointer: commenting.pointed.pointer,
+      pointed: { index: 1, side: "old" },
+      review,
+    },
+    { index: 1, line: three },
     "old",
   );
 
   comments.onComment?.();
 
-  expect(review.onStart).toHaveBeenCalledWith({ path: "a.txt", side: "old", line: 2 });
+  expect(review.onStart).toHaveBeenCalledWith({
+    path: "a.txt",
+    side: "old",
+    line: 3,
+    anchor: { text: "three", before: ["two"], after: ["four"] },
+  });
 });
 
 // What the review numbers a line of a version it hasn't.
@@ -148,7 +176,15 @@ test("lines that can't be commented on, or aren't there, have nothing to comment
     newNumber: 1,
   };
 
-  const commented = { file, pointer: commenting.pointed.pointer, pointed: undefined, review };
+  const commented = {
+    file,
+    lines: [line],
+    shown: review.commentsIn(file.path),
+    pointer: commenting.pointed.pointer,
+    pointed: undefined,
+    review,
+  };
+
   const nothing = { pointer: undefined, onComment: undefined, thread: undefined };
 
   expect(commentsOn(undefined, { index: 0, line })).toStrictEqual(nothing);
@@ -157,14 +193,11 @@ test("lines that can't be commented on, or aren't there, have nothing to comment
 
   // A line only the index has, staged and then changed in the worktree.
   const indexOnly = { ...file, numbering: { old: notInReview, new: notInReview } };
+  const onLine = reviewOf([{ path: file.path, side: "new", line: 1, id: 1, body: "" }]);
 
   expect(
     commentsOn(
-      {
-        ...commented,
-        file: indexOnly,
-        review: reviewOf([{ path: file.path, side: "new", line: 1, id: 1, body: "" }]),
-      },
+      { ...commented, file: indexOnly, shown: onLine.commentsIn(indexOnly.path), review: onLine },
       { index: 0, line },
       "new",
     ),

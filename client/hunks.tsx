@@ -14,13 +14,13 @@ import { View } from "react-native";
 import type { diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import { barRequests } from "./bar-requests";
-import type { NumberedFile } from "./comments";
 import { useFindableLines } from "./find-page";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
 import { HunkArea, LinesBefore } from "./hunk-area";
 import { HunkBar } from "./hunk-bar";
 import type { NumberedLine, Unchanged } from "./lines";
+import type { CommentedFile } from "./numbering";
 import { shownFileOf } from "./place";
 import { pointedHunk } from "./pointed";
 import { ReviewContext } from "./review-context";
@@ -195,15 +195,13 @@ function useKeptLines(
   });
 }
 
-// The file a group lists, with how the review numbers the lines of its diff, once that's known, while
-// they can be commented on.
-function useNumbered({ group, path }: OpenFile): NumberedFile | undefined {
-  const review = useContext(ReviewContext);
-  const numbering = review?.numbering({ diff: groups[group].side, path });
+// The diff of the file a group lists, while its lines can be commented on.
+function useCommented({ group, path }: OpenFile): CommentedFile | undefined {
+  const commented = useContext(ReviewContext) !== undefined;
 
   return useMemo(
-    () => (numbering === undefined ? undefined : { path, numbering }),
-    [path, numbering],
+    () => (commented ? { diff: groups[group].side, path } : undefined),
+    [commented, group, path],
   );
 }
 
@@ -238,7 +236,7 @@ function HunksShown({
   theme,
   shown: around,
 }: HunksProps & { shown: UnchangedShown }): ReactElement {
-  const { shownDiff, shown: runs, window, showAround, unchanged, above } = around;
+  const { shownDiff, file: commented, shown: runs, window, showAround, unchanged, above } = around;
   const pointed = useMemo(() => pointedHunk(), []);
   const requests = useMemo(() => barRequests(), []);
 
@@ -264,8 +262,6 @@ function HunksShown({
 
   const focus = useFocus(sideBySide);
   const range = useMemo(() => onSide(selection, focus), [selection, focus]);
-
-  const commented = useNumbered(file);
 
   // The highest the view shows lines from: under its file's bar, while that stays at its top, and
   // a hunk's bar.
@@ -366,7 +362,11 @@ function HunksShown({
 // commented on, whether or not they're asked to show.
 export function Hunks(props: HunksProps): ReactElement {
   return (
-    <UnchangedLinesShown diff={props.diff} query={props.entireQuery} file={useNumbered(props.file)}>
+    <UnchangedLinesShown
+      diff={props.diff}
+      query={props.entireQuery}
+      commented={useCommented(props.file)}
+    >
       {(shown) => <HunksShown {...props} shown={shown} />}
     </UnchangedLinesShown>
   );

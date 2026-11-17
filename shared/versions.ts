@@ -2,7 +2,14 @@ import type { RpcOutput } from "@getpaseo/plugin";
 
 import type { diffRpc } from "./diff";
 
-type Hunk = RpcOutput<typeof diffRpc>["hunks"][number];
+type Line = RpcOutput<typeof diffRpc>["hunks"][number]["lines"][number];
+
+// A hunk, by the kind of each of its lines.
+export interface Hunk {
+  oldStart: number;
+  newStart: number;
+  lines: readonly Pick<Line, "kind">[];
+}
 
 // How many lines of the version a hunk goes from come before its own, and up to its last, and as
 // many of the version it goes to. A hunk without lines of a version starts after the line before
@@ -63,7 +70,7 @@ function reversed({ oldStart, newStart, lines }: Hunk): Hunk {
   return {
     oldStart: newStart,
     newStart: oldStart,
-    lines: lines.map((line) => ({ ...line, kind: swapped[line.kind] })),
+    lines: lines.map(({ kind }) => ({ kind: swapped[kind] })),
   };
 }
 

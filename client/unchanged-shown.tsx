@@ -5,10 +5,12 @@ import type { ReactElement } from "react";
 import { startTransition, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 import type { diffRpc } from "../shared/diff";
-import { commentedOn, commentedOutside } from "./commenting";
+import { hasComments, linesCommented } from "./commenting";
 import type { NumberedFile } from "./comments";
 import { aboveHunks, unchangedLines } from "./lines";
-import type { Above, NumberedLine, Unchanged } from "./lines";
+import type { Above, Unchanged } from "./lines";
+import { reviewedFile } from "./numbering";
+import type { CommentedFile } from "./numbering";
 import { covers, widened, windowAround } from "./rendering";
 import type { LineWindow } from "./rendering";
 import { ReviewContext } from "./review-context";
@@ -80,17 +82,17 @@ function useEntireDiff(diff: Diff, query: EntireQuery, wanted: boolean): Diff {
 }
 
 // The diff to show, as useEntireDiff has it, with every line of the file while any of its runs of
-// unchanged lines show, or `outside` asks for them, and what's shown of those runs, carried over to
+// unchanged lines show, or `commented` asks for them, and what's shown of those runs, carried over to
 // its hunks each time they change, so that a run stays open above the hunk it was open above,
 // whichever of the diff and the entire file is read first after a change. And what shows the
 // entire file, or none of them, and shows or hides the run above the hunk at an index.
-function useShownRuns(diff: Diff, query: EntireQuery, outside: boolean) {
+function useShownRuns(diff: Diff, query: EntireQuery, commented: boolean) {
   const [state, setState] = useState<CarriedRuns<Diff["hunks"]>>(() => ({
     hunks: diff.hunks,
     shown: carriedTo({ entire: false, runs: [] }, diff.hunks),
   }));
 
-  const shownDiff = useEntireDiff(diff, query, showsAny(state.shown) || outside);
+  const shownDiff = useEntireDiff(diff, query, showsAny(state.shown) || commented);
   const current = carriedOver(state, shownDiff.hunks);
 
   if (current !== state) {
@@ -118,8 +120,11 @@ const none: Unchanged = { before: [], after: [] };
 
 // What a file's diff shows of its unchanged lines, and what shows them.
 export interface UnchangedShown {
-  // The diff to show, with every line of the file once that's read while any are asked for.
+  // The diff to show, with every line of the file once that's read while any are asked for, and its
+  // file, with how the review numbers its lines, as that read numbers them, while they can be
+  // commented on.
   shownDiff: Diff;
+  file: NumberedFile | undefined;
   shown: ShownRuns;
   // The lines it renders of the file's new version, and what renders them around a line first.
   window: LineWindow;
@@ -134,35 +139,50 @@ export interface UnchangedShown {
   close: (hunk: number) => void;
 }
 
-// What's commented on among a diff's lines: what says whether a line has comments under it, or
-// one being written, and whether any of them is on a line outside the hunks, until it's known how
-// the review numbers the lines, or without a review, nothing.
-interface CommentedLines {
-  commented: ((line: NumberedLine) => boolean) | undefined;
-  outside: boolean;
-}
-
 // No runs of unchanged lines, the same each time.
 const noRuns: ReadonlySet<number> = new Set();
+
+// What says whether a line of the file's diff has comments under it, or one being written, while its
+// lines can be commented on, and it's known how the review numbers them. The same while what shows
+// under the lines is, though the review changes otherwise, as while it shows a comment.
+function useCommentedLines(file: NumberedFile | undefined) {
+  const commentsIn = useContext(ReviewContext)?.commentsIn;
+
+  return useMemo(() => linesCommented(commentsIn, file), [commentsIn, file]);
+}
+
+// The diff's file, with how the review numbers its lines, as the diff was read with it, while they
+// can be commented on.
+function useNumbered(commented: CommentedFile | undefined, diff: Diff): NumberedFile | undefined {
+  return useMemo(
+    () => (commented === undefined ? undefined : reviewedFile(commented, diff)),
+    [commented, diff],
+  );
+}
 
 // The runs of unchanged lines around the diff's hunks that show, which the diff with every line of
 // the file is read for: none until asked for, then the run above a hunk once its bar asks, until it
 // asks to hide it, or the entire file once the toggle does, and whatever's asked, those with a line
-// commented on, which the diff's read for while a comment's on a line outside the hunks.
+// commented on. The diff's read for while a comment's on the file, or being written on it, so that
+// the hunks show from the read that the comments are placed on the lines of, which the review reads
+// too.
 function useUnchangedShown(
   diff: Diff,
   query: EntireQuery,
-  { commented, outside }: CommentedLines,
+  commented: CommentedFile | undefined,
 ): UnchangedShown {
-  const runs = useShownRuns(diff, query, outside);
+  const review = useContext(ReviewContext);
+  const runs = useShownRuns(diff, query, hasComments(review, commented));
   const { shownDiff } = runs;
+  const file = useNumbered(commented, shownDiff);
+  const commentedLine = useCommentedLines(file);
   const whole = shownDiff !== diff;
   const [window, showAround] = useLineWindow(whole ? shownDiff.contents.length : undefined);
   const all = useMemo(() => (whole ? unchangedLines(shownDiff) : none), [shownDiff, whole]);
 
   const kept = useMemo(
-    () => (commented === undefined ? noRuns : commentedRuns(all, commented)),
-    [all, commented],
+    () => (commentedLine === undefined ? noRuns : commentedRuns(all, commentedLine)),
+    [all, commentedLine],
   );
 
   const shownAround = useMemo(
@@ -184,6 +204,7 @@ function useUnchangedShown(
 
   return {
     shownDiff,
+    file,
     shown: runs.shown,
     window,
     showAround,
@@ -201,32 +222,11 @@ function useUnchangedShown(
   };
 }
 
-// Nothing commented on, as while lines can't be.
-const uncommented: CommentedLines = { commented: undefined, outside: false };
-
-// What's commented on among the diff's lines, while they can be commented on.
-function useCommentedLines(diff: Diff, file: NumberedFile | undefined): CommentedLines {
-  const review = useContext(ReviewContext);
-  const threads = review?.threads;
-  const editing = review?.editing;
-
-  return useMemo(
-    () =>
-      file === undefined || threads === undefined
-        ? uncommented
-        : {
-            commented: commentedOn(file, threads, editing),
-            outside: commentedOutside(file, diff.hunks, threads, editing),
-          },
-    [diff.hunks, file, threads, editing],
-  );
-}
-
 interface UnchangedLinesShownProps {
   diff: Diff;
   query: EntireQuery;
-  // The file, with how the review numbers its lines, while they can be commented on.
-  file: NumberedFile | undefined;
+  // The file's diff, while its lines can be commented on.
+  commented: CommentedFile | undefined;
   children: (shown: UnchangedShown) => ReactElement;
 }
 
@@ -235,8 +235,8 @@ interface UnchangedLinesShownProps {
 export function UnchangedLinesShown({
   diff,
   query,
-  file,
+  commented,
   children,
 }: UnchangedLinesShownProps): ReactElement {
-  return <>{children(useUnchangedShown(diff, query, useCommentedLines(diff, file)))}</>;
+  return <>{children(useUnchangedShown(diff, query, commented))}</>;
 }

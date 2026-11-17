@@ -247,6 +247,12 @@ export async function changesOf(
   return changes;
 }
 
+// The diff the changes are shown with: with whitespace changes hidden where they're hidden. A
+// submodule's, which names the commits it goes between as lines of text, shows without lines.
+export function shownDiffOf({ diff, withoutWhitespace, repository }: Changes): Buffer {
+  return repository === undefined ? (withoutWhitespace ?? diff) : Buffer.alloc(0);
+}
+
 // Changes whenever the changes' diff does, and where whitespace changes are hidden, whenever the
 // diff that hides them does, where an action on lines finds them.
 export function versionOfChanges({ diff, withoutWhitespace }: Changes): string {

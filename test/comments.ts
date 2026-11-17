@@ -1,10 +1,10 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
-import type { CommentTarget, ReviewComment } from "../client/comments";
+import type { CommentTarget, NumberedFile, ReviewComment } from "../client/comments";
 import { numberLines } from "../client/lines";
 import type { NumberedLine } from "../client/lines";
-import { numberingOf } from "../client/numbering";
+import type { Numbering } from "../client/numbering";
 import type { diffRpc } from "../shared/diff";
 import { filePath } from "./file-names";
 import { hunkLines } from "./hunk-lines";
@@ -13,7 +13,27 @@ type Diff = RpcOutput<typeof diffRpc>;
 
 // How the review numbers the lines of a file whose diffs change nothing of each other's versions: as
 // the diffs number them.
-export const asNumbered = numberingOf("unstaged", { hunks: [] });
+export const asNumbered: Numbering = { old: (number) => number, new: (number) => number };
+
+// The whitespace git's --ignore-all-space ignores, as Hide whitespace does.
+const gitWhitespace = new Set([" ", "\t", "\r", "\n"]);
+
+// The text without that whitespace, as a version's lines are compared with what a comment's line
+// was.
+export function squeezed(text: string): string {
+  return text
+    .split("")
+    .filter((character) => !gitWhitespace.has(character))
+    .join("");
+}
+
+// What a diff whose file's other diff changes nothing is read with.
+export const reviewed = { other: [] };
+
+// The file at the path, whose diffs change nothing of each other's versions.
+export function numberedFile(path: string): NumberedFile {
+  return { path, numbering: asNumbered };
+}
 
 // Two paths, so that comments are often on the same file, or any path.
 const path = fc.oneof(fc.constantFrom("a.txt", "b.txt"), filePath);
@@ -72,7 +92,15 @@ export const diffHunks: fc.Arbitrary<{ diff: Diff; numbered: NumberedLine[][] }>
     });
 
     return {
-      diff: { version: "version", kind: "text", added: 0, removed: 0, hunks, contents: [] },
+      diff: {
+        version: "version",
+        kind: "text",
+        added: 0,
+        removed: 0,
+        hunks,
+        contents: [],
+        review: reviewed,
+      },
       numbered: hunks.map(numberLines),
     };
   });
@@ -184,11 +212,14 @@ function filesOf(lines: readonly Presence[], context: number) {
     return texts.filter((_, at) => lines[at]?.[tree] === true);
   }
 
+  const staged = hunksOf(entriesOf(texts, lines, "head", "index"), context);
+  const unstaged = hunksOf(entriesOf(texts, lines, "index", "worktree"), context);
+
   return {
     versions: { head: version("head"), index: version("index"), worktree: version("worktree") },
     diffs: {
-      staged: { hunks: hunksOf(entriesOf(texts, lines, "head", "index"), context) },
-      unstaged: { hunks: hunksOf(entriesOf(texts, lines, "index", "worktree"), context) },
+      staged: { hunks: staged, review: { other: unstaged } },
+      unstaged: { hunks: unstaged, review: { other: staged } },
     },
   };
 }
@@ -211,6 +242,21 @@ export const restaged = fc
     ),
     after: filesOf(
       lines.map(([line, index]) => ({ ...line, index })),
+      around,
+    ),
+  }));
+
+// A file's versions and diffs, and its versions and diffs once its worktree has changed, as an agent
+// changes it, or discarding its changes does, with HEAD and the index as they were.
+export const rewritten = fc
+  .record({ lines: fc.array(fc.tuple(presence, fc.boolean()), { maxLength: 24 }), context })
+  .map(({ lines, context: around }) => ({
+    before: filesOf(
+      lines.map(([line]) => line),
+      around,
+    ),
+    after: filesOf(
+      lines.map(([line, worktree]) => ({ ...line, worktree })),
       around,
     ),
   }));

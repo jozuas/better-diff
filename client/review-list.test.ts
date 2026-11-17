@@ -5,7 +5,8 @@ import { expect, test } from "vitest";
 import type { diffRpc } from "../shared/diff";
 import { groupName } from "../test/changes";
 import { diffHunks, reviewComments } from "../test/comments";
-import type { ReviewComment } from "./comments";
+import { readWith, unchanged } from "../test/review";
+import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
 import type { CommentedFile } from "./numbering";
 import {
@@ -13,13 +14,12 @@ import {
   lineNote,
   linkLabel,
   openFileOf,
-  partlyStaged,
   pendingCounts,
   pendingLabel,
   pendingOn,
   reviewList,
 } from "./review-list";
-import type { ListedFile, Placed } from "./review-list";
+import type { ListedComment, ListedFile, Placed } from "./review-list";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -42,7 +42,7 @@ function diffIn(diffs: Diffs): (file: CommentedFile) => Pick<Diff, "hunks"> | un
   return ({ diff, path }) => {
     const { side, read } = diffs(path);
 
-    return diff === side ? read?.diff : read && { hunks: [] };
+    return diff === side ? read?.diff : read && unchanged;
   };
 }
 
@@ -172,13 +172,23 @@ test("a file's comments in one of its diffs are listed in the order of its hunks
     unstaged: { hunks: [hunkOf(0, 1, ["x", "y"]), hunkOf(4, 7, ["z"])] },
   };
 
-  const onZ = { path: "a.txt", side: "new", line: 7, id: 1, body: "" } as const;
+  const onZ = {
+    path: "a.txt",
+    side: "new",
+    line: 7,
+    id: 1,
+    body: "",
+  } as const;
+
   const onY = { ...onZ, line: 2, id: 2 };
   const onX = { ...onZ, line: 1, id: 3 };
 
-  expect(reviewList([onZ, onY, onX], ({ diff }) => diffs[diff])).toMatchObject([
-    { comments: [{ comment: onX }, { comment: onY }, { comment: onZ }] },
-  ]);
+  expect(
+    reviewList(
+      [onZ, onY, onX],
+      readWith(({ diff }) => diffs[diff]),
+    ),
+  ).toMatchObject([{ comments: [{ comment: onX }, { comment: onY }, { comment: onZ }] }]);
 });
 
 test("a file's comments are listed in the order of their lines in its unstaged diff and then its staged one, those on staged lines saying so", () => {
@@ -188,9 +198,20 @@ test("a file's comments are listed in the order of their lines in its unstaged d
     unstaged: { hunks: [hunkOf(1, 1, [" s", "u"])] },
   };
 
-  const onS = { path: "a.txt", side: "new", line: 1, id: 1, body: "" } as const;
+  const onS = {
+    path: "a.txt",
+    side: "new",
+    line: 1,
+    id: 1,
+    body: "",
+  } as const;
+
   const onU = { ...onS, line: 2, id: 2 };
-  const files = reviewList([onS, onU], ({ diff }) => diffs[diff]);
+
+  const files = reviewList(
+    [onS, onU],
+    readWith(({ diff }) => diffs[diff]),
+  );
 
   expect(files).toMatchObject([
     {
@@ -241,23 +262,6 @@ test("a file's row counts the comments pending on the file, whichever of its dif
   );
 });
 
-test("the files partly staged are those both MODIFIED and STAGED list", () => {
-  fc.assert(
-    fc.property(
-      fc.record({
-        modified: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
-        untracked: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
-        staged: fc.uniqueArray(fc.constantFrom("a", "b", "c", "d")),
-      }),
-      (listed) => {
-        expect(new Set(partlyStaged(listed))).toStrictEqual(
-          new Set(listed.modified.filter((path) => listed.staged.includes(path))),
-        );
-      },
-    ),
-  );
-});
-
 const line: NumberedLine = {
   kind: "context",
   text: "\tkept é",
@@ -268,6 +272,14 @@ const line: NumberedLine = {
 };
 
 const comment = { path: "a.txt", side: "old", line: 7, id: 1, body: "" } as const;
+
+// The comment as made, on line 1 of the worktree, before its line moved to the target's lines.
+const made = { path: "a.txt", side: "new", line: 1, id: 1, body: "" } as const;
+
+// A comment listed on the target's lines, as its file's diffs place it, where its line is.
+function listedOn(target: CommentTarget, placed: Placed): ListedComment {
+  return { comment: made, target, placed };
+}
 
 // The comment is on line 7 of HEAD, and the line is numbered 2 in the old version of the diff that
 // has it, as a partly staged file's unstaged diff numbers HEAD's lines as the index does.
@@ -282,8 +294,8 @@ const placings: [Placed, string, string][] = [
 test.each(placings)(
   "a comment's line in the review is labelled with its number where it's shown, marked as removed, added or neither, and as staged, or else the review's, and shown, or as gone or not yet read: %o",
   (placed, label, note) => {
-    expect(lineLabel({ comment, placed })).toBe(label);
-    expect(linkLabel({ comment, placed })).toBe(
+    expect(lineLabel(listedOn(comment, placed))).toBe(label);
+    expect(linkLabel(listedOn(comment, placed))).toBe(
       `Show line ${label.replaceAll(/\D+/gu, "")} of a.txt`,
     );
     expect(lineNote(placed)).toBe(note);
@@ -302,17 +314,17 @@ const rangePlacings: [Placed, string][] = [
 test.each(rangePlacings)(
   "a comment on several lines is labelled in the review with their numbers as the review has them, and as staged: %o",
   (placed, label) => {
-    expect(lineLabel({ comment: onSeveral, placed })).toBe(label);
+    expect(lineLabel(listedOn(onSeveral, placed))).toBe(label);
   },
 );
 
 test("what shows a comment in its diff is named by its line, or its lines", () => {
   const placed: Placed = { line, diff: "unstaged" };
 
-  expect(linkLabel({ comment, placed })).toBe("Show line 2 of a.txt");
-  expect(linkLabel({ comment, placed: "gone" })).toBe("Show line 7 of a.txt");
-  expect(linkLabel({ comment: onSeveral, placed })).toBe("Show lines 4\u20137 of a.txt");
-  expect(linkLabel({ comment: { ...onSeveral, start: { side: "new", line: 5 } }, placed })).toBe(
+  expect(linkLabel(listedOn(comment, placed))).toBe("Show line 2 of a.txt");
+  expect(linkLabel(listedOn(comment, "gone"))).toBe("Show line 7 of a.txt");
+  expect(linkLabel(listedOn(onSeveral, placed))).toBe("Show lines 4\u20137 of a.txt");
+  expect(linkLabel(listedOn({ ...onSeveral, start: { side: "new", line: 5 } }, placed))).toBe(
     "Show lines +5 to \u22127 of a.txt",
   );
 });

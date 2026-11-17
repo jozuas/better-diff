@@ -3,18 +3,11 @@ import * as fc from "fast-check";
 import { expect, test, vi } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
-import { diffHunks, reviewComments } from "../test/comments";
+import { diffHunks, reviewComments, reviewed } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
 import type { ListedAgent, NewAgent, Recipient, ReviewComment } from "./comments";
-import {
-  agentsIn,
-  discardLabel,
-  feedbackTo,
-  messageAfter,
-  reviewLabel,
-  sendLabel,
-} from "./feedback";
+import { agentsIn, feedbackTo, messageAfter } from "./feedback";
 import type { FeedbackServer, Told } from "./feedback";
 import type { CommentedFile } from "./numbering";
 
@@ -147,6 +140,7 @@ const diff: Diff = {
     { oldStart: 0, newStart: 1, lines: [{ kind: "added", text: "", newline: true, runs: [] }] },
   ],
   contents: [],
+  review: reviewed,
 };
 
 const unchanged: Diff = { ...diff, kind: "unchanged", added: 0, hunks: [] };
@@ -346,12 +340,4 @@ test("the message is empty again once comments have been sent with it, unless it
   expect(messageAfter(sent, "Fix these.", "Fix these.")).toBe("");
   expect(messageAfter(sent, "Fix these.", "Fix these, and test.")).toBe("Fix these, and test.");
   expect(messageAfter(none, "Fix these.", "Fix these.")).toBe("Fix these.");
-});
-
-test("the buttons say how many comments are pending, whether they're being sent, and ask once Discard is pressed", () => {
-  expect(reviewLabel(3)).toBe("Review (3)");
-  expect(sendLabel(false)).toBe("Send feedback");
-  expect(sendLabel(true)).toBe("Sending feedback");
-  expect(discardLabel(false)).toBe("Discard review");
-  expect(discardLabel(true)).toBe("Confirm discard?");
 });

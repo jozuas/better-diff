@@ -124,6 +124,7 @@ const unmerged: Entry = {
   modified: true,
   deleted: false,
   original: undefined,
+  indexBlob: undefined,
 };
 
 // Each side, the group it's read for, and how new files beside the file with merge conflicts are

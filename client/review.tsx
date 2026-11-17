@@ -9,43 +9,36 @@ import { View } from "react-native";
 
 import { diffRpc } from "../shared/diff";
 import { bothDiffs } from "./attachment";
-import { restoredComments, restoredMessage, saved, threadsOf, without } from "./comments";
+import { restoredComments, restoredMessage, saved, without } from "./comments";
 import type { Editing, ReviewComment, SentReview } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
-import { fileKey, numberings } from "./numbering";
+import { fileKey } from "./numbering";
 import type { CommentedFile } from "./numbering";
+import {
+  commentedPaths,
+  commentsByPath,
+  keptPaths,
+  threadsByPath,
+  versionsByPath,
+  writtenNowhere,
+} from "./placing";
 import { ReviewBar } from "./review-bar";
 import { ReviewContext } from "./review-context";
 import type { Review, Revealing } from "./review-context";
-import { openFileOf, partlyStaged } from "./review-list";
+import { openFileOf } from "./review-list";
 import { useLatest } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
 type Listed = Readonly<Record<GroupName, readonly string[]>>;
 
-// Both diffs of each file the comments are on, with every line of the file, as the unchanged lines
-// around the hunks can be commented on, and of each file partly staged, whose diffs number each
-// other's lines, once they're read, as a file's view reads them with their hunks though they'd be
-// collapsed, so that what one reads, the other has. The same while what's read is.
-function useReviewedDiffs(
-  directory: string,
-  hideWhitespace: boolean,
-  comments: readonly ReviewComment[],
-  listed: Listed | undefined,
-) {
+// Both diffs of each of the files at the paths, which comments are on, or being written on, with
+// every line of the file, as the unchanged lines around the hunks can be commented on, and the
+// comments are placed on the lines of the file's versions, once they're read. The same while what's
+// read is.
+function useReviewedDiffs(directory: string, hideWhitespace: boolean, paths: readonly string[]) {
   const readDiff = useRpc(diffRpc);
-  const partly = useMemo(() => (listed === undefined ? undefined : partlyStaged(listed)), [listed]);
-
-  const files = useMemo(() => {
-    const commented = new Set(comments.map(({ path }) => path));
-
-    return bothDiffs([...commented, ...(partly ?? [])]).map(({ diff, path }) => ({
-      diff,
-      path,
-      entire: commented.has(path),
-    }));
-  }, [comments, partly]);
+  const files = useMemo(() => bothDiffs(paths), [paths]);
 
   const combine = useCallback(
     (results: UseQueryResult<Diff>[]) => results.map(({ data }) => data),
@@ -53,15 +46,15 @@ function useReviewedDiffs(
   );
 
   const read = useQueries({
-    queries: files.map(({ diff, path, entire }) => ({
-      queryKey: [directory, "diff", diff, path, true, entire, hideWhitespace],
+    queries: files.map(({ diff, path }) => ({
+      queryKey: [directory, "diff", diff, path, true, true, hideWhitespace],
       queryFn: async () => {
         const diffRead = await readDiff({
           directory,
           path,
           side: diff,
           expand: true,
-          entire,
+          entire: true,
           hideWhitespace,
         });
 
@@ -74,12 +67,25 @@ function useReviewedDiffs(
   return useMemo(() => {
     const diffs = new Map(files.map((file, at) => [fileKey(file), read[at]]));
 
-    function diffOf(file: CommentedFile): Diff | undefined {
-      return diffs.get(fileKey(file));
-    }
+    return (file: CommentedFile): Diff | undefined => diffs.get(fileKey(file));
+  }, [files, read]);
+}
 
-    return { diffOf, numbering: numberings(partly, diffOf) };
-  }, [files, read, partly]);
+// The paths of the files the comments are on, and the one being written is, if any, the same while
+// they're the same ones, as keptPaths has them.
+function useCommentedPaths(
+  comments: readonly ReviewComment[],
+  editing: Editing | undefined,
+): readonly string[] {
+  const now = commentedPaths(comments, editing);
+  const [paths, setPaths] = useState<readonly string[]>(now);
+  const kept = keptPaths(paths, now);
+
+  if (kept !== paths) {
+    setPaths(kept);
+  }
+
+  return kept;
 }
 
 // How many milliseconds a comment shown stands out for.
@@ -108,11 +114,14 @@ interface ReviewProviderProps {
 
 // Has the diffs in it comment on their lines, one comment being written at a time: starting another
 // leaves the one being written. A comment's line is numbered as the review the agent reads numbers
-// it, so it shows in whichever of its file's diffs has it. Under them, while comments are pending, a
-// bar opens the review of them, which sends them to an agent, and shows any of them in the diff that
-// has its line, where it stands out for a moment. Once a review's sent, until another comment's
-// started, the bar restores it, its comments pending again, as for sending it to another agent.
-// While any are pending, the tab shows it has unsaved work, and asks before it's closed.
+// it, so it shows in whichever of its file's diffs has it, and follows its line as the file
+// changes, placed on it in the file's versions as its diffs are read now. Under them, while comments
+// are pending, a bar opens the review of them, which sends them to an agent, and shows any of them
+// in the diff that has its line, where it stands out for a moment. Once a review's sent, until
+// another comment's started, the bar restores it, its comments pending again, as for sending it to
+// another agent. While the comment being written, or an edit of one saved, shows under no line, as
+// its line is changed, the bar says so, and discards it. While any are pending, the tab shows it has
+// unsaved work, and asks before it's closed.
 export function ReviewProvider({
   comments,
   onComments,
@@ -128,8 +137,15 @@ export function ReviewProvider({
   const [revealing, setRevealing] = useState<Revealing>();
   const latest = useLatest({ tab, listed, onOpen });
   const pending = comments.length > 0;
-  const threads = useMemo(() => threadsOf(comments), [comments]);
-  const reviewed = useReviewedDiffs(bar.directory, bar.hideWhitespace, comments, listed);
+  const paths = useCommentedPaths(comments, editing);
+  const diffOf = useReviewedDiffs(bar.directory, bar.hideWhitespace, paths);
+  const versions = useMemo(() => versionsByPath(paths, diffOf), [paths, diffOf]);
+  const threadsIn = useMemo(() => threadsByPath(comments, versions), [comments, versions]);
+
+  const commentsIn = useMemo(
+    () => commentsByPath(threadsIn, editing, versions),
+    [threadsIn, editing, versions],
+  );
 
   useEffect(() => {
     latest.current.tab.setModified(pending);
@@ -137,8 +153,8 @@ export function ReviewProvider({
 
   const review = useMemo<Review>(
     () => ({
-      numbering: reviewed.numbering,
-      threads,
+      commentsIn,
+      commentedOn: (path) => paths.includes(path),
       editing,
       revealing,
       onStart: (target) => {
@@ -165,7 +181,7 @@ export function ReviewProvider({
         onComments((current) => without(current, id));
       },
     }),
-    [reviewed.numbering, threads, editing, revealing, onComments],
+    [commentsIn, paths, editing, revealing, onComments],
   );
 
   // Opens the file's diff that has the comment's line, if a group lists it, and has it show the
@@ -202,7 +218,11 @@ export function ReviewProvider({
           }
         }}
         onSent={setRestorable}
-        diffOf={reviewed.diffOf}
+        writtenNowhere={writtenNowhere(editing, commentsIn)}
+        onDiscardWritten={() => {
+          setEditing(undefined);
+        }}
+        diffOf={diffOf}
         onShow={onShow}
         canShow={(file) => listed !== undefined && openFileOf(file, listed) !== undefined}
         {...bar}

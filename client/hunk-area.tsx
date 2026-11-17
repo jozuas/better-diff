@@ -70,8 +70,8 @@ function useUnchangedCommenting(
   const pointed = useMemo(() => pointedLine(), []);
 
   const commenting = useMemo(
-    () => (file === undefined ? undefined : { file, pointed }),
-    [file, pointed],
+    () => (file === undefined ? undefined : { file, lines, pointed }),
+    [file, lines, pointed],
   );
 
   return [

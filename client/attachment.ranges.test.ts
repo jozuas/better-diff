@@ -2,6 +2,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
+import { contextOf, onlyIn } from "../test/review";
 import { reviewOf } from "./attachment";
 import type { CommentTarget } from "./comments";
 import type { CommentedFile } from "./numbering";
@@ -11,18 +12,6 @@ type Diff = RpcOutput<typeof diffRpc>;
 type Hunk = Diff["hunks"][number];
 
 const file = { path: "a.txt" };
-
-// The diffs of a file with changes only in its unstaged diff.
-function unstagedOnly(diff: Pick<Diff, "hunks">) {
-  return (each: CommentedFile) => (each.diff === "unstaged" ? diff : { hunks: [] });
-}
-
-// What a comment on the target is sent with, as a review of the diff sends it, if the diff has its
-// line.
-function contextOf(diff: Pick<Diff, "hunks">, target: CommentTarget) {
-  return reviewOf("/repository", [{ ...target, id: 1, body: "" }], unstagedOnly(diff)).attachment
-    ?.comments[0]?.context;
-}
 
 // A hunk of unchanged lines, from line 1 of each version, saying their numbers.
 const unchangedHunk: Hunk = {
@@ -69,8 +58,26 @@ test("a comment on several lines is sent saying which they are, before what it s
   const sent = reviewOf(
     "/repository",
     [{ ...file, side: "new", line: 8, start: { side: "new", line: 5 }, id: 1, body: "Why?\nAnd?" }],
-    unstagedOnly({ hunks: [unchangedHunk] }),
+    onlyIn({ hunks: [unchangedHunk] }, "unstaged"),
   ).attachment?.comments[0];
 
   expect(sent).toMatchObject({ side: "new", lineNumber: 8, body: "Lines 5\u20138: Why?\nAnd?" });
+});
+
+// The diffs of a file with changes only in its unstaged diff, but the one on the side read without
+// what the review numbers its lines by, as while its diffs were read of different lines of the index.
+function unreviewedIn(side: CommentedFile["diff"]) {
+  const read = onlyIn({ hunks: [unchangedHunk] }, "unstaged");
+
+  return (each: CommentedFile) => (each.diff === side ? { hunks: read(each).hunks } : read(each));
+}
+
+test("a comment whose diffs were read without what numbers their lines, as while they were read of different lines of the index, isn't sent", () => {
+  const comment = { ...file, side: "new", line: 8, id: 1, body: "" } as const;
+
+  expect(
+    (["unstaged", "staged"] as const).map(
+      (side) => reviewOf("/repository", [comment], unreviewedIn(side)).unsent,
+    ),
+  ).toStrictEqual([["unread"], ["unread"]]);
 });

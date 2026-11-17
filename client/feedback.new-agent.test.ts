@@ -2,6 +2,7 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
+import { reviewed } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
 import type { NewAgent, ReviewComment } from "./comments";
@@ -19,6 +20,7 @@ const added: Diff = {
     { oldStart: 0, newStart: 1, lines: [{ kind: "added", text: "", newline: true, runs: [] }] },
   ],
   contents: [],
+  review: reviewed,
 };
 
 // The diffs of every file: an unstaged one, which adds one line, and a staged one, which changes

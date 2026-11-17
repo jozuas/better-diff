@@ -143,8 +143,8 @@ function LinesOfHunk({
   const found = useFoundLines(container, hunkSection(index));
 
   const commenting = useMemo(
-    () => (file === undefined ? undefined : { file, pointed: pointedOver }),
-    [file, pointedOver],
+    () => (file === undefined ? undefined : { file, lines, pointed: pointedOver }),
+    [file, lines, pointedOver],
   );
 
   return (

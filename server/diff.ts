@@ -3,7 +3,7 @@ import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import type { applyFileRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
 import { indexOf } from "./changes";
 import { collapsed, generatedPaths } from "./collapse";
-import { changesOf, versionOfChanges } from "./file-changes";
+import { changesOf, shownDiffOf, versionOfChanges } from "./file-changes";
 import type { Changes, Side } from "./file-changes";
 import { git } from "./git";
 import { highlighted } from "./highlight";
@@ -18,6 +18,7 @@ import {
   reverse,
 } from "./patch";
 import type { FileDiff } from "./patch";
+import { reviewedChanges } from "./reviewed";
 import { sameChanges } from "./same-changes";
 import { beyondSymlinks } from "./symlinks";
 
@@ -73,18 +74,15 @@ function text(content: Buffer): string {
   return content.toString("utf8");
 }
 
-// The diff of the changes, with whitespace changes hidden where they're hidden. A submodule's, which
-// names the commits it goes between as lines of text, shows without lines.
+// The diff of the changes, as they're shown.
 export function diffOf(changes: Changes): UnhighlightedDiff {
-  const { diff, withoutWhitespace, renamedFrom, repository } = changes;
-  const shown = repository === undefined ? (withoutWhitespace ?? diff) : Buffer.alloc(0);
-  const { kind: shownKind, header, hunks, lines } = parseDiff(shown);
+  const { kind: shownKind, header, hunks, lines } = parseDiff(shownDiffOf(changes));
   const changed = hunks.flatMap((hunk) => hunk.lines);
 
   return {
     version: versionOfChanges(changes),
     kind: kindShown(changes, shownKind),
-    renamedFrom,
+    renamedFrom: changes.renamedFrom,
     mode: modeOf(header),
     added: changed.filter(({ kind }) => kind === "added").length,
     removed: changed.filter(({ kind }) => kind === "removed").length,
@@ -112,14 +110,15 @@ export async function readDiff({
   entire,
   hideWhitespace,
 }: RpcInput<typeof diffRpc>): Promise<RpcOutput<typeof diffRpc>> {
-  const [changes, generated] = await Promise.all([
-    changesOf(directory, path, side, hideWhitespace),
+  const [{ own, review }, generated] = await Promise.all([
+    reviewedChanges(directory, path, side, hideWhitespace),
     expand === true ? undefined : generatedPaths(directory, [path]),
   ]);
 
-  const diff = diffOf(changes);
+  const diff = diffOf(own);
   const shown = generated === undefined ? diff : collapsed(diff, generated.has(path));
-  const read = await highlighted(shown, path, entire === true);
+  const reviewed = review === undefined ? shown : { ...shown, review };
+  const read = await highlighted(reviewed, path, entire === true);
 
   return read;
 }

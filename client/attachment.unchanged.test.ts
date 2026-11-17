@@ -3,7 +3,7 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
-import { partlyStaged } from "../test/comments";
+import { partlyStaged, reviewed } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
 import type { CommentTarget } from "./comments";
@@ -12,7 +12,7 @@ import type { Side } from "./side-by-side";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
-type Read = Pick<Diff, "hunks" | "contents">;
+type Read = Pick<Diff, "hunks" | "contents" | "review">;
 
 type Line = Diff["hunks"][number]["lines"][number];
 
@@ -121,31 +121,35 @@ function lineOf(kind: Line["kind"], text: string): Line {
 // A file of twenty lines, each its number, but the tenth, which the worktree changes from "ten":
 // its staged diff changes nothing, and its unstaged one has one hunk, with three unchanged lines
 // either side of the change, and the unchanged lines around it before and after.
+const tenthHunks = [
+  {
+    oldStart: 7,
+    newStart: 7,
+    lines: [
+      lineOf("context", "7"),
+      lineOf("context", "8"),
+      lineOf("context", "9"),
+      lineOf("removed", "ten"),
+      lineOf("added", "10"),
+      lineOf("context", "11"),
+      lineOf("context", "12"),
+      lineOf("context", "13"),
+    ],
+  },
+];
+
 const tenth: Record<CommentedFile["diff"], Read> = {
   unstaged: {
-    hunks: [
-      {
-        oldStart: 7,
-        newStart: 7,
-        lines: [
-          lineOf("context", "7"),
-          lineOf("context", "8"),
-          lineOf("context", "9"),
-          lineOf("removed", "ten"),
-          lineOf("added", "10"),
-          lineOf("context", "11"),
-          lineOf("context", "12"),
-          lineOf("context", "13"),
-        ],
-      },
-    ],
+    hunks: tenthHunks,
     contents: contentsOf(Array.from({ length: 20 }, (_, at) => String(at + 1))),
+    review: reviewed,
   },
   staged: {
     hunks: [],
     contents: contentsOf(
       Array.from({ length: 20 }, (_, at) => (at === 9 ? "ten" : String(at + 1))),
     ),
+    review: { other: tenthHunks },
   },
 };
 

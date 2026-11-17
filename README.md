@@ -27,7 +27,7 @@ Stage, unstage and discard whole files, hunks or selected lines. Select lines wi
 
 ### Review what agents change
 
-Comment on a line, or on several, as you read. Comments stay pending, as in a GitHub review, until you look them over and send them, with a message of your own, to an agent in the workspace, or to a new one.
+Comment on a line, or on several, as you read. Comments stay pending, as in a GitHub review, following their lines as you stage or discard, or an agent edits the file, until you look them over and send them, with a message of your own, to an agent in the workspace, or to a new one.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/review-dark.png">

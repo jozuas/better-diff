@@ -7,10 +7,10 @@ import { partlyStaged, restaged } from "../test/comments";
 import { placedByFile, reviewOf } from "./attachment";
 import type { PlacedComment } from "./attachment";
 import { shownOn, targetOf } from "./comments";
-import type { CommentTarget, ReviewComment } from "./comments";
+import type { CommentTarget, NumberedFile, ReviewComment } from "./comments";
 import { numberLines } from "./lines";
 import type { NumberedLine } from "./lines";
-import { numberIn, numberingOf } from "./numbering";
+import { numberIn, reviewedFile } from "./numbering";
 import type { CommentedFile } from "./numbering";
 import type { Side } from "./side-by-side";
 
@@ -46,14 +46,27 @@ function hunk(oldStart: number, newStart: number, written: readonly string[]) {
   };
 }
 
-type Diffs = Record<CommentedFile["diff"], Pick<Diff, "hunks">>;
+type Diffs = Record<CommentedFile["diff"], Pick<Diff, "hunks"> & Partial<Pick<Diff, "review">>>;
+
+const others = { unstaged: "staged", staged: "unstaged" } as const;
+
+// The file's diff, as read with what the review numbers its lines by: the hunks of the file's other
+// diff.
+function readOf(diffs: Diffs, diff: CommentedFile["diff"]): Pick<Diff, "hunks" | "review"> {
+  const read = diffs[diff];
+
+  return { ...read, review: read.review ?? { other: diffs[others[diff]].hunks } };
+}
 
 // The file's diff, with how the review numbers its lines, by the file's other diff.
-function numberedIn(diffs: Diffs, diff: CommentedFile["diff"]) {
-  return {
-    path,
-    numbering: numberingOf(diff, diff === "unstaged" ? diffs.staged : diffs.unstaged),
-  };
+function numberedIn(diffs: Diffs, diff: CommentedFile["diff"]): NumberedFile {
+  const file = reviewedFile({ diff, path }, readOf(diffs, diff));
+
+  if (file === undefined) {
+    throw new Error("The diff was read without what the review numbers its lines by.");
+  }
+
+  return file;
 }
 
 // What a comment on the line of the diff with the number on the side is on, inline, or on the side
@@ -73,11 +86,8 @@ function madeOn(
 
 // The context a comment on the target is sent with, by the file's diffs.
 function sentWithin(diffs: Diffs, target: CommentTarget | undefined) {
-  const review = reviewOf(
-    "/repository",
-    target === undefined ? [] : [{ ...target, id: 1, body: "" }],
-    ({ diff }) => diffs[diff],
-  );
+  const comments = target === undefined ? [] : [{ ...target, id: 1, body: "" }];
+  const review = reviewOf("/repository", comments, ({ diff }) => readOf(diffs, diff));
 
   const sent = review.attachment?.comments[0];
 
@@ -165,7 +175,11 @@ test("inline, a comment on an unchanged line the worktree hasn't is on its line 
     unstaged: { hunks: [hunk(1, 1, [" a", "-b", " C"])] },
   };
 
-  expect(madeOn(removed, "staged", ["new", 2])).toStrictEqual({ path, side: "old", line: 2 });
+  expect(madeOn(removed, "staged", ["new", 2])).toStrictEqual({
+    path,
+    side: "old",
+    line: 2,
+  });
   expect(madeOn(removed, "staged", ["new", 2], "new")).toBeUndefined();
 
   // HEAD has a and b, the index X between them, and the worktree Y after b.
@@ -175,7 +189,11 @@ test("inline, a comment on an unchanged line the worktree hasn't is on its line 
   };
 
   expect(madeOn(added, "unstaged", ["old", 2], "old")).toBeUndefined();
-  expect(madeOn(added, "unstaged", ["old", 2])).toStrictEqual({ path, side: "new", line: 2 });
+  expect(madeOn(added, "unstaged", ["old", 2])).toStrictEqual({
+    path,
+    side: "new",
+    line: 2,
+  });
   expect(madeOn(added, "unstaged", ["old", 1], "old")).toStrictEqual({
     path,
     side: "old",
@@ -299,7 +317,7 @@ function comment(target: CommentTarget): ReviewComment {
 
 // Where the review places a comment on the target among the diffs.
 function placementIn(target: CommentTarget, diffs: Diffs): PlacedComment["placement"] | undefined {
-  return placedByFile([comment(target)], ({ diff }) => diffs[diff])[0]?.[1][0]?.placement;
+  return placedByFile([comment(target)], ({ diff }) => readOf(diffs, diff))[0]?.[1][0]?.placement;
 }
 
 test("a comment on a partly staged file is on the line of HEAD or the worktree that its line is, unless neither has it, and is sent there, with the lines around it numbered so", () => {

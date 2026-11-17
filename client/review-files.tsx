@@ -129,7 +129,7 @@ function ReviewedComment({
 
   return editedIn(review.editing, comment.id, "list") ? (
     <View style={styles.editor}>
-      <CommentEditor review={review} theme={theme} />
+      <CommentEditor review={review} target={listed.target} theme={theme} />
     </View>
   ) : (
     <View role="group" accessibilityLabel="Pending review comment" style={styles.row}>

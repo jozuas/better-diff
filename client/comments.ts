@@ -13,11 +13,27 @@ type Agent = Awaited<ReturnType<Paseo["agents"]["list"]>>["entries"][number]["ag
 
 const sideSchema = z.enum(["old", "new"]) satisfies z.ZodType<Side>;
 
+// What tells a line apart from the others of its version, as a comment on it was started: its text,
+// and those of up to three lines before it and after it there, as far as the part of the diff it was
+// started in had them. The comment's placed on its line by it as the file changes.
+const anchorSchema = z.object({
+  text: z.string(),
+  before: z.array(z.string()),
+  after: z.array(z.string()),
+});
+
+export type Anchor = z.infer<typeof anchorSchema>;
+
 // A line of a file's uncommitted changes, by its number in the version it's in, as the review the
-// agent reads numbers it: HEAD, on the old side, or the worktree, on the new one. A line both have
-// is in each. Neither stages nor unstages, so the line stays the same as the file's hunks are
-// staged and unstaged, and shows in whichever of the file's diffs has it.
-const lineOnSide = { side: sideSchema, line: z.int().positive() };
+// agent reads numbers it: HEAD, on the old side, or the worktree, on the new one, and what tells it
+// apart there. A line both have is in each. Neither stages nor unstages, so the line stays the same
+// as the file's hunks are staged and unstaged, and shows in whichever of the file's diffs has it. A
+// line kept from before comments had anchors stays at its number.
+const lineOnSide = {
+  side: sideSchema,
+  line: z.int().positive(),
+  anchor: anchorSchema.exactOptional(),
+};
 
 // A comment's lines: the line it's on, which it shows under, and for a comment on several lines, as
 // GitHub's start line and side, the first of them, which can be on the other side from the last
@@ -71,9 +87,13 @@ export function targetOf(
 // What a comment on the lines from the first of the targets to the last is on: the last, from the
 // first, or only the last where they're the same line.
 export function rangeOf(first: CommentTarget, last: CommentTarget): CommentTarget {
-  return first.side === last.side && first.line === last.line
-    ? last
-    : { ...last, start: { side: first.side, line: first.line } };
+  const { side, line, anchor } = first;
+
+  if (side === last.side && line === last.line) {
+    return last;
+  }
+
+  return { ...last, start: anchor === undefined ? { side, line } : { side, line, anchor } };
 }
 
 const signs: Record<Side, string> = { old: "\u2212", new: "+" };
@@ -99,7 +119,7 @@ export function rangeLabel(target: CommentTarget): string | undefined {
 }
 
 // Tells the comments on a line apart from those on others.
-export function targetKey({ path, side, line }: CommentTarget): string {
+function targetKey({ path, side, line }: CommentTarget): string {
   return JSON.stringify([path, side, line]);
 }
 

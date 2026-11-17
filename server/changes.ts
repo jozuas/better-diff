@@ -29,6 +29,9 @@ export interface Entry {
   // The path git status names as the one the file was renamed or copied from, on either side. Its
   // diff on a side tells whether it's renamed there.
   original: string | undefined;
+  // The blob the index has the file as, as git status names it, in full: all zeros where the index
+  // hasn't the file, or has it intent-to-add. None for an untracked file.
+  indexBlob: string | undefined;
 }
 
 function untrackedEntry(path: string): Entry {
@@ -44,6 +47,7 @@ function untrackedEntry(path: string): Entry {
     // Stryker disable next-line BooleanLiteral: an untracked file is never the one a new file is renamed from, so taking it for deleted only has git status asked again where it pairs nothing.
     deleted: false,
     original: undefined,
+    indexBlob: undefined,
   };
 }
 
@@ -67,12 +71,9 @@ export function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
       yield untrackedEntry(field.slice(2));
     } else if (type === "1" || type === "2") {
       // A changed file's path follows eight fields, a renamed or copied one's nine, and the next
-      // field is its original path.
-      const path = field
-        .split(" ")
-        .slice(type === "1" ? 8 : 9)
-        .join(" ");
-
+      // field is its original path. The eighth names the index's blob.
+      const parts = field.split(" ");
+      const path = parts.slice(type === "1" ? 8 : 9).join(" ");
       const original = type === "2" ? fields.next().value : undefined;
 
       yield {
@@ -85,6 +86,7 @@ export function* entriesOf(fields: ArrayIterator<string>): Generator<Entry> {
         modified: field.charAt(3) !== ".",
         deleted: field.charAt(3) === "D",
         original,
+        indexBlob: parts[7],
       };
     }
   }

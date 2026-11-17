@@ -70,6 +70,27 @@ test("a comment on several lines is on the last, from the first, and one on a li
   expect(rangeOf(last, last)).toBe(last);
 });
 
+test("a comment on several lines keeps what tells each of the first and the last apart", () => {
+  const first: CommentTarget = {
+    path: "a.txt",
+    side: "old",
+    line: 4,
+    anchor: { text: "four", before: ["three"], after: [] },
+  };
+
+  const last: CommentTarget = {
+    path: "a.txt",
+    side: "new",
+    line: 7,
+    anchor: { text: "seven", before: [], after: ["eight"] },
+  };
+
+  expect(rangeOf(first, last)).toStrictEqual({
+    ...last,
+    start: { side: "old", line: 4, anchor: first.anchor },
+  });
+});
+
 test("a comment on several lines says which they are, as Linear does", () => {
   const last: CommentTarget = { path: "a.txt", side: "new", line: 51 };
 
@@ -88,13 +109,22 @@ test("a comment on lines on different sides says which side each of the first an
   );
 });
 
-test("a comment kept on several lines reads back on them, and one kept from before comments could be is on one line", () => {
+test("a comment kept on several lines reads back on them, with what tells each apart, and one kept from before comments could be is on one line, and one from before they had anchors on its lines as numbered", () => {
   const kept = { path: "a.txt", side: "new", line: 3, id: 1, body: "Why?" };
   const onSeveral = { ...kept, start: { side: "old", line: 2 } };
+  const anchor = { text: "b", before: ["a"], after: ["c", "d"] };
+
+  const anchored = {
+    ...kept,
+    anchor,
+    start: { side: "old", line: 2, anchor: { ...anchor, text: "z" } },
+  };
 
   expect(reviewComment.parse(onSeveral)).toStrictEqual(onSeveral);
   expect(reviewComment.parse(kept)).toStrictEqual(kept);
+  expect(reviewComment.parse(anchored)).toStrictEqual(anchored);
   expect(reviewComment.safeParse({ ...kept, start: { side: "old", line: 0 } }).success).toBe(false);
+  expect(reviewComment.safeParse({ ...kept, anchor: { text: "b" } }).success).toBe(false);
 });
 
 test("a comment says what's written, without whitespace at either end, and nothing is kept if it's only whitespace", () => {
