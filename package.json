@@ -32,10 +32,10 @@
     "check": "npm run check:fast && npm run mutate"
   },
   "dependencies": {
-    "@getpaseo/highlight": "^0.13.2"
+    "@getpaseo/highlight": "^0.16.0"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.14.0",
+    "@getpaseo/plugin": "0.16.0",
     "@oxlint/plugins": "1.90.0",
     "@playwright/test": "1.64.1",
     "@stryker-mutator/api": "10.1.1",

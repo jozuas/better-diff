@@ -243,7 +243,7 @@ Confirming takes no mouse movement: the clicked button turns into "Confirm disca
 
 ### Font sizes
 
-Plugins can't read Paseo's own font size settings, so the plugin has two of its own, on its page in Paseo's settings, in its menu under Settings → Plugins. They take the sizes Paseo's do:
+Plugins can't read Paseo's own font size settings, so the plugin has two of its own, on its page in Paseo's settings, which its row under Settings → Plugins opens. They take the sizes Paseo's do:
 
 - Diff font size, 9 to 22, 13 by default, as Paseo's code size: the diff's lines and their numbers, each line half as tall again as the font, as in Paseo's own diff, and what comments say, under their lines, in the review and while they're written: a little larger, 14 at 13, as Paseo's interface font's letters are narrower than the diff's monospace ones, so they look as large.
 - Panel font size, 10 to 21, 13 by default, as Paseo's interface size: the rest of the panel, its smaller text, such as buttons and headings, scaled with it as Paseo scales its own, and the files' icons in the sidebar too, as large as in Paseo's Changes tab at 14.

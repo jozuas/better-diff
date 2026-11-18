@@ -20,7 +20,7 @@ interface App {
   showWorkspace: () => Promise<void>;
   // Shows the repository's workspace, and opens the plugin's panel in it.
   openPanel: () => Promise<void>;
-  // Opens the plugin's page in Paseo's settings, from its menu in the list of the host's plugins.
+  // Opens the plugin's page in Paseo's settings, from its row in the list of the host's plugins.
   openSettings: () => Promise<void>;
   // Leaves the plugin's page in Paseo's settings for the list of the host's plugins, within the app,
   // and opens it again from there.
@@ -149,8 +149,7 @@ export const test = base.extend<Fixtures>({
 
   app: async ({ daemon, page, workspace }, provide) => {
     async function openFromPlugins(): Promise<void> {
-      await page.getByRole("button", { name: `Actions for ${pluginId}`, exact: true }).click();
-      await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+      await page.getByRole("button", { name: "Better Diff", exact: true }).click();
     }
 
     async function openSettings(): Promise<void> {

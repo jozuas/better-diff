@@ -57,7 +57,7 @@ The full behaviour is in [SPEC.md](SPEC.md).
 
 Syntax highlighting comes from Paseo's highlighter, [`@getpaseo/highlight`](https://github.com/getpaseo/paseo/tree/main/packages/highlight), and file icons from the set [Paseo's Changes tab](https://github.com/getpaseo/paseo/blob/main/packages/app/src/components/material-file-icons.ts) has. For a missing language or icon, open an issue with [Paseo](https://github.com/getpaseo/paseo/issues), not here.
 
-Needs Paseo 0.14 or later.
+Needs Paseo 0.16 or later.
 
 ```sh
 paseo plugin add https://github.com/jozuas/better-diff
