@@ -40,6 +40,8 @@ export const viewSettings = defineSettings({
     // Whether diffs leave out changes only to whitespace, which hunk and line actions then leave as
     // they are.
     hideWhitespace: z.boolean().default(false),
+    // Whether the panel has the strip along its bottom of the keys that work where focus is.
+    showKeys: z.boolean().default(true),
     // Paseo doesn't pass its own font sizes on to plugins, so Better Diff has these.
     diffFontSize: wholeNumber(fontSizeRanges.diff),
     panelFontSize: wholeNumber(fontSizeRanges.panel),

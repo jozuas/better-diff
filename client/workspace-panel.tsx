@@ -8,6 +8,7 @@ import type { ViewValues } from "../shared/settings";
 import { Changes } from "./changes-panel";
 import { TabSizeContext } from "./diff-styles";
 import { FontSizesProvider } from "./font-sizes";
+import { KeysShownContext } from "./key-hints";
 import { viewSettingsOf } from "./settings";
 import { SyntaxColorsProvider } from "./syntax-colors";
 
@@ -32,14 +33,16 @@ export function ChangesPanel({ workspaceId, tab, theme }: PluginWorkspacePanelPr
     <FontSizesProvider settings={settings}>
       <TabSizeContext value={settings.tabSize}>
         <SyntaxColorsProvider theme={theme}>
-          <Changes
-            workspace={workspaceId}
-            directory={directory}
-            layout={settings}
-            hideWhitespace={settings.hideWhitespace}
-            tab={tab}
-            theme={theme}
-          />
+          <KeysShownContext value={settings.showKeys}>
+            <Changes
+              workspace={workspaceId}
+              directory={directory}
+              layout={settings}
+              hideWhitespace={settings.hideWhitespace}
+              tab={tab}
+              theme={theme}
+            />
+          </KeysShownContext>
         </SyntaxColorsProvider>
       </TabSizeContext>
     </FontSizesProvider>

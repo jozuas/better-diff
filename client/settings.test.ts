@@ -12,6 +12,7 @@ const read: ViewValues = {
   lineLength: 100,
   tabSize: 4,
   hideWhitespace: true,
+  showKeys: false,
   diffFontSize: 16,
   panelFontSize: 18,
 };
@@ -21,6 +22,7 @@ const defaults: ViewValues = {
   lineLength: 80,
   tabSize: 8,
   hideWhitespace: false,
+  showKeys: true,
   diffFontSize: 13,
   panelFontSize: 13,
 };

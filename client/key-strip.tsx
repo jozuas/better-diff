@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from "react-native";
 
 import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
-import { hintsIn, KeyHintsContext, keyHints } from "./key-hints";
+import { hintsIn, KeyHintsContext, keyHints, KeysShownContext } from "./key-hints";
 import type { Hint } from "./key-hints";
 import { useRestingHints } from "./keyboard";
 import type { LineRange } from "./selection";
@@ -137,16 +137,17 @@ interface WithKeyStripProps {
 const styles = StyleSheet.create({ columns: { flex: 1, flexDirection: "row" } });
 
 // What the panel shows, over the strip of the keys that work where focus is in it, which the
-// places in it show their hints with.
+// places in it show their hints with, while the settings say to show it.
 export function WithKeyStrip({ panel, theme, children }: WithKeyStripProps): ReactElement {
   const hints = useMemo(() => keyHints(), []);
+  const shown = useContext(KeysShownContext);
 
   useRestingHints(panel, hints);
 
   return (
     <KeyHintsContext value={hints}>
       <View style={styles.columns}>{children}</View>
-      <KeyStrip theme={theme} />
+      {shown ? <KeyStrip theme={theme} /> : null}
     </KeyHintsContext>
   );
 }

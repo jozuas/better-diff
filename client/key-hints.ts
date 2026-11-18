@@ -1,5 +1,6 @@
 import { createContext } from "react";
 
+import { viewSettings } from "../shared/settings";
 import { fileActions, hunkActions, lineActions } from "./actions";
 import type { Action } from "./actions";
 import type { GroupName } from "./groups";
@@ -230,6 +231,9 @@ export function keyHints(): KeyHints {
     },
   };
 }
+
+// Whether the panel shows its strip of keys, as the settings say, and until they do, as they start.
+export const KeysShownContext = createContext(viewSettings.schema.parse({}).showKeys);
 
 // The panel's, which the places focus is in show their hints with.
 export const KeyHintsContext = createContext(keyHints());

@@ -116,7 +116,8 @@ function Keys({ theme }: KeysProps): ReactElement {
   );
 }
 
-// Better Diff's page in Paseo's settings, which lists the panel's keys after the settings.
+// Better Diff's page in Paseo's settings, which lists the panel's keys after the settings, the last
+// of which shows them in the panel or not.
 export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
   const toast = useToast();
   const settings = viewSettingsOf(useSettings(viewSettings), toast.error);
@@ -180,6 +181,18 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
             options={panelSizes}
             onValueChange={(size) => {
               void settings.change({ panelFontSize: Number(size) });
+            }}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Keyboard">
+        <SettingsCard>
+          <SettingsSwitch
+            label="Show keys"
+            hint="A strip along the bottom of the panel shows the keys that work where focus is"
+            value={settings.values.showKeys}
+            onValueChange={(showKeys) => {
+              void settings.change({ showKeys });
             }}
           />
         </SettingsCard>
