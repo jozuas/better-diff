@@ -1,7 +1,7 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/ui";
 import type { ReactElement } from "react";
-import { memo, useCallback, useContext, useId, useMemo, useState } from "react";
+import { memo, useContext, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { diffRpc } from "../shared/diff";
@@ -12,7 +12,10 @@ import { KeyboardFocusContext } from "./focus";
 import { groups as kinds, isOpen, isReached } from "./groups";
 import type { GroupName, Open, OpenFile, SidebarGroup } from "./groups";
 import { Hoverable } from "./hoverable";
-import { useCommands, useContextMenu } from "./keyboard";
+import { handled, heard } from "./key-events";
+import { hintsIn } from "./key-hints";
+import { Hinted } from "./key-strip";
+import { useCommands, useContextMenu, useKeys } from "./keyboard";
 import type { CommandIn } from "./keymap";
 import type { Point } from "./menu";
 import { lookOf } from "./reveal";
@@ -23,7 +26,7 @@ import { groupBar, rowBar } from "./sidebar-keys";
 import type { HeadingKeys, RowKeys } from "./sidebar-keys";
 import type { SidebarStop } from "./sidebar-stops";
 import type { SidebarStyles as Styles } from "./sidebar-styles";
-import { pointUnder } from "./web";
+import { onMac, pointUnder } from "./web";
 
 // Whether the pointer is over a row or focus is in it, which reveals its buttons, and what hears
 // each, for each of the row's pressables. The pointer leaves one before it enters the next, and a
@@ -98,7 +101,7 @@ interface FileRowProps extends Omit<StopHandlers, "onHeadingKey"> {
 }
 
 // The file's row, whose button opens the file. With focus in it, keys move focus on through the
-// sidebar, and Shift+Enter and Shift+Backspace run the row's actions, as its buttons do.
+// sidebar, and Enter and Backspace, with Shift or without, run the row's actions, as its buttons do.
 function RowOfFile({
   group,
   path,
@@ -118,12 +121,20 @@ function RowOfFile({
   const opened = isOpen(open, group, path);
   const look = lookOf(opened, isReached(open, group, path), revealed);
   const id = useId();
+  const button = useId();
   const focus = useContext(KeyboardFocusContext);
   const actions = rowActions(open, file, kind);
 
-  // The button that opens the file, which focus moves to once keys reach the row.
-  const buttonRef = useCallback(
-    (button: View | null) => (button === null ? undefined : focus.addRow(file, button)),
+  const buttonRef = useRef<View>(null);
+
+  // Focus moves to the button that opens the file once keys reach the row, while the row shows.
+  useLayoutEffect(
+    () =>
+      focus.addRow(file, {
+        focus: () => {
+          buttonRef.current?.focus();
+        },
+      }),
     [focus, file],
   );
 
@@ -136,24 +147,29 @@ function RowOfFile({
   useContextMenu(id, (point) => {
     onMenu(file, point);
   });
-  useCommands(id, "row", (command, _own, repeat) =>
-    onRowKey(
-      command,
-      {
-        stop: file,
-        bar,
-        onMenu: () => {
-          onMenu(file, pointUnder(id));
+  useKeys(id, (event) =>
+    handled(heard("row", event, onMac()), (command) =>
+      onRowKey(
+        command,
+        {
+          stop: file,
+          bar,
+          own: event.target?.id === button,
+          onMenu: () => {
+            onMenu(file, pointUnder(id));
+          },
         },
-      },
-      repeat,
+        event.repeat,
+      ),
     ),
   );
 
   return (
     <View role="listitem" nativeID={id}>
+      <Hinted focused={focused} hints={() => hintsIn.row(actions.actions, onMac())} />
       <Pressable
         ref={buttonRef}
+        nativeID={button}
         tabIndex={-1}
         accessibilityRole="button"
         accessibilityLabel={path}
@@ -171,6 +187,7 @@ function RowOfFile({
       <SidebarButtons
         {...actions}
         place="row"
+        level="part"
         onRun={bar.onRun}
         look={look}
         background={styles[look]}
@@ -218,9 +235,16 @@ export function GroupHeading({
   const id = useId();
   const focus = useContext(KeyboardFocusContext);
 
-  // The button that opens the group, which focus moves to once keys reach the heading.
-  const buttonRef = useCallback(
-    (button: View | null) => (button === null ? undefined : focus.addHeading(name, button)),
+  const buttonRef = useRef<View>(null);
+
+  // Focus moves to the button that opens the group once keys reach the heading.
+  useLayoutEffect(
+    () =>
+      focus.addHeading(name, {
+        focus: () => {
+          buttonRef.current?.focus();
+        },
+      }),
     [focus, name],
   );
 
@@ -236,6 +260,10 @@ export function GroupHeading({
 
   return (
     <View nativeID={id}>
+      <Hinted
+        focused={focused}
+        hints={() => hintsIn.heading({ file: bar?.actions, expanded }, onMac())}
+      />
       <Pressable tabIndex={-1} style={[styles.headingRow, styles[look]]} {...reveal}>
         <Hoverable
           accessibilityRole="button"
@@ -275,6 +303,7 @@ export function GroupHeading({
           actions={groupActions[name]}
           row={bar.bar}
           place="heading"
+          level="file"
           target={bar.target}
           onRun={bar.onRun}
           look={look}

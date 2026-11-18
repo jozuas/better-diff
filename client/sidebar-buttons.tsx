@@ -15,6 +15,7 @@ import { showsButtons } from "./reveal";
 import type { Look } from "./reveal";
 import { ShortcutTip } from "./shortcut-tip";
 import { shortcutOf, shortcutText } from "./shortcuts";
+import type { Level } from "./shortcuts";
 import { onMac, overlayId } from "./web";
 
 // What hears the pointer and focus coming into a row and leaving it.
@@ -66,6 +67,8 @@ interface SidebarButtonProps {
   row: string;
   // Where focus is while its key presses it: in a file's row, or a group's heading.
   place: Place;
+  // The level of the key it shows: a row's, the key on its own, and a heading's, with Shift.
+  level: Level;
   target: Target;
   path: string | undefined;
   hidden: boolean;
@@ -81,6 +84,7 @@ function SidebarButton({
   action,
   row,
   place,
+  level,
   target,
   path,
   hidden,
@@ -122,7 +126,7 @@ function SidebarButton({
               theme={theme}
             />
             <ShortcutTip
-              shortcut={shortcutText(shortcutOf(action, "file", place, onMac()), onMac())}
+              shortcut={shortcutText(shortcutOf(action, level, place, onMac()), onMac())}
               resting={hovered && !pressed}
               theme={theme}
             />
@@ -139,6 +143,8 @@ interface SidebarButtonsProps {
   row: string;
   // Where focus is while their keys press them: in a file's row, or a group's heading.
   place: Place;
+  // The level of the keys they show: a row's, the keys on their own, and a heading's, with Shift.
+  level: Level;
   target: Target;
   // The file they act on, which their names say, if they act on one.
   path?: string;
@@ -159,6 +165,7 @@ export function SidebarButtons({
   actions,
   row,
   place,
+  level,
   target,
   path,
   onRun,
@@ -184,6 +191,7 @@ export function SidebarButtons({
           action={action}
           row={row}
           place={place}
+          level={level}
           target={target}
           path={path}
           hidden={hidden}

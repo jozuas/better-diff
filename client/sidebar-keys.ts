@@ -5,7 +5,7 @@ import type { KeyboardFocus } from "./focus";
 import { isOpen, reachedFile, selectedBy } from "./groups";
 import type { GroupName, Open, OpenFile, OpenFiles, SidebarGroup } from "./groups";
 import type { CommandIn } from "./keymap";
-import { runShortcut } from "./shortcuts";
+import { runsAction, runShortcut } from "./shortcuts";
 import type { ActionCommand, Bar } from "./shortcuts";
 import { firstRow, openRow, openStop, stopBy, stopInPlace } from "./sidebar-stops";
 import type { SidebarStop } from "./sidebar-stops";
@@ -35,6 +35,8 @@ export interface Sidebar {
 export interface RowKeys {
   stop: OpenFile;
   bar: Bar;
+  // Whether focus is on the row itself, rather than on one of its actions' buttons.
+  own: boolean;
   onMenu: () => void;
 }
 
@@ -80,10 +82,18 @@ function moving(step: 1 | -1, headings: boolean) {
   };
 }
 
-// Runs the action of the row's or heading's the command runs, if it has any.
+// Runs the action of the heading's the command runs, if it has any.
 function acting(command: ActionCommand) {
   return ({ bar, controls }: { bar: Bar | undefined } & Sidebar): boolean =>
     runShortcut(command, { file: bar }, controls);
+}
+
+// Runs the action of the row's the command runs, on its file with Shift or without, as a file's bar
+// does: Enter on its own only with focus on the row itself, as on one of its buttons it presses the
+// button.
+function actingOnFile(command: ActionCommand) {
+  return ({ own, bar, controls }: RowKeys & Sidebar): boolean =>
+    runsAction(command, own) && runShortcut(command, { part: bar, file: bar }, controls);
 }
 
 // The files the sidebar lists of the group.
@@ -130,8 +140,10 @@ const rowCommands: Record<CommandIn<"row">, (row: RowKeys & Sidebar) => boolean>
 
     return true;
   },
-  stageFile: acting("stageFile"),
-  discardFile: acting("discardFile"),
+  stage: actingOnFile("stage"),
+  discard: actingOnFile("discard"),
+  stageFile: actingOnFile("stageFile"),
+  discardFile: actingOnFile("discardFile"),
   menu: ({ onMenu }) => {
     onMenu();
 
@@ -143,9 +155,9 @@ const rowCommands: Record<CommandIn<"row">, (row: RowKeys & Sidebar) => boolean>
 // Does what the command does with focus in the file's row, and says whether it did anything: ↓ and
 // ↑ move focus on through the sidebar, opening the file of each row they reach, and Alt+↓ and Alt+↑
 // move it from heading to heading. Shift+↓ and Shift+↑ select one more file or one fewer, → moves
-// focus into the file's diff, opening it first if the view doesn't show it, Shift+Enter and
-// Shift+Backspace run the row's actions, the menu key opens its menu, and Escape opens just the
-// file, if it's one of the files selected.
+// focus into the file's diff, opening it first if the view doesn't show it, Enter and Backspace,
+// with Shift or without, run the row's actions, the menu key opens its menu, and Escape opens just
+// the file, if it's one of the files selected.
 export function rowKey(command: CommandIn<"row">, row: RowKeys, sidebar: Sidebar): boolean {
   return rowCommands[command]({ ...row, ...sidebar });
 }

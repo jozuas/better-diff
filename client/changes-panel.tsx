@@ -21,6 +21,7 @@ import { usePanelFind } from "./find-page";
 import { KeyboardFocusContext, keyboardFocus } from "./focus";
 import { fileAfter, openAfter, placeholder, toggled } from "./groups";
 import type { Hidden, Open } from "./groups";
+import { WithKeyStrip } from "./key-strip";
 import { useFocusOnOpen, usePanelKeys } from "./keyboard";
 import { readAt, refreshOf, refreshOnChanges } from "./refresh";
 import { requests } from "./requests";
@@ -277,7 +278,7 @@ export function Changes({
   const id = useId();
   const findBar = usePanelFind(id);
 
-  usePanelKeys(id, focus, controls, findBar.keys);
+  usePanelKeys(id, focus, controls, findBar.keys, sidebar.open);
   useFocusOnOpen(
     requests,
     { workspace, panel: id },
@@ -291,12 +292,7 @@ export function Changes({
       StyleSheet.create({
         // It has focus after a click in it where nothing else takes it, so that keys pressed then
         // reach it, and shows it no more than the page does.
-        panel: {
-          flex: 1,
-          flexDirection: "row",
-          backgroundColor: theme.colors.surface0,
-          outlineWidth: 0,
-        },
+        panel: { flex: 1, backgroundColor: theme.colors.surface0, outlineWidth: 0 },
         diff: { flex: 1 },
       }),
     [theme],
@@ -320,44 +316,46 @@ export function Changes({
       })}
     >
       <KeyboardFocusContext value={focus}>
-        <Sidebar
-          {...sidebar}
-          directory={directory}
-          changes={changes}
-          controls={controls}
-          refresh={refreshNow}
-          panelWidth={panelWidth}
-          pending={pending}
-          theme={theme}
-        />
-        <View style={styles.diff}>
-          <ReviewProvider
+        <WithKeyStrip panel={id} theme={theme}>
+          <Sidebar
+            {...sidebar}
             directory={directory}
-            workspace={workspace}
-            {...review}
-            listed={changes.data}
-            onOpen={sidebar.onOpen}
-            hideWhitespace={hideWhitespace}
-            tab={tab}
+            changes={changes}
+            controls={controls}
+            refresh={refreshNow}
+            panelWidth={panelWidth}
+            pending={pending}
             theme={theme}
-          >
-            <DiffWithFind panelFind={findBar} theme={theme}>
-              <ShownDiffsContext value={shownDiffs}>
-                <DiffView
-                  open={sidebar.open}
-                  placeholder={placeholder(changes.data)}
-                  layout={layout}
-                  directory={directory}
-                  next={next}
-                  filter={sidebar.filter}
-                  hideWhitespace={hideWhitespace}
-                  controls={controls}
-                  theme={theme}
-                />
-              </ShownDiffsContext>
-            </DiffWithFind>
-          </ReviewProvider>
-        </View>
+          />
+          <View style={styles.diff}>
+            <ReviewProvider
+              directory={directory}
+              workspace={workspace}
+              {...review}
+              listed={changes.data}
+              onOpen={sidebar.onOpen}
+              hideWhitespace={hideWhitespace}
+              tab={tab}
+              theme={theme}
+            >
+              <DiffWithFind panelFind={findBar} theme={theme}>
+                <ShownDiffsContext value={shownDiffs}>
+                  <DiffView
+                    open={sidebar.open}
+                    placeholder={placeholder(changes.data)}
+                    layout={layout}
+                    directory={directory}
+                    next={next}
+                    filter={sidebar.filter}
+                    hideWhitespace={hideWhitespace}
+                    controls={controls}
+                    theme={theme}
+                  />
+                </ShownDiffsContext>
+              </DiffWithFind>
+            </ReviewProvider>
+          </View>
+        </WithKeyStrip>
       </KeyboardFocusContext>
     </View>
   );

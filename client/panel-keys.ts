@@ -1,5 +1,7 @@
 import type { KeyboardFocus } from "./focus";
+import type { Open } from "./groups";
 import type { CommandIn } from "./keymap";
+import { openStop } from "./sidebar-stops";
 
 // The panel's find bar, as keys anywhere in the panel act on it.
 export interface FindTargets {
@@ -48,4 +50,22 @@ const panelCommands: Record<CommandIn<"panel">, (targets: PanelTargets) => boole
 // Does what the command does with focus anywhere in the panel, and says whether it did something.
 export function panelCommand(command: CommandIn<"panel">, targets: PanelTargets): boolean {
   return panelCommands[command](targets);
+}
+
+// An arrow with focus nowhere in the panel that keys act on: moves focus to what's open, the open
+// file's row or the open group's heading, or with nothing open, to the filter, and says it did
+// something, so that no arrow pressed in the panel does nothing.
+export function openCommand(
+  open: Open | undefined,
+  focus: Pick<KeyboardFocus, "toStop" | "toFilter">,
+): boolean {
+  const stop = openStop(open);
+
+  if (stop === undefined) {
+    focus.toFilter();
+  } else {
+    focus.toStop(stop);
+  }
+
+  return true;
 }

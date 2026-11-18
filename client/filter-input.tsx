@@ -8,8 +8,11 @@ import { StyleSheet, View } from "react-native";
 import { KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
+import { hintsIn } from "./key-hints";
+import { Hinted } from "./key-strip";
 import { useCommands } from "./keyboard";
 import type { CommandIn } from "./keymap";
+import { onMac } from "./web";
 
 interface FilterInputProps {
   filter: string;
@@ -83,6 +86,7 @@ export function FilterInput({ filter, onFilter, onKey, theme }: FilterInputProps
 
   return (
     <View nativeID={id} style={[styles.box, focused && styles.focused]}>
+      <Hinted focused={focused} hints={() => hintsIn.filterInput(filter === "", onMac())} />
       <TextInput
         ref={input}
         tabIndex={-1}

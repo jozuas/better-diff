@@ -21,6 +21,7 @@ import type { HunkEnd } from "./focus";
 import type { OpenFile } from "./groups";
 import { HunkBarContent } from "./hunk-buttons";
 import { handled, heard } from "./key-events";
+import { HunkHints } from "./key-strip";
 import { useBarFocus, useKeys } from "./keyboard";
 import { rangeOf, selectedCursor } from "./line-cursor";
 import type { Cursor } from "./line-cursor";
@@ -343,6 +344,7 @@ function BarOfHunk(props: HunkBarProps): ReactElement {
       {...handlers}
       {...pointed.pointer(index)}
     >
+      <HunkHints focused={focused} {...props} />
       <HunkBarContent
         entire={entire}
         revealed={revealed}

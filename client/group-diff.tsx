@@ -29,7 +29,7 @@ import { FontSizesContext } from "./fonts";
 import { GroupFileBar } from "./group-file-bar";
 import { diffOf, listedFiles } from "./groups";
 import type { GroupName, Open, OpenFile } from "./groups";
-import { useFocusOnPress } from "./keyboard";
+import { restingView, useFocusOnPress } from "./keyboard";
 import { Failed, Queried } from "./queried";
 import { filesToRender, linesShown, stillRendered } from "./rendering";
 import { fileId, rangeIn } from "./selection";
@@ -296,7 +296,11 @@ function GroupFiles({
   return (
     <SelectionBarLayer theme={theme}>
       {(layer) => (
-        <ScrollView nativeID={view} stickyHeaderIndices={files.map((_, index) => 2 * index)}>
+        <ScrollView
+          {...restingView}
+          nativeID={view}
+          stickyHeaderIndices={files.map((_, index) => 2 * index)}
+        >
           {files.length === 0 ? (
             <Text style={styles.hint}>No changes</Text>
           ) : (

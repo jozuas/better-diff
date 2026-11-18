@@ -22,12 +22,14 @@ test("each line has its commands' keys, each in turn", () => {
     "/",
     "⌘F",
     "⌘G  ⇧⌘G",
+    "↓  ↑  ←  →",
     "Esc",
   ]);
   expect(anywhere?.lines.map((line) => keysText(line, false))).toStrictEqual([
     "/",
     "Ctrl+F",
     "F3  Shift+F3",
+    "↓  ↑  ←  →",
     "Esc",
   ]);
   expect(fileList?.lines.map((line) => keysText(line, false))).toStrictEqual([
@@ -35,8 +37,8 @@ test("each line has its commands' keys, each in turn", () => {
     "Alt+↓  Alt+↑",
     "Shift+↓  Shift+↑",
     "→",
-    "Shift+Enter",
-    "Shift+Backspace",
+    "Enter  Shift+Enter",
+    "Backspace  Shift+Backspace",
     "Menu  Shift+F10",
     "Esc",
   ]);

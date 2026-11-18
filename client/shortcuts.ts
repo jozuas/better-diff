@@ -37,15 +37,30 @@ const pressing: Record<ActionCommand, { level: Level; key: Key }> = {
   discardFile: { level: "file", key: "discard" },
 };
 
+// The command of the key that runs the action at the level: Enter's, but Backspace's for a discard.
+export function actionCommand(
+  { operation }: Pick<Action, "operation">,
+  level: Level,
+): ActionCommand {
+  return commands[level][operation === "discard" ? "discard" : "move"];
+}
+
 // The key that runs the action at the level with focus in the place, which its button teaches:
 // Enter's, Shift+Enter's on all of a file, but Backspace's for a discard.
 export function shortcutOf(
-  { operation }: Pick<Action, "operation">,
+  action: Pick<Action, "operation">,
   level: Level,
   place: Place,
   mac: boolean,
 ): Chord | undefined {
-  return chordOf(place, commands[level][operation === "discard" ? "discard" : "move"], mac);
+  return chordOf(place, actionCommand(action, level), mac);
+}
+
+// Whether the command runs its action, given with focus on a bar or a file's row itself, or on
+// something inside it: Enter on its own runs one only on the bar or row itself, and presses a
+// button with focus as anywhere.
+export function runsAction(command: ActionCommand, own: boolean): boolean {
+  return own || command !== "stage";
 }
 
 // A bar's actions, as its buttons have them.

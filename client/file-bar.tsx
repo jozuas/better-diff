@@ -12,11 +12,13 @@ import { fileBar, KeyboardFocusContext } from "./focus";
 import { FontSizesContext } from "./fonts";
 import { groups } from "./groups";
 import type { OpenFile } from "./groups";
+import { hintsIn } from "./key-hints";
+import { Hinted } from "./key-strip";
 import { useBarFocus, useCommands } from "./keyboard";
 import type { Bar } from "./shortcuts";
 import { whileShown } from "./shown";
 import { ShownDiffsContext, shownFileKey } from "./shown-diffs";
-import { useInsetFocusRing, useLatest } from "./web";
+import { onMac, useInsetFocusRing, useLatest } from "./web";
 
 type Diff = RpcOutput<typeof diffRpc>;
 
@@ -226,6 +228,12 @@ export function FileBar({
       style={[styles.fileBar, { minHeight }]}
       {...handlers}
     >
+      <Hinted
+        focused={focused}
+        hints={() =>
+          hintsIn.fileBar({ part: bar?.actions, collapsed: diff?.collapsed !== undefined }, onMac())
+        }
+      />
       <View
         accessibilityRole="header"
         accessibilityLabel={label}

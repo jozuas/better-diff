@@ -288,7 +288,8 @@ test("a command's key is the first that gives it in the place, and a place where
   expect(chordOf("filter", "first", true)).toStrictEqual(down);
   expect(chordOf("row", "menu", false)).toStrictEqual({ key: "ContextMenu" });
   expect(chordOf("bar", "stageFile", true)).toStrictEqual({ ...enter, shift: true });
-  expect(chordOf("row", "stage", false)).toBeUndefined();
+  expect(chordOf("row", "stage", false)).toStrictEqual(enter);
+  expect(chordOf("heading", "stage", false)).toBeUndefined();
 });
 
 test.each([

@@ -1,10 +1,12 @@
 import { commandOf, isHeld } from "./keymap";
 import type { CommandIn, KeyPress, Place } from "./keymap";
 
-// An element on the page, which may take text typed in it.
+// An element on the page, which may take text typed in it, with what it's marked with.
 interface KeyTarget {
+  readonly id?: string;
   readonly tagName?: string;
   readonly isContentEditable?: boolean;
+  readonly dataset?: Readonly<Record<string, string | undefined>>;
 }
 
 // A key's event, as the element it's pressed in hears it.
@@ -12,6 +14,17 @@ export interface KeyEvent extends Readonly<KeyPress> {
   readonly target: KeyTarget | null;
   // Whether something inside the element handled it.
   readonly defaultPrevented: boolean;
+}
+
+const view = "view";
+
+// What a view of the panel that scrolls is marked with, as focus on it is on nothing keys act on.
+export const restMark = { rest: view };
+
+// Whether focus is nowhere in the panel that keys act on, given whether it's on the panel itself,
+// as after a click on empty space in it, or else on a view of it that scrolls.
+export function atRest(target: KeyTarget | null, own: boolean): boolean {
+  return own || target?.dataset?.["rest"] === view;
 }
 
 // What takes text typed in it.

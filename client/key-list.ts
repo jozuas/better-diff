@@ -32,6 +32,11 @@ export const keyList: readonly KeySection[] = [
         commands: ["findNext", "findPrevious"],
         does: "Move to the next match, or the one before, while the find bar is open",
       },
+      {
+        place: "nowhere",
+        commands: ["open"],
+        does: "Move to the open file, with focus on nothing else in the panel",
+      },
       { place: "question", commands: ["cancel"], does: "Take back the question a discard asks" },
     ],
   },
@@ -56,12 +61,12 @@ export const keyList: readonly KeySection[] = [
       { place: "row", commands: ["into"], does: "Move into the file's diff" },
       {
         place: "row",
-        commands: ["stageFile"],
+        commands: ["stage", "stageFile"],
         does: "Stage the file, or the files selected, or in STAGED unstage them",
       },
       {
         place: "row",
-        commands: ["discardFile"],
+        commands: ["discard", "discardFile"],
         does: "Discard the file, or the files selected, or in STAGED unstage them",
       },
       { place: "row", commands: ["menu"], does: "Open the file's menu" },

@@ -11,9 +11,11 @@ import { barCommand } from "./bar-commands";
 import { fileBar, KeyboardFocusContext, modeBar } from "./focus";
 import { FontSizesContext } from "./fonts";
 import type { OpenFile } from "./groups";
+import { hintsIn } from "./key-hints";
+import { Hinted } from "./key-strip";
 import { useBarFocus, useCommands } from "./keyboard";
 import type { Bar } from "./shortcuts";
-import { useInsetFocusRing, useLatest } from "./web";
+import { onMac, useInsetFocusRing, useLatest } from "./web";
 
 type Mode = NonNullable<RpcOutput<typeof diffRpc>["mode"]>;
 
@@ -133,6 +135,10 @@ export function ModeBar({
       style={styles.bar}
       {...handlers}
     >
+      <Hinted
+        focused={focused}
+        hints={() => hintsIn.modeBar({ part: bars.part.actions, file: bars.file.actions }, onMac())}
+      />
       <Text style={styles.text}>
         File mode {mode.old} → {mode.new}
       </Text>

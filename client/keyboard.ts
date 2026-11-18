@@ -1,5 +1,5 @@
 // Stryker disable all: this module imports react-native, which Vitest can't load.
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Platform } from "react-native";
 
 import type { Controls } from "./actions";
@@ -7,11 +7,13 @@ import type { KeyboardFocus } from "./focus";
 import { entersOnList } from "./focus-requests";
 import type { FocusRequests } from "./focus-requests";
 import type { Open } from "./groups";
-import { handled, heard } from "./key-events";
+import { atRest, handled, heard, restMark } from "./key-events";
 import type { KeyEvent } from "./key-events";
+import { hintsIn } from "./key-hints";
+import type { KeyHints } from "./key-hints";
 import type { CommandIn, Place } from "./keymap";
 import type { Point } from "./menu";
-import { panelCommand } from "./panel-keys";
+import { openCommand, panelCommand } from "./panel-keys";
 import type { FindTargets } from "./panel-keys";
 import { markedHunk, pressedBar } from "./reveal";
 import { openStop } from "./sidebar-stops";
@@ -52,8 +54,15 @@ interface PageTarget {
   readonly dataset?: Readonly<Record<string, string | undefined>>;
 }
 
+// Focus coming to an element, or leaving it.
+interface PageFocusEvent {
+  readonly target: PageTarget | null;
+}
+
 // What an element's listeners hear, by the event they listen for.
 interface PageEvents {
+  focusin: PageFocusEvent;
+  focusout: PageFocusEvent;
   dblclick: PageMouseEvent;
   mousedown: PageMouseEvent;
   contextmenu: PageMouseEvent;
@@ -186,17 +195,30 @@ export function useKeyUp(id: string, listener: (event: PageKeyboardEvent) => voi
   useListener(id, "keyup", listener);
 }
 
+// What a view of the panel that scrolls takes: Tab doesn't reach it, as a browser has it reach a
+// view that scrolls, and with focus on it, as after a click on empty space in it, the arrows move
+// focus to what's open.
+export const restingView = { tabIndex: -1, dataSet: restMark } as const;
+
 // Keys anywhere in the panel with the id: `/` moves focus to the filter, and Escape takes back the
-// question an armed button asks, before anything else in the panel hears it. Pressing the pointer in the panel gives up moving focus to what keys
-// opened once it shows.
+// question an armed button asks, before anything else in the panel hears it. With focus nowhere in
+// it that keys act on, the arrows move focus to what's `open`. Pressing the pointer in the panel
+// gives up moving focus to what keys opened once it shows.
 export function usePanelKeys(
   id: string,
   focus: KeyboardFocus,
   controls: Controls,
   find: FindTargets,
+  open: Open | undefined,
 ): void {
   useCommands(id, "panel", (command) => panelCommand(command, { focus, find }));
   useCommands(id, "question", () => controls.cancel(), true);
+  useKeys(
+    id,
+    (event, own) =>
+      atRest(event.target, own) &&
+      handled(heard("nowhere", event, onMac()), () => openCommand(open, focus)),
+  );
   useListener(
     id,
     "pointerdown",
@@ -207,6 +229,23 @@ export function usePanelKeys(
   );
 }
 
+// Shows the keys that work with focus nowhere in the panel with the id that keys act on, in the
+// panel's strip, while focus is there.
+export function useRestingHints(id: string, hints: KeyHints): void {
+  const owner = useId();
+
+  useListener(id, "focusin", ({ target }, own) => {
+    if (atRest(target, own)) {
+      hints.show(owner, hintsIn.nowhere(onMac()));
+    }
+  });
+  useListener(id, "focusout", ({ target }, own) => {
+    if (atRest(target, own)) {
+      hints.hide(owner);
+    }
+  });
+}
+
 // What a hunk's lines are inside of, marked with the hunk, where the pointer can press them.
 const hunkMarked = "[data-hunk]";
 
@@ -214,6 +253,10 @@ const hunkMarked = "[data-hunk]";
 // comment being written.
 export const commentsMark = { comments: "thread" };
 const commentsMarked = "[data-comments]";
+
+// What takes focus itself once the pointer is pressed on it or in it, as a bar does: not a view
+// that scrolls, which a press on its lines is in.
+const takesFocus = "[tabindex]:not([data-rest])";
 
 // Has a press of the pointer's main button in the element with the id, outside the bars and the
 // lines' comments there, move focus once it's let go to the bar of the hunk whose lines it selected
@@ -225,7 +268,7 @@ export function useFocusOnPress(id: string, view: string, focus: KeyboardFocus):
     id,
     "pointerdown",
     ({ target, button }) => {
-      const focusable = target?.closest?.("[tabindex]") ?? null;
+      const focusable = target?.closest?.(takesFocus) ?? null;
 
       if (
         target === null ||

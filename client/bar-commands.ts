@@ -11,7 +11,7 @@ import { at, extended, linesOn, moved } from "./line-cursor";
 import type { Cursor } from "./line-cursor";
 import { rangeKey, rangeLines } from "./selection";
 import type { LineRange } from "./selection";
-import { runShortcut } from "./shortcuts";
+import { runsAction, runShortcut } from "./shortcuts";
 import type { ActionCommand, Bar, Level } from "./shortcuts";
 import type { Side } from "./side-by-side";
 
@@ -23,13 +23,6 @@ type Kind = Hunk["lines"][number]["kind"];
 
 // The bars whose actions keys run, at each level: what focus is in, and its file.
 type Bars = Partial<Record<Level, Bar | undefined>>;
-
-// Whether the command runs the action of the bars' it runs, given with focus on the bar itself, or
-// on something inside it: Enter on its own runs one only on the bar itself, and presses a button
-// with focus as anywhere.
-function runsAction(command: ActionCommand, own: boolean): boolean {
-  return own || command !== "stage";
-}
 
 // What a bar in a diff does with keys.
 export interface BarKeys {

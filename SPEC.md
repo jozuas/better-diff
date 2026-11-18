@@ -52,13 +52,15 @@ Replicates Sublime Merge as much as possible:
 
 The panel works from the keyboard as it does with the pointer, but for review comments for now (see Later), in one way throughout: the arrows move focus from one place to the next, Enter and Backspace act on the place focus is in, and Shift widens what they act on to whole files. The keys work while focus is in the panel, and keep clear of Paseo's own: none takes Cmd or Ctrl but the find bar's ⌘F and ⌘G, or Ctrl+F elsewhere, which Paseo leaves free and other apps find with (see Find in diff), and Enter in a comment or the review's message, with Cmd or Ctrl or without, as in Paseo's agent chat input (see Review comments), and `?` shows Paseo's list of its own shortcuts. A letter's key works on any keyboard layout: on one that doesn't type Latin letters, as a Cyrillic one, it's the key where a US keyboard has the letter.
 
-Tab reaches nothing in the panel: every action has a key of its own, and Tab moves focus on out of the panel.
+Tab reaches nothing in the panel: every action has a key of its own, and Tab moves focus on out of the panel. Nor does it reach a view of the panel that scrolls, as a diff taller than the view, which a browser has Tab reach.
 
 #### Where focus goes
 
 - In the sidebar: the filter, each group's heading, and each file's row while its group is expanded.
 - In the diff: for each file it shows, its file bar, its mode change's bar if it has one, and each hunk's bar, so a file shown without hunks, such as a binary or collapsed one, still has its bar to go to. Focus is on the bar itself, rather than on one of its buttons.
 - In a hunk: its lines, as a selection of one line or more.
+- Nowhere keys act on: a press on empty space in the panel leaves focus on the panel itself, or on the view pressed, if it scrolls. An arrow there moves focus to the open file's row, or the open group's heading, or with nothing open, to the filter, so no arrow pressed in the panel does nothing.
+- Focus that moves to the row of a file the sidebar doesn't list, as while its group is collapsed or the filter hides it, moves to its group's heading instead.
 
 #### Moving
 
@@ -74,10 +76,10 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 
 #### Acting
 
-- Enter and Backspace act on the place with focus as its buttons do: Enter stages, or unstages in STAGED, and Backspace discards, or unstages in STAGED. In a hunk's bar they act on the hunk, or on its selected lines while it has any; in a mode change's bar, on the mode change; and in a file's bar, on the file.
-- Shift+Enter and Shift+Backspace act on whole files: in any of a file's bars or lines, on the file, as its file bar's buttons do; in a file's row, as the row's buttons do, on the file, or on the selected files in one of their rows; and in a group's heading, as its buttons do, on all its files.
-- Enter in a row or heading opens its file or group.
-- Once an action on a hunk, its lines or its mode change runs with focus in its bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left, or that file's bar if it has no hunks. So Enter stages one hunk after another. Once an action on a file runs from one of its bars, focus moves the same way to the next file's first hunk. Once one runs from a row or a heading, focus moves to the row of the file the view moves on to, or while it moves on to none, as once no file is left or in a group's view, which stays on its group, to the row or heading that takes its place in the sidebar.
+- Enter and Backspace act on the place with focus as its buttons do: Enter stages, or unstages in STAGED, and Backspace discards, or unstages in STAGED. In a hunk's bar they act on the hunk, or on its selected lines while it has any; in a mode change's bar, on the mode change; in a file's bar, on the file; and in a file's row, as the row's buttons do, on the file, or on the selected files in one of their rows.
+- Shift+Enter and Shift+Backspace act on whole files: in any of a file's bars or lines, on the file, as its file bar's buttons do; in a file's row, as they do without Shift; and in a group's heading, as its buttons do, on all its files.
+- Enter in a heading opens its group: only Shift+Enter stages its files. With focus on one of a bar's or a row's buttons, as after a click on it, Enter presses that button, as it does anywhere, rather than act on the bar or row.
+- Once an action on a hunk, its lines or its mode change runs with focus in its bar, focus moves on to the hunk the view moves to: the one that takes its place, or else the last, or the next file's first once the file has none left, or that file's bar if it has no hunks. So Enter stages one hunk after another. Once an action on a file runs from one of its bars, focus moves the same way to the next file's first hunk. Once one runs from a row or a heading, focus moves to the row of the file the view moves on to, or while it moves on to none, as once no file is left or in a group's view, which stays on its group, to the row or heading that takes its place in the sidebar. So Enter stages one file after another from the sidebar too.
 - A discard asks for confirmation as its button does (see Confirmation), and Escape takes the question back.
 
 #### Lines
@@ -99,8 +101,9 @@ Tab reaches nothing in the panel: every action has a key of its own, and Tab mov
 #### Getting there, and learning the keys
 
 - Better Diff in Paseo's command center opens the panel with focus in the open file's row, or the open group's heading, and so does opening the panel some other way, unless focus is in a text field then, as in a message being written, or already in the panel.
-- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter under a hunk's or a mode change's Stage or Unstage, and Backspace under their Discard, and above the selected lines' after their names, in the bar over them (see Selecting lines), Shift+Enter or Shift+Backspace likewise under a file's or a group's, E under the middle of a hunk's bar and a collapsed diff's Show diff, and Shift+E under the hunk's toggle. On a Mac, in its symbols: ↩, ⌫, ⇧↩, ⇧⌫ and ⇧E. Only the pointer shows them, not focus resting on a bar.
-- Better Diff's settings page lists the keys, but Enter in a row or a heading and Enter and Escape in a file's menu, which work as they do on any button and menu, and a comment's and the review's keys.
+- Once the pointer rests on a button for a second, its key shows under it, to teach it: Enter under a hunk's or a mode change's Stage or Unstage, and Backspace under their Discard, and above the selected lines' after their names, in the bar over them (see Selecting lines), Enter and Backspace likewise under those of a file's row, Shift+Enter or Shift+Backspace under a file's bar's or a group's, E under the middle of a hunk's bar and a collapsed diff's Show diff, and Shift+E under the hunk's toggle. On a Mac, in its symbols: ↩, ⌫, ⇧↩, ⇧⌫ and ⇧E. Only the pointer shows them, not focus resting on a bar.
+- A strip along the bottom of the panel shows the keys that work where focus is, and what each does, in a word or two, as lazygit's bottom line does, so the keys are learnt from the keyboard too. First those that run the actions there, named as their buttons are, Enter's before Backspace's, as "↩ Stage Hunk" and "⌫ Discard Hunk", with File after the name of one on the whole file where others act on a part of it, as "⇧↩ Stage File". Then those that move focus from there, each by where it moves it, as "→ Lines" and "← File list", and last `/` and ⌘F. It follows focus: to a file's row, a group's heading, the filter, a file's, a mode change's or a hunk's bar, a hunk's selected lines, the find bar, or nowhere keys act on. It names what a key does there now: Unstage in STAGED, Delete for an untracked file, Expand for → on a collapsed group's heading, and Collapse and Diff for ← and → on an expanded one's, Show diff for E in a collapsed diff's file bar, and Side for ← and → in a selection only side by side. It's one line, in the panel's smaller text, as tall with hints as without, and those it has no room for are left out whole, from its end. With focus outside the panel, or in the panel somewhere without keys of the panel's own, as in a comment being written, it's empty.
+- Better Diff's settings page lists the keys, but Enter in a heading and Enter and Escape in a file's menu, which work as they do on any button and menu, and a comment's and the review's keys.
 
 ### Find in diff
 

@@ -7,7 +7,14 @@ import type { Action } from "./actions";
 import type { Target } from "./apply";
 import type { GroupName } from "./groups";
 import type { Place } from "./keymap";
-import { buttonShortcut, nameTip, runShortcut, shortcutOf, shortcutText } from "./shortcuts";
+import {
+  buttonShortcut,
+  nameTip,
+  runsAction,
+  runShortcut,
+  shortcutOf,
+  shortcutText,
+} from "./shortcuts";
 import type { ActionCommand, Bar, Level } from "./shortcuts";
 
 function onPartRun(): void {}
@@ -90,7 +97,7 @@ test("unstages with Enter too, as it moves the change to the other side, which i
   });
 });
 
-test("in a row or a group's heading, all of a file has keys, but a part of one has none", () => {
+test("in a row, a file's actions have their keys with Shift or on their own, and in a group's heading only with Shift", () => {
   expect(shortcutOf({ operation: "stage" }, "file", "row", false)).toStrictEqual({
     key: "Enter",
     shift: true,
@@ -99,8 +106,30 @@ test("in a row or a group's heading, all of a file has keys, but a part of one h
     key: "Backspace",
     shift: true,
   });
-  expect(shortcutOf({ operation: "stage" }, "part", "row", false)).toBeUndefined();
-  expect(shortcutOf({ operation: "discard" }, "part", "heading", false)).toBeUndefined();
+  expect(
+    (["unstage", "discard"] as const).map((operation) =>
+      shortcutOf({ operation }, "part", "row", false),
+    ),
+  ).toStrictEqual([{ key: "Enter" }, { key: "Backspace" }]);
+  expect(
+    (["stage", "discard"] as const).map((operation) =>
+      shortcutOf({ operation }, "part", "heading", false),
+    ),
+  ).toStrictEqual([undefined, undefined]);
+});
+
+test("on its own, Enter runs its action only with focus on the bar or row itself, and the other keys that run actions wherever focus is in it", () => {
+  expect(
+    (["stage", "discard", "stageFile", "discardFile"] as const).map((command) => [
+      runsAction(command, true),
+      runsAction(command, false),
+    ]),
+  ).toStrictEqual([
+    [true, false],
+    [true, true],
+    [true, true],
+    [true, true],
+  ]);
 });
 
 test("in a modified or untracked file's hunk's bar, Enter stages the hunk and Backspace discards it, and Shift+Enter and Shift+Backspace stage and discard the file", () => {
@@ -187,11 +216,12 @@ test("writes a shortcut in a Mac's symbols on a Mac, in words elsewhere, and not
 const operations = fc.constantFrom<Action["operation"]>("stage", "unstage", "discard");
 
 // The levels of the keys that run actions in each place: a part of a file and all of it in a bar
-// and on lines selected, all of a file in the file list, and none elsewhere.
+// and on lines selected, and in a file's row, whose part is all of its file, all of a group's files
+// in its heading, and none elsewhere.
 const levelsIn: Partial<Record<Place, readonly Level[]>> = {
   bar: ["part", "file"],
   lines: ["part", "file"],
-  row: ["file"],
+  row: ["part", "file"],
   heading: ["file"],
 };
 

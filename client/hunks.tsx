@@ -19,6 +19,7 @@ import { useFindableLines } from "./find-page";
 import type { OpenFile } from "./groups";
 import { HunkArea, LinesBefore } from "./hunk-area";
 import { HunkBar } from "./hunk-bar";
+import { restingView } from "./keyboard";
 import { unchangedButton } from "./labels";
 import type { NumberedLine, Unchanged } from "./lines";
 import { shownFileOf } from "./place";
@@ -352,6 +353,7 @@ function HunksShown({
     <SelectionBarLayer theme={theme}>
       {(layer) => (
         <ScrollView
+          {...restingView}
           nativeID={view}
           stickyHeaderIndices={shownDiff.hunks.map((_, index) => 2 * index + 1)}
         >

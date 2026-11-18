@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
-import { panelCommand } from "./panel-keys";
+import type { Open } from "./groups";
+import { openCommand, panelCommand } from "./panel-keys";
 import type { FindTargets } from "./panel-keys";
 
 // What a command anywhere in the panel did, with the find bar open or closed: each thing it asked
@@ -63,4 +64,33 @@ test("⌘G and ⇧⌘G do nothing while the find bar is closed, and the page hea
     false,
   ]);
   expect(done).toStrictEqual([]);
+});
+
+test.each<[string, Open | undefined, unknown[]]>([
+  [
+    "the open file's row",
+    { group: "modified", path: "a" },
+    [{ stop: { group: "modified", path: "a" } }],
+  ],
+  [
+    "the row of the file the files selected reach",
+    { group: "staged", paths: ["a", "b"] },
+    [{ stop: { group: "staged", path: "b" } }],
+  ],
+  ["the open group's heading", { group: "untracked" }, [{ stop: { group: "untracked" } }]],
+  ["the filter, with nothing open", undefined, ["filter"]],
+])("an arrow with focus nowhere in the panel moves it to %s", (_, open, moved) => {
+  const done: unknown[] = [];
+
+  expect(
+    openCommand(open, {
+      toStop: (stop) => {
+        done.push({ stop });
+      },
+      toFilter: () => {
+        done.push("filter");
+      },
+    }),
+  ).toBe(true);
+  expect(done).toStrictEqual(moved);
 });

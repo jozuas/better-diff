@@ -1,7 +1,7 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { handled, heard, takesText } from "./key-events";
+import { atRest, handled, heard, restMark, takesText } from "./key-events";
 import type { KeyEvent } from "./key-events";
 import type { Place } from "./keymap";
 
@@ -20,7 +20,7 @@ function keyed(key: string, change: Partial<KeyEvent> = {}): KeyEvent {
   return { ...plain, key, ...change };
 }
 
-const places: Place[] = ["row", "heading", "bar", "lines", "menu", "panel", "question"];
+const places: Place[] = ["row", "heading", "bar", "lines", "menu", "panel", "nowhere", "question"];
 
 // Elements that take text typed in them, as the page has them.
 const textFields = [
@@ -131,4 +131,18 @@ test("a key that gives a command is handled once what runs it says it did someth
   ).toBe(true);
   expect(handled("stage", () => false)).toBe(false);
   expect(run).toStrictEqual(["stage"]);
+});
+
+test("focus is nowhere keys act on while it's on the panel itself, or on a view of it that scrolls, and not on anything else in it", () => {
+  expect([
+    atRest({ tagName: "DIV" }, true),
+    atRest(null, true),
+    atRest({ tagName: "DIV", dataset: { rest: "view" } }, false),
+    atRest({ tagName: "DIV", dataset: restMark }, false),
+  ]).toStrictEqual([true, true, true, true]);
+  expect([
+    atRest({ tagName: "DIV", dataset: { hunk: "0 1" } }, false),
+    atRest({ tagName: "BUTTON" }, false),
+    atRest(null, false),
+  ]).toStrictEqual([false, false, false]);
 });

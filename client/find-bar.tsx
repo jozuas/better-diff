@@ -12,6 +12,8 @@ import type { Find } from "./find-store";
 import { FontSizesContext } from "./fonts";
 import { Hoverable, TintLayer } from "./hoverable";
 import { IconButton } from "./icon-button";
+import { hintsIn } from "./key-hints";
+import { Hinted } from "./key-strip";
 import { useCommands } from "./keyboard";
 import { ShortcutTip } from "./shortcut-tip";
 import { onMac } from "./web";
@@ -173,6 +175,7 @@ function FindBar({ find, input, onClose, theme }: FindBarProps): ReactElement {
 
   return (
     <View nativeID={bar} style={styles.bar}>
+      <Hinted focused={focused} hints={() => hintsIn.findBar(onMac())} />
       <View style={[styles.box, focused && styles.focused]}>
         <TextInput
           nativeID={input}

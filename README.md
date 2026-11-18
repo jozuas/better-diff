@@ -45,7 +45,7 @@ Comment on a line, or on several, as you read. Comments stay pending, as in a Gi
 
 ### Keyboard first
 
-Everything works from the keyboard as well as the pointer: the arrows move between files, hunks and lines, Enter stages, Backspace discards, and Shift widens either to the whole file. Rest the pointer on a button for a second to see its key. Better Diff's page under Settings → Plugins lists them all.
+The arrows move between files, hunks and lines, Enter stages, Backspace discards, and Shift widens either to the whole file. A strip along the bottom shows the keys for where you are.
 
 ### Even more
 
@@ -68,6 +68,7 @@ paseo plugin add https://github.com/jozuas/better-diff
 - Paseo's mobile app isn't supported.
 - No history, branches or other git operations beyond staging: planned for v2. Commit from Paseo itself.
 - No GitHub pull request reviews: planned for v3.
+- Review comments have no keys yet: they take the pointer.
 - Merge conflicts aren't handled: a conflicted file shows "Merge conflicts" instead of its diff.
 - Submodules are only staged and unstaged whole, to the commit they're at: one shows "Submodule" instead of its diff, and can't be discarded.
 

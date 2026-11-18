@@ -24,7 +24,7 @@ import type { GroupName, Open, OpenFile, OpenFiles, Repositories, SidebarGroup }
 import type { IgnorePlace } from "./ignore";
 import { IgnorePrompt } from "./ignore-prompt";
 import type { Ignoring } from "./ignore-prompt";
-import { useKeyUp } from "./keyboard";
+import { restingView, useKeyUp } from "./keyboard";
 import type { Point } from "./menu";
 import { passing } from "./passing";
 import type { Passing } from "./passing";
@@ -202,7 +202,7 @@ export function FileList({
         onKey={(command) => filterKey(command, { filter, onFilter }, list, focus)}
         theme={theme}
       />
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView {...restingView} contentContainerStyle={styles.list}>
         {groups.map((group) => (
           <GroupSection
             key={group.name}

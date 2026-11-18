@@ -51,6 +51,7 @@ export interface KeyboardFocus {
   // Has keys open the next file or the one before past the view's bars, as they do in a view of
   // one file.
   addCrossing: () => () => void;
+  // Moves focus to the file's row, or while the sidebar doesn't list it, to its group's heading.
   toRow: (file: OpenFile) => void;
   toHeading: (group: GroupName) => void;
   // Moves focus to the heading, or the row, if there's one.
@@ -225,14 +226,23 @@ export function keyboardFocus(): KeyboardFocus {
     }
   }
 
-  function toRow(file: OpenFile): void {
-    pending = undefined;
-    rows.get(shownFileKey(file))?.focus();
-  }
-
   function toHeading(group: GroupName): void {
     pending = undefined;
     headings.get(group)?.focus();
+  }
+
+  // To the file's row, or while the sidebar doesn't list it, as while its group is collapsed or the
+  // filter hides it, to its group's heading.
+  function toRow(file: OpenFile): void {
+    const row = rows.get(shownFileKey(file));
+
+    pending = undefined;
+
+    if (row === undefined) {
+      toHeading(file.group);
+    } else {
+      row.focus();
+    }
   }
 
   return {

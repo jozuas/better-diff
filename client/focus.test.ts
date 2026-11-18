@@ -320,6 +320,23 @@ test("a bar, row, heading or filter taken out of the panel is no longer moved to
   expect(done).toStrictEqual([...shown([0, 1]), "b", "untracked", "other filter"]);
 });
 
+test("focus moves to a file's group's heading while the sidebar doesn't list the file's row, as while its group is collapsed", () => {
+  const { done, focus, named } = recorded();
+  const a = { group: "modified", path: "a" } as const;
+
+  focus.addHeading("modified", named("modified"));
+  focus.addHeading("staged", named("staged"));
+
+  const removeRow = focus.addRow(a, named("a"));
+
+  focus.toRow(a);
+  removeRow();
+  focus.toRow(a);
+  focus.toStop({ group: "staged", path: "b" });
+
+  expect(done).toStrictEqual(["a", "modified", "staged"]);
+});
+
 test("← moves focus to the row of the bar's file, as opened from its group", () => {
   const { done, focus, named } = recorded();
 

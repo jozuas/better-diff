@@ -61,6 +61,8 @@ const bindings = [
   { place: "row", command: "selectDown", chords: [shiftDown] },
   { place: "row", command: "selectUp", chords: [shiftUp] },
   { place: "row", command: "into", chords: [right] },
+  { place: "row", command: "stage", chords: [enter] },
+  { place: "row", command: "discard", chords: [backspace] },
   { place: "row", command: "stageFile", chords: [shiftEnter] },
   { place: "row", command: "discardFile", chords: [shiftBackspace] },
   { place: "row", command: "menu", chords: [{ key: "ContextMenu" }, { key: "F10", shift: true }] },
@@ -106,6 +108,7 @@ const bindings = [
   { place: "panel", command: "find", chords: [find] },
   { place: "panel", command: "findNext", chords: [findNext, f3] },
   { place: "panel", command: "findPrevious", chords: [findPrevious, shiftF3] },
+  { place: "nowhere", command: "open", chords: [down, up, left, right] },
   { place: "find", command: "next", chords: [enter, f3] },
   { place: "find", command: "previous", chords: [shiftEnter, shiftF3] },
   { place: "find", command: "matchCase", chords: [{ key: "c", alt: true }] },
@@ -116,8 +119,9 @@ const bindings = [
 type Binding = (typeof bindings)[number];
 
 // Where focus is: a file's row or a group's heading in the sidebar, the filter, a bar in the diff,
-// or a hunk's selected lines, a file's menu, the find bar, or anywhere in the panel, and anywhere in
-// it while a button asks its question, before anything in it hears the key.
+// or a hunk's selected lines, a file's menu, the find bar, or anywhere in the panel, nowhere in it
+// that keys act on, as on the panel itself after a click on empty space in it, and anywhere in it
+// while a button asks its question, before anything in it hears the key.
 export type Place = Binding["place"];
 
 export type Command = Binding["command"];

@@ -2,106 +2,14 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { changes, groupName } from "../test/changes";
-import { groupActions, rowActions } from "./actions";
+import { sidebarOf } from "../test/sidebar-keys";
+import type { StopCommand } from "../test/sidebar-keys";
 import { selectedBy, sidebarGroups } from "./groups";
-import type { GroupName, Open, OpenFile, SidebarGroup } from "./groups";
+import type { Open } from "./groups";
 import type { CommandIn } from "./keymap";
-import {
-  filterKey,
-  groupBar,
-  headingKey,
-  listed,
-  rowBar,
-  rowKey,
-  settledStop,
-} from "./sidebar-keys";
-import type { HeadingKeys, RowKeys, Sidebar } from "./sidebar-keys";
+import { filterKey, headingKey, listed, rowKey, settledStop } from "./sidebar-keys";
 import { indexOfStop, openStop, sidebarStops } from "./sidebar-stops";
 import type { SidebarStop } from "./sidebar-stops";
-
-function onRun(): void {}
-
-// The commands a row and a heading both hear.
-type StopCommand = CommandIn<"row"> & CommandIn<"heading">;
-
-// A sidebar listing the groups, with what's open, and what keys did to it, in order, as they're
-// pressed or held down. Its rows have their actions, and its headings their groups', expanded
-// unless said otherwise, of a group not open. Moving focus into a file opens it.
-function sidebarOf(groups: SidebarGroup[], open?: Open, repeat = false) {
-  const done: unknown[] = [];
-
-  const sidebar: Sidebar = {
-    list: {
-      groups,
-      stops: sidebarStops(groups, []),
-      open,
-      onOpen: (opened) => {
-        done.push({ open: opened });
-      },
-      onPass: (passed) => {
-        done.push({ pass: passed });
-      },
-    },
-    focus: {
-      toRow: (file) => {
-        done.push({ row: file });
-      },
-      toStop: (stop) => {
-        done.push({ stop });
-      },
-      toFilter: () => {
-        done.push("filter");
-      },
-      toFile: (file, openFile) => {
-        done.push({ file });
-        openFile();
-      },
-      toGroup: (group, groupOpen) => {
-        done.push({ into: group, open: groupOpen });
-      },
-    },
-    controls: {
-      press: (button) => {
-        done.push({ press: button });
-      },
-    },
-    repeat,
-  };
-
-  function row(file: OpenFile): RowKeys {
-    return {
-      stop: file,
-      bar: rowBar(rowActions(open, file), onRun),
-      onMenu: () => {
-        done.push("menu");
-      },
-    };
-  }
-
-  function heading(group: GroupName, { expanded = true, opened = false } = {}): HeadingKeys {
-    return {
-      stop: { group },
-      bar: groupBar(group, groups.find(({ name }) => name === group)?.files, onRun),
-      expanded,
-      open: opened,
-      onToggle: () => {
-        done.push({ toggle: group });
-      },
-      onOpen: () => {
-        done.push({ open: { group } });
-      },
-    };
-  }
-
-  // Gives the command in the stop's row, or in its heading.
-  function key({ group, path }: SidebarStop, command: StopCommand): boolean {
-    return path === undefined
-      ? headingKey(command, heading(group), sidebar)
-      : rowKey(command, row({ group, path }), sidebar);
-  }
-
-  return { done, sidebar, row, heading, key };
-}
 
 // The sidebar's groups as changes.list lists them, and one of its stops.
 const someStop = changes.chain((listedChanges) => {
@@ -215,29 +123,6 @@ test("in a selected file's row, Escape opens just that file, and in another row,
   ]);
 });
 
-test("in a row, Shift+Enter and Shift+Backspace press its buttons, on the files selected in one of theirs, and in a heading its group's, while it has them", () => {
-  const selected: Open = { group: "modified", paths: ["a", "b"] };
-  const groups = { modified: ["a", "b"], untracked: [], staged: ["c"] };
-  const { done, sidebar, row, heading } = sidebarOf(sidebarGroups(groups), selected);
-  const filtered = sidebarOf(sidebarGroups(groups, "a"));
-
-  expect([
-    rowKey("stageFile", row({ group: "staged", path: "c" }), sidebar),
-    rowKey("discardFile", row({ group: "modified", path: "b" }), sidebar),
-    headingKey("stageFile", heading("modified"), sidebar),
-    headingKey("discardFile", heading("staged"), sidebar),
-  ]).toStrictEqual([true, true, true, true]);
-  expect(headingKey("discardFile", heading("untracked"), sidebar)).toBe(false);
-  expect(headingKey("stageFile", filtered.heading("modified"), filtered.sidebar)).toBe(false);
-  expect(done).toStrictEqual([
-    { press: "file:staged:c:unstage" },
-    { press: 'selected:modified:["a","b"]:b:discard' },
-    { press: "group:modified:stage" },
-    { press: "group:staged:unstage" },
-  ]);
-  expect(filtered.done).toStrictEqual([]);
-});
-
 test.each<[CommandIn<"heading">, boolean, boolean, unknown[]]>([
   ["collapse", true, false, [{ toggle: "untracked" }]],
   ["collapse", true, true, [{ toggle: "untracked" }]],
@@ -321,25 +206,6 @@ test.each<
     expect(done).toStrictEqual(moved.map((stop) => ({ stop })));
   },
 );
-
-test("a row's keys run its actions, and a heading's run its group's while it lists all its files", () => {
-  const file = { group: "staged", path: "a" } as const;
-  const none: string[][] = [];
-
-  expect(rowBar(rowActions(undefined, file), onRun)).toStrictEqual({
-    actions: rowActions(undefined, file).actions,
-    bar: "file:staged:a",
-    target: rowActions(undefined, file).target,
-    onRun,
-  });
-  expect(groupBar("staged", ["a", "b"], onRun)).toStrictEqual({
-    actions: groupActions.staged,
-    bar: "group:staged",
-    target: { group: "staged", paths: ["a", "b"] },
-    onRun,
-  });
-  expect(groupBar("staged", none[0], onRun)).toBeUndefined();
-});
 
 test("the files listed of a group are its paths, and none of a group the sidebar doesn't have", () => {
   fc.assert(
