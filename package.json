@@ -1,11 +1,16 @@
 {
-  "name": "better-diff",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@jozuas/better-diff",
+  "version": "1.0.0",
+  "description": "A diff and staging view for a workspace's worktree, made for reviewing what agents change.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jozuas/better-diff.git"
+  },
   "files": [
     "paseo-plugin.json",
-    "OVERVIEW.md",
-    "OVERVIEW.*.md",
+    "docs/screenshots/*-dark.png",
+    "npm-shrinkwrap.json",
     "index.client.ts",
     "index.client.tsx",
     "index.server.ts",

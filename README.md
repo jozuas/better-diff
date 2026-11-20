@@ -60,8 +60,16 @@ Syntax highlighting comes from Paseo's highlighter, [`@getpaseo/highlight`](http
 Needs Paseo 0.16 or later.
 
 ```sh
-paseo plugin add https://github.com/jozuas/better-diff
+paseo plugin add npm:@jozuas/better-diff
 ```
+
+## What it reads and changes
+
+Better Diff runs git in the workspace's worktree, on the host Paseo's daemon runs on. Staging and unstaging change the index, and discarding changes the worktree's files, which git can't bring back. Its only other writes are the ignore rules you add, to the file you pick, and a copy of the index it makes in the system's temporary directory and deletes again. Copy file contents reads a file from the worktree to the clipboard.
+
+Pending review comments and the review's message are kept on the workspace by Paseo's daemon. A review goes only to the agent you pick when you send it, as a message with each comment and the lines around it, and so to that agent's provider, as any message to it does. A new agent started for it takes the provider, model and mode of the agent last active.
+
+Better Diff makes no network requests of its own.
 
 ## Limitations
 
