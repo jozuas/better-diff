@@ -1,15 +1,15 @@
 import type { PluginTheme, RpcOutput } from "@getpaseo/plugin";
-import type { PluginTab } from "@getpaseo/plugin/client";
 import { useRpc } from "@getpaseo/plugin/client";
 import { useQueries } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { Dispatch, ReactElement, ReactNode, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 
 import { diffRpc } from "../shared/diff";
+import type { ReviewChange } from "../shared/review";
 import { bothDiffs } from "./attachment";
-import { restoredComments, restoredMessage, saved, without } from "./comments";
+import { restored, saved } from "./comments";
 import type { Editing, ReviewComment, SentReview } from "./comments";
 import type { GroupName, OpenFile } from "./groups";
 import { fileKey } from "./numbering";
@@ -95,18 +95,15 @@ interface ReviewProviderProps {
   // The worktree's, and its workspace's ID, whose agents the comments are sent to.
   directory: string;
   workspace: string;
-  // Those pending, and what changes them.
+  // Those pending, what they're to be sent with, and what changes them.
   comments: readonly ReviewComment[];
-  onComments: Dispatch<SetStateAction<readonly ReviewComment[]>>;
-  // What they're to be sent with, and what changes it.
   message: string;
-  onMessage: Dispatch<SetStateAction<string>>;
+  onChange: (...changes: ReviewChange[]) => void;
   // The files each group lists, once they're listed, and what opens one.
   listed: Listed | undefined;
   onOpen: (file: OpenFile) => void;
   // Whether diffs are read with whitespace changes hidden.
   hideWhitespace: boolean;
-  tab: PluginTab;
   theme: PluginTheme;
   // The diffs commented on.
   children: ReactNode;
@@ -120,14 +117,12 @@ interface ReviewProviderProps {
 // in the diff that has its line, where it stands out for a moment. Once a review's sent, until
 // another comment's started, the bar restores it, its comments pending again, as for sending it to
 // another agent. While the comment being written, or an edit of one saved, shows under no line, as
-// its line is changed, the bar says so, and discards it. While any are pending, the tab shows it has
-// unsaved work, and asks before it's closed.
+// its line is changed, the bar says so, and discards it.
 export function ReviewProvider({
   comments,
-  onComments,
+  onChange,
   listed,
   onOpen,
-  tab,
   children,
   ...bar
 }: ReviewProviderProps): ReactElement {
@@ -135,8 +130,7 @@ export function ReviewProvider({
   const [restorable, setRestorable] = useState<SentReview>();
   const written = useRef("");
   const [revealing, setRevealing] = useState<Revealing>();
-  const latest = useLatest({ tab, listed, onOpen });
-  const pending = comments.length > 0;
+  const latest = useLatest({ listed, onOpen });
   const paths = useCommentedPaths(comments, editing);
   const diffOf = useReviewedDiffs(bar.directory, bar.hideWhitespace, paths);
   const versions = useMemo(() => versionsByPath(paths, diffOf), [paths, diffOf]);
@@ -146,10 +140,6 @@ export function ReviewProvider({
     () => commentsByPath(threadsIn, editing, versions),
     [threadsIn, editing, versions],
   );
-
-  useEffect(() => {
-    latest.current.tab.setModified(pending);
-  }, [latest, pending]);
 
   const review = useMemo<Review>(
     () => ({
@@ -164,7 +154,7 @@ export function ReviewProvider({
       },
       onEdit: (comment, where) => {
         written.current = comment.body;
-        setEditing({ target: comment, id: comment.id, where });
+        setEditing({ target: comment, id: comment.id, said: comment.body, where });
       },
       written: () => written.current,
       onWrite: (text) => {
@@ -174,14 +164,19 @@ export function ReviewProvider({
         setEditing(undefined);
       },
       onSave: (text) => {
+        const change = editing === undefined ? undefined : saved(comments, editing, text);
+
         setEditing(undefined);
-        onComments((current) => (editing === undefined ? current : saved(current, editing, text)));
+
+        if (change !== undefined) {
+          onChange(change);
+        }
       },
       onDelete: (id) => {
-        onComments((current) => without(current, id));
+        onChange({ kind: "delete", id });
       },
     }),
-    [commentsIn, paths, editing, revealing, onComments],
+    [commentsIn, paths, editing, revealing, comments, onChange],
   );
 
   // Opens the file's diff that has the comment's line, if a group lists it, and has it show the
@@ -208,12 +203,11 @@ export function ReviewProvider({
       <View style={{ flex: 1 }}>{children}</View>
       <ReviewBar
         comments={comments}
-        onComments={onComments}
+        onChange={onChange}
         restorable={restorable}
         onRestore={() => {
           if (restorable !== undefined) {
-            onComments((current) => restoredComments(current, restorable));
-            bar.onMessage((current) => restoredMessage(current, restorable));
+            onChange(restored(comments, restorable));
             setRestorable(undefined);
           }
         }}

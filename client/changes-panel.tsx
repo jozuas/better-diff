@@ -7,11 +7,10 @@ import type { ReactElement } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
-import { changesRpc, releaseRpc, versionRpc, waitRpc } from "../shared/changes";
+import { changesRpc, versionRpc } from "../shared/changes";
 import { applyFileRpc, applyGroupRpc, applyLinesRpc, applyModeRpc, diffRpc } from "../shared/diff";
 import type { Controls } from "./actions";
 import type { Server, Where } from "./apply";
-import type { ReviewComment } from "./comments";
 import { confirmation } from "./confirmation";
 import { applyAndTell, controlsStore, runBusy } from "./controls";
 import type { Layout } from "./diff-style";
@@ -23,7 +22,7 @@ import { fileAfter, openAfter, placeholder, toggled } from "./groups";
 import type { Hidden, Open } from "./groups";
 import { WithKeyStrip } from "./key-strip";
 import { useFocusOnOpen, usePanelKeys } from "./keyboard";
-import { readAt, refreshOf, refreshOnChanges } from "./refresh";
+import { readAt, refreshOf } from "./refresh";
 import { requests } from "./requests";
 import { ReviewProvider } from "./review";
 import { pendingCounts } from "./review-list";
@@ -33,8 +32,10 @@ import { Sidebar } from "./sidebar";
 import type { SidebarState } from "./sidebar";
 import { startingTab, tabState } from "./tab-state";
 import { clearSelection } from "./text-selection";
+import { RefreshOnChanges } from "./watching";
 import { useLatest } from "./web";
 import { useWindowFocus } from "./window-focus";
+import type { ReviewState } from "./workspace-review";
 
 type Listed = RpcOutput<typeof changesRpc>;
 
@@ -109,46 +110,6 @@ function useControls(
   );
 }
 
-// Shows the directory's changes as they are whenever they may have changed, as while an agent edits
-// its files, once they're first read: from `from`, the version they were read at, undefined until
-// they're read, or an empty one, which none is, if they couldn't be.
-function useRefreshOnChanges(
-  directory: string,
-  from: string | undefined,
-  refresh: (version: string) => Promise<void>,
-): void {
-  const wait = useRpc(waitRpc);
-  const release = useRpc(releaseRpc);
-  const first = useLatest(from);
-  const read = from !== undefined;
-
-  useEffect(() => {
-    const stopping = new AbortController();
-
-    if (read) {
-      refreshOnChanges(
-        {
-          wait: async (input) => {
-            const answer = await wait({ directory, ...input });
-
-            return answer;
-          },
-          release: async (version) => {
-            await release({ directory, version });
-          },
-        },
-        refresh,
-        first.current ?? "",
-        stopping.signal,
-      );
-    }
-
-    return () => {
-      stopping.abort();
-    };
-  }, [directory, read, wait, release, refresh, first]);
-}
-
 // What's open, from what the tab kept: once the changes are first listed, what's still open of it,
 // or else the first file the sidebar lists, with what it hides hidden, and after that, moved on from
 // the open file whenever the changes are listed again and its group no longer lists it, as after an
@@ -165,29 +126,19 @@ function useOpen(kept: Open | undefined, changes: Listed | undefined, hidden: Hi
   return [open, setOpen] as const;
 }
 
-// What the sidebar shows, and the review comments pending and the message they're to be sent with,
-// with what changes them, as the tab kept them before Paseo reloaded, if it did, and kept in the
-// tab whenever they change, so that the tab shows them again once Paseo reloads.
+// What the sidebar shows, with what changes it, as the tab kept it before Paseo reloaded, if it
+// did, and kept in the tab whenever it changes, so that the tab shows it again once Paseo reloads.
 function useKeptState(tab: PluginTab, changes: Listed | undefined) {
   const [kept, keep] = useTabState(tab, tabState, startingTab);
   const [filter, setFilter] = useState(kept.filter);
   const [collapsed, setCollapsed] = useState(kept.collapsed);
   const [open, setOpen] = useOpen(kept.open ?? undefined, changes, { filter, collapsed });
   const [width, setWidth] = useState(kept.fileListWidth);
-  const [comments, setComments] = useState<readonly ReviewComment[]>(kept.comments);
-  const [message, setMessage] = useState(kept.message);
   const latestKeep = useLatest(keep);
 
   useEffect(() => {
-    latestKeep.current({
-      fileListWidth: width,
-      open: open ?? null,
-      collapsed,
-      filter,
-      comments: [...comments],
-      message,
-    });
-  }, [latestKeep, width, open, collapsed, filter, comments, message]);
+    latestKeep.current({ fileListWidth: width, open: open ?? null, collapsed, filter });
+  }, [latestKeep, width, open, collapsed, filter]);
 
   const sidebar: SidebarState = {
     open,
@@ -202,7 +153,7 @@ function useKeptState(tab: PluginTab, changes: Listed | undefined) {
     onWidth: setWidth,
   };
 
-  return { sidebar, review: { comments, onComments: setComments, message, onMessage: setMessage } };
+  return sidebar;
 }
 
 export interface ChangesProps {
@@ -212,6 +163,8 @@ export interface ChangesProps {
   layout: Layout;
   // Whether diffs are read with whitespace changes hidden.
   hideWhitespace: boolean;
+  // The review the workspace keeps, with what changes it.
+  review: ReviewState;
   tab: PluginTab;
   theme: PluginTheme;
 }
@@ -221,6 +174,7 @@ export function Changes({
   directory,
   layout,
   hideWhitespace,
+  review,
   tab,
   theme,
 }: ChangesProps): ReactElement {
@@ -236,7 +190,7 @@ export function Changes({
     },
   });
 
-  const { sidebar, review } = useKeptState(tab, changes.data);
+  const sidebar = useKeptState(tab, changes.data);
   const pending = useMemo(() => pendingCounts(review.comments), [review.comments]);
   const [panelWidth, setPanelWidth] = useState(Number.POSITIVE_INFINITY);
   const shownDiffs = useMemo(() => new Map<string, Diff>(), []);
@@ -298,8 +252,6 @@ export function Changes({
     [theme],
   );
 
-  useRefreshOnChanges(directory, readAt(changes), refresh);
-
   // Switching back from an editor may have changed what nothing tells of a change to, such as a
   // file outside the worktree that git reads.
   useWindowFocus(() => {
@@ -315,6 +267,7 @@ export function Changes({
         setPanelWidth(width);
       })}
     >
+      <RefreshOnChanges directory={directory} from={readAt(changes)} refresh={refresh} />
       <KeyboardFocusContext value={focus}>
         <WithKeyStrip panel={id} theme={theme}>
           <Sidebar
@@ -335,7 +288,6 @@ export function Changes({
               listed={changes.data}
               onOpen={sidebar.onOpen}
               hideWhitespace={hideWhitespace}
-              tab={tab}
               theme={theme}
             >
               <DiffWithFind panelFind={findBar} theme={theme}>

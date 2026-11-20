@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import { writeFile } from "../test/repository";
-import { changesSettings, expect, test as base } from "./fixtures";
+import { expect, test } from "./fixtures";
 import { box, button, line, openFile, row } from "./panel";
 import { changeA, comment, editor, openReview, pending, startComment } from "./review";
 
@@ -27,21 +27,6 @@ function sizeOf(locator: Locator): () => Promise<{ width: number; height: number
     return { width, height };
   };
 }
-
-// The sizes are the host's, so each test puts back the defaults it may have changed.
-const test = base.extend<Record<"defaultSizes", void>>({
-  defaultSizes: [
-    async ({ app, page }, provide) => {
-      await provide();
-      await app.openSettings();
-      await choose(page, "Diff font size", 13);
-      await choose(page, "Panel font size", 13);
-    },
-    { auto: true },
-  ],
-});
-
-changesSettings();
 
 test("Better Diff's page in Paseo's settings says, by its font sizes' heading, that Paseo's own sizes don't change Better Diff, while zooming Paseo does", async ({
   app,
@@ -214,7 +199,36 @@ test("what a comment says scales with the diff font size, a little larger than t
   );
 });
 
-test("a size chosen on one client of the host shows at once in a Better Diff panel open on another", async ({
+test("a size chosen is saved on the device it's chosen on, and another client of the host keeps its own", async ({
+  app,
+  page,
+  otherDevice,
+  repository,
+}) => {
+  writeFile(repository, "a.txt", "alpha\n");
+
+  await app.openSettings();
+  await choose(page, "Diff font size", 16);
+  await choose(page, "Panel font size", 18);
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
+  await expect(line(page, "alpha")).toHaveCSS("font-size", "16px");
+  await expect(path(page, "a.txt")).toHaveCSS("font-size", "18px");
+
+  await otherDevice.app.openPanel();
+  await openFile(otherDevice.page, "UNTRACKED FILES (1)", "a.txt");
+
+  await expect(line(otherDevice.page, "alpha")).toHaveCSS("font-size", "13px");
+  await expect(path(otherDevice.page, "a.txt")).toHaveCSS("font-size", "13px");
+
+  await otherDevice.app.openSettings();
+
+  await expect(otherDevice.page.getByRole("button", { name: "Diff font size: 13" })).toBeVisible();
+  await expect(otherDevice.page.getByRole("button", { name: "Panel font size: 13" })).toBeVisible();
+});
+
+test("a size chosen in a window of Paseo after another window on the device chose one isn't saved, and says to try again, and tried again, it is", async ({
   app,
   page,
   repository,
@@ -222,18 +236,26 @@ test("a size chosen on one client of the host shows at once in a Better Diff pan
   writeFile(repository, "a.txt", "alpha\n");
 
   await app.openSettings();
-
-  const settings = page.url();
-
-  await app.openPanel();
-  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
-  await expect(line(page, "alpha")).toHaveCSS("font-size", "13px");
+  await expect(page.getByRole("button", { name: "Diff font size: 13" })).toBeVisible();
 
   const other = await page.context().newPage();
 
-  await other.goto(settings);
+  await other.goto(page.url());
   await choose(other, "Diff font size", 16);
   await other.close();
 
+  await page.getByRole("button", { name: /^Panel font size: /u }).click();
+  await page.getByRole("menuitem", { name: "18", exact: true }).click();
+
+  await expect(
+    page.getByText("The diff settings couldn't be changed. Try again.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Diff font size: 16" })).toBeVisible();
+
+  await choose(page, "Panel font size", 18);
+  await app.openPanel();
+  await openFile(page, "UNTRACKED FILES (1)", "a.txt");
+
   await expect(line(page, "alpha")).toHaveCSS("font-size", "16px");
+  await expect(path(page, "a.txt")).toHaveCSS("font-size", "18px");
 });

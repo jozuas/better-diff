@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 
 import { vi } from "vitest";
 
-import { changeFrom, release } from "../server/wait";
-import type { Watched } from "../server/wait";
+import { subscribe } from "../server/subscribers";
+import type { Watched } from "../server/subscribers";
 
-// The order in which waiters ask, checks start and versions change, across things.
+// The order in which subscribers come, leave and are told, checks start and end, and versions
+// change, across things.
 let order = 0;
 
 export function nextInOrder(): number {
@@ -17,8 +18,9 @@ export function nextInOrder(): number {
 export interface Check {
   order: number;
   started: number;
-  // When it ended, or was told to stop.
+  // When it ended, or was told to stop, and where that was in the order, once it has.
   ended: number;
+  endedOrder: number;
   // The version as the check started, which it finds unless it fails.
   version: string;
   // Whether it was told to stop, and whether it failed, as one told to stop does.
@@ -26,12 +28,21 @@ export interface Check {
   failed: boolean;
 }
 
-export interface Answer {
+interface Told {
   order: number;
-  asked: number;
-  version: string | undefined;
-  failed: boolean;
-  at: number | undefined;
+  version: string;
+  at: number;
+}
+
+export interface Subscription {
+  order: number;
+  subscribed: number;
+  // Each version it was told, as it was.
+  told: Told[];
+  // When it left, and where that was in the order, once it has.
+  left: number | undefined;
+  leftOrder: number | undefined;
+  leave: () => void;
 }
 
 export interface Thing {
@@ -52,13 +63,8 @@ export interface Thing {
   listened: () => number;
   listenings: () => number[];
   stopped: () => number;
-  // Waits for a change from the version given, saying what it was answered with, and when.
-  wait: (from: string, timeout?: number) => Answer;
-  // Waits for a change from the version given, and from each it's answered with as soon as it's
-  // answered, until the function it gives is called.
-  keepWaiting: (from: string) => () => void;
-  // Releases the waits from the version given.
-  release: (from: string) => void;
+  // Subscribes to its version, saying what it's told, and when.
+  subscribe: () => Subscription;
 }
 
 // How its listener does: tells of changes when the test says, fails to, or throws as it starts.
@@ -91,6 +97,7 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
         order: nextInOrder(),
         started: now(),
         ended: Number.NaN,
+        endedOrder: Number.NaN,
         version: found,
         stopped: false,
         failed: false,
@@ -100,6 +107,7 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
         check.stopped = true;
         check.failed = true;
         check.ended = now();
+        check.endedOrder = nextInOrder();
       });
       checks.push(check);
       await new Promise((resolve) => {
@@ -108,6 +116,7 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
         }
       });
       check.ended = now();
+      check.endedOrder = nextInOrder();
 
       if (fails) {
         check.failed = true;
@@ -162,46 +171,27 @@ export function thing(took: number, listens: Listens = "tells", starts = 0): Thi
     listened: () => listenings.length,
     listenings: () => [...listenings],
     stopped: () => stopped,
-    wait: (from, timeout = 50_000) => {
-      const answer: Answer = {
+    subscribe: () => {
+      const subscription: Subscription = {
         order: nextInOrder(),
-        asked: now(),
-        version: undefined,
-        failed: false,
-        at: undefined,
+        subscribed: now(),
+        told: [],
+        left: undefined,
+        leftOrder: undefined,
+        leave: () => {},
       };
 
-      void (async () => {
-        try {
-          answer.version = await changeFrom(key, watched, from, timeout);
-        } catch {
-          answer.failed = true;
-        }
+      const leave = subscribe(key, watched, (told) => {
+        subscription.told.push({ order: nextInOrder(), version: told, at: now() });
+      });
 
-        answer.at = now();
-      })();
-
-      return answer;
-    },
-    keepWaiting: (from) => {
-      let waiting = true;
-
-      async function waitFrom(asked: string): Promise<void> {
-        const changed = await changeFrom(key, watched, asked, 50_000);
-
-        if (waiting) {
-          await waitFrom(changed);
-        }
-      }
-
-      void waitFrom(from);
-
-      return () => {
-        waiting = false;
+      subscription.leave = () => {
+        subscription.left = now();
+        subscription.leftOrder = nextInOrder();
+        leave();
       };
-    },
-    release: (from) => {
-      release(key, from);
+
+      return subscription;
     },
   };
 }
@@ -211,6 +201,7 @@ export async function pass(milliseconds: number): Promise<void> {
   await vi.advanceTimersByTimeAsync(milliseconds);
 }
 
-export function answered(answer: Answer): Pick<Answer, "version" | "at" | "failed"> {
-  return { version: answer.version, at: answer.at, failed: answer.failed };
+// What the subscription was told, and when.
+export function toldTo({ told }: Subscription): [string, number][] {
+  return told.map(({ version, at }) => [version, at]);
 }

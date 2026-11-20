@@ -63,3 +63,37 @@ test("once a review's sent, until another comment's started, Restore sent review
   await expect(editor(page)).toBeVisible();
   await expect(button(page, "Restore sent review")).toBeHidden();
 });
+
+test("a review restored makes its comments pending again but for those that say what one pending already says on the same lines, as one another client made since", async ({
+  agents,
+  app,
+  page,
+  otherDevice,
+  repository,
+}) => {
+  const other = otherDevice.page;
+
+  changeA(repository);
+
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+  // Before an agent is started, which the workspace shows in Better Diff's place.
+  await otherDevice.app.openPanel();
+  await openFile(other, "MODIFIED FILES (1)", "a.txt");
+  await comment(page, "BRAVO", "Why uppercase?");
+  await comment(page, "delta", "Not needed");
+  await agents.start("Reviewer");
+  await sendTo(page, await openReview(page, 2), "Reviewer");
+
+  await expect(page.getByText("Feedback sent to Reviewer.", { exact: true })).toBeVisible();
+
+  await comment(other, "BRAVO", "Why uppercase?");
+
+  await expect(button(page, "Review (1)")).toBeVisible();
+
+  await button(page, "Restore sent review").click();
+
+  await expect(button(page, "Review (2)")).toBeVisible();
+  await expect(pending(page, "Why uppercase?")).toHaveCount(1);
+  await expect(pending(page, "Not needed")).toBeVisible();
+});

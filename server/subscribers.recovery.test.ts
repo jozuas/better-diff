@@ -1,41 +1,38 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { answered, pass, thing } from "../test/watched";
-import { stopWaiting } from "./wait";
+import { pass, thing, toldTo } from "../test/watched";
+import { unsubscribeAll } from "./subscribers";
 
 beforeEach(() => {
   vi.useFakeTimers();
 });
 
 afterEach(() => {
-  stopWaiting();
+  unsubscribeAll();
   vi.useRealTimers();
 });
 
 // Checks start at 0ms, at 1010ms, once listening has started, and at 2020ms, once told of a change.
-// That one hangs, as git status can on a hook. The second wait is long, so that the check it's
-// answered by is due as the change it's told of calls for, and not as its wait is over.
-test("stops a check that takes a minute, fails the waits it was for, and rests after it as long as before it", async () => {
+// That one hangs, as git status can on a hook.
+test("stops a check that takes a minute, and checks again a second after, as after one that failed", async () => {
   const watched = thing(10);
-  const first = watched.wait("1", 100_000);
+  const subscription = watched.subscribe();
 
   await pass(2000);
   watched.hangChecks(true);
+  watched.set("2");
   watched.changed();
   await pass(60_020);
 
-  expect(answered(first)).toStrictEqual({ version: undefined, at: 62_020, failed: true });
   expect(watched.checks.map(({ stopped }) => stopped)).toStrictEqual([false, false, true]);
 
   watched.hangChecks(false);
-  watched.set("2");
-
-  const second = watched.wait("1", 1_000_000);
-
-  watched.changed();
   await pass(1010);
 
-  expect(answered(second)).toStrictEqual({ version: "2", at: 63_030, failed: false });
+  expect(toldTo(subscription)).toStrictEqual([
+    ["1", 10],
+    ["2", 63_030],
+  ]);
   expect(watched.starts()).toStrictEqual([0, 1010, 2020, 63_020]);
 });
 
@@ -43,12 +40,11 @@ test("stops a check that takes a minute, fails the waits it was for, and rests a
 // 31_020ms, finds.
 test("listens anew once a check finds a change it wasn't told of", async () => {
   const watched = thing(10);
-  const stop = watched.keepWaiting("1");
 
+  watched.subscribe();
   await pass(5000);
   watched.set("2");
   await pass(30_000);
-  stop();
 
   expect(watched.listenings()).toStrictEqual([0, 31_030]);
   expect(watched.stopped()).toBe(1);
@@ -61,14 +57,13 @@ test.each([
   [" as the check that finds it runs", 100, 31_150, 100],
 ])("keeps listening where it's told of a change%s", async (_, took, changedAt, toldAfter) => {
   const watched = thing(took);
-  const stop = watched.keepWaiting("1");
 
+  watched.subscribe();
   await pass(changedAt);
   watched.set("2");
   await pass(toldAfter);
   watched.changed();
   await pass(40_000);
-  stop();
 
   expect(watched.listenings()).toStrictEqual([0]);
 });
@@ -76,22 +71,20 @@ test.each([
 // Checks half a minute apart find what the one before did.
 test("keeps listening where nothing changes", async () => {
   const watched = thing(10);
-  const stop = watched.keepWaiting("1");
 
+  watched.subscribe();
   await pass(100_000);
-  stop();
 
   expect(watched.listenings()).toStrictEqual([0]);
 });
 
 test("keeps listening where a change is found while listening fails, as checks are made every second", async () => {
   const watched = thing(10, "fails");
-  const stop = watched.keepWaiting("1");
 
+  watched.subscribe();
   await pass(2500);
   watched.set("2");
   await pass(2500);
-  stop();
 
   expect(watched.listenings()).toStrictEqual([0]);
 });
@@ -101,7 +94,7 @@ test("keeps listening where a change is found while listening fails, as checks a
 test("listens anew a minute after listening that told of changes fails, each time", async () => {
   const watched = thing(10);
 
-  watched.wait("1", 1_000_000);
+  watched.subscribe();
   await pass(5000);
   watched.failed();
   await pass(65_000);
@@ -118,7 +111,7 @@ test("listens anew a minute after listening that told of changes fails, each tim
 test("listens anew twice as long after listening that failed before it told of anything as after the one before it, up to an hour", async () => {
   const watched = thing(10, "throws");
 
-  watched.wait("1", 20_000_000);
+  watched.subscribe();
   await pass(11_000_000);
 
   expect(watched.listenings().map((at) => Math.floor(at / 10_000) * 10_000)).toStrictEqual([

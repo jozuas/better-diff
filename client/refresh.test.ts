@@ -11,56 +11,53 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-// One wait for changes: the version it answers with, or undefined if it fails, whether the refresh
-// it calls for, if any, fails, and how many milliseconds each takes.
-interface Step {
-  answer: string | undefined;
-  waitTakes: number;
-  refreshFails: boolean;
-  refreshTakes: number;
-}
+// What happens to a view: the changes are told to be at a version, what it shows is read at one, or
+// it's told to stop refreshing.
+type Happening =
+  | { kind: "told"; version: string }
+  | { kind: "read"; version: string }
+  | { kind: "stop" };
 
-// Few versions, so that a wait often answers with the one before.
-const step: fc.Arbitrary<Step> = fc.record({
-  answer: fc.option(fc.constantFrom("a", "b", "c"), { nil: undefined }),
-  waitTakes: fc.integer({ min: 0, max: 3000 }),
-  refreshFails: fc.boolean(),
-  refreshTakes: fc.integer({ min: 0, max: 3000 }),
+// Few versions, so that the changes are often told to be at the one shown.
+const version = fc.constantFrom("a", "b", "c");
+
+const happening: fc.Arbitrary<Happening> = fc.oneof(
+  { weight: 6, arbitrary: fc.record({ kind: fc.constant("told" as const), version }) },
+  { weight: 2, arbitrary: fc.record({ kind: fc.constant("read" as const), version }) },
+  { weight: 1, arbitrary: fc.record({ kind: fc.constant("stop" as const) }) },
+);
+
+// Each a while after the one before it.
+const happenings = fc.array(fc.record({ after: fc.integer({ min: 0, max: 3000 }), happening }), {
+  maxLength: 12,
 });
 
-const steps = fc.array(step, { maxLength: 12 });
+// How each refresh in turn goes: how many milliseconds it takes, and whether it fails. Those after
+// the last take none, and don't fail.
+interface Outcome {
+  takes: number;
+  fails: boolean;
+}
 
-// The version what's shown was read at before the first wait, or an empty one, which none is.
-const from = fc.constantFrom("", "a", "b");
+const outcomes = fc.array(
+  fc.record({ takes: fc.integer({ min: 0, max: 3000 }), fails: fc.boolean() }),
+  { maxLength: 12 },
+);
 
-// What the changes were at, by the last wait's answer, and what was shown, by the last refresh that
-// didn't fail, or as read before the first wait.
+// What the changes were last told to be at, what the view shows them at, by what it was first read
+// at and the last refresh that didn't fail, and whether it's been told to stop.
 interface State {
-  changes: string | undefined;
-  shown: string;
+  told: string | undefined;
+  shown: string | undefined;
+  stopped: boolean;
 }
 
-interface Wait extends State {
-  version: string;
-  timeout: number;
-}
-
-interface Run {
-  // As each was asked.
-  waits: Wait[];
-  refreshes: State[];
-  // The versions each refresh was asked to show.
-  refreshedTo: string[];
-  // The indices of the steps whose wait or refresh failed, and of those that refreshed.
-  failed: Set<number>;
-  refreshed: Set<number>;
-  // How many milliseconds in each wait was asked, and each step ended: its wait, or the refresh it
-  // called for.
-  asked: number[];
-  ended: number[];
-  // The versions of the waits released.
-  released: string[];
-}
+// What happened, in order, and when, with the state after it, or for a refresh that began, before.
+type Entry = State & { at: number } & (
+    | { kind: "happened" }
+    | { kind: "began"; version: string }
+    | { kind: "ended"; failed: boolean; rested: number }
+  );
 
 async function elapsed(milliseconds: number): Promise<void> {
   await new Promise((resolve) => {
@@ -68,242 +65,248 @@ async function elapsed(milliseconds: number): Promise<void> {
   });
 }
 
-// What refreshOnChanges asks of waits that answer as the steps say, in turn, and of a refresh that
-// shows the changes as the last wait answered them, unless it fails, starting from what was read at
-// `shown`. The wait after the steps answers with a version none of them did, once the signal has
-// said to stop while it waits.
-async function run(given: readonly Step[], shown = ""): Promise<Run> {
+// How long a refresh that took the milliseconds should be rested after.
+function restAfter(took: number, failed: boolean): number {
+  return failed ? Math.max(1000, 2 * took) : 2 * took;
+}
+
+// What refreshOnChanges does as the happenings happen, with a refresh that goes as the outcomes
+// say, until nothing is left for it to do.
+async function run(
+  given: readonly { after: number; happening: Happening }[],
+  refreshes: readonly Outcome[],
+): Promise<Entry[]> {
   const stopping = new AbortController();
   const start = Date.now();
-
-  const ran: Run = {
-    waits: [],
-    refreshes: [],
-    refreshedTo: [],
-    failed: new Set(),
-    refreshed: new Set(),
-    asked: [],
-    ended: [],
-    released: [],
-  };
-
-  const state: State = { changes: undefined, shown };
-  const last: Step = { answer: "stopped", waitTakes: 0, refreshFails: false, refreshTakes: 0 };
+  const log: Entry[] = [];
+  const state: State = { told: undefined, shown: undefined, stopped: false };
+  let began = 0;
 
   function now(): number {
     return Date.now() - start;
   }
 
-  // The step's index, and its end so far, once it's taken its time.
-  async function taken(milliseconds: number): Promise<number> {
-    const index = ran.waits.length - 1;
+  const following = refreshOnChanges(async (asked) => {
+    const { takes, fails } = refreshes[began] ?? { takes: 0, fails: false };
 
-    await elapsed(milliseconds);
-    ran.ended[index] = now();
+    began += 1;
+    log.push({ kind: "began", version: asked, at: now(), ...state });
+    await elapsed(takes);
 
-    return index;
-  }
-
-  refreshOnChanges(
-    {
-      wait: async ({ version, timeout }) => {
-        const { answer, waitTakes } = given[ran.waits.length] ?? last;
-
-        ran.waits.push({ ...state, version, timeout });
-        ran.asked.push(now());
-
-        const index = await taken(waitTakes);
-
-        if (index === given.length) {
-          stopping.abort();
-        }
-
-        if (answer === undefined) {
-          ran.failed.add(index);
-
-          throw new Error("The wait failed.");
-        }
-
-        state.changes = answer;
-
-        return { version: answer };
-      },
-      release: async (version) => {
-        ran.released.push(version);
-        await elapsed(0);
-      },
-    },
-    async (version) => {
-      const { refreshFails, refreshTakes } = given[ran.waits.length - 1] ?? last;
-
-      ran.refreshes.push({ ...state });
-      ran.refreshedTo.push(version);
-      ran.refreshed.add(ran.waits.length - 1);
-
-      const index = await taken(refreshTakes);
-
-      if (refreshFails) {
-        ran.failed.add(index);
-
-        throw new Error("The refresh failed.");
-      }
-
-      state.shown = version;
-    },
-    shown,
-    stopping.signal,
-  );
-
-  await vi.runAllTimersAsync();
-
-  return ran;
-}
-
-// The waits asked while what was shown wasn't the changes as the wait before answered them, though
-// nothing failed in its step.
-function outOfDate({ waits, failed }: Run): Wait[] {
-  return waits.filter(
-    ({ changes, shown }, index) => index > 0 && changes !== shown && !failed.has(index - 1),
-  );
-}
-
-// How many milliseconds after each step ended the next wait was asked.
-function pauses({ asked, ended }: Run): number[] {
-  return asked.slice(1).map((at, index) => at - (ended[index] ?? Number.NaN));
-}
-
-// How many milliseconds each step's next wait should be asked after it ends: a second after a wait
-// fails, twice as long as a refresh took after one, but a second at least after one that fails.
-function rests(given: readonly Step[], { failed, refreshed }: Run): number[] {
-  return given.map(({ refreshFails, refreshTakes }, index) => {
-    if (!refreshed.has(index)) {
-      return failed.has(index) ? 1000 : 0;
+    if (!fails) {
+      state.shown = asked;
     }
 
-    return refreshFails ? Math.max(1000, 2 * refreshTakes) : 2 * refreshTakes;
+    log.push({
+      kind: "ended",
+      failed: fails,
+      rested: restAfter(takes, fails),
+      at: now(),
+      ...state,
+    });
+
+    if (fails) {
+      throw new Error("The refresh failed.");
+    }
+  }, stopping.signal);
+
+  function happen(happened: Happening): void {
+    switch (happened.kind) {
+      case "told": {
+        state.told = happened.version;
+        log.push({ kind: "happened", at: now(), ...state });
+        following.told(happened.version);
+        break;
+      }
+
+      case "read": {
+        state.shown ??= happened.version;
+        log.push({ kind: "happened", at: now(), ...state });
+        following.read(happened.version);
+        break;
+      }
+
+      case "stop": {
+        state.stopped = true;
+        log.push({ kind: "happened", at: now(), ...state });
+        stopping.abort();
+        break;
+      }
+    }
+  }
+
+  async function take(rest: readonly { after: number; happening: Happening }[]): Promise<void> {
+    const [next, ...later] = rest;
+
+    if (next !== undefined) {
+      await vi.advanceTimersByTimeAsync(next.after);
+      happen(next.happening);
+      await take(later);
+    }
+  }
+
+  await take(given);
+  await vi.runAllTimersAsync();
+
+  return log;
+}
+
+// Whether a refresh is called for: what's shown has been read, the changes aren't at the version
+// it's at, and it hasn't been told to stop.
+function calledFor({ told, shown, stopped }: State): boolean {
+  return !stopped && shown !== undefined && told !== undefined && told !== shown;
+}
+
+interface Busy {
+  // When the rest after the last refresh that ended is over, or was, if one has.
+  free: number;
+  // Whether a refresh is under way.
+  refreshing: boolean;
+}
+
+// As the entry at the index happens.
+function busyAt(log: readonly Entry[], index: number): Busy {
+  const last = log.slice(0, index).findLast(({ kind }) => kind !== "happened");
+
+  return {
+    free: last?.kind === "ended" ? last.at + last.rested : -Infinity,
+    refreshing: last?.kind === "began",
+  };
+}
+
+// The refreshes that began though none was called for, or for another version than the changes were
+// last told to be at, or while another was under way.
+function uncalledFor(log: readonly Entry[]): Entry[] {
+  return log.filter(
+    (entry, index) =>
+      entry.kind === "began" &&
+      !(calledFor(entry) && entry.version === entry.told && !busyAt(log, index).refreshing),
+  );
+}
+
+// The refreshes that began before the rest after the one before was over.
+function unrested(log: readonly Entry[]): Entry[] {
+  return log.filter((entry, index) => entry.kind === "began" && entry.at < busyAt(log, index).free);
+}
+
+// What happened that called for a refresh, with none under way and the rest after the last over,
+// without one beginning at once.
+function leftWaiting(log: readonly Entry[]): Entry[] {
+  return log.filter((entry, index) => {
+    const { free, refreshing } = busyAt(log, index);
+    const next = log[index + 1];
+
+    return (
+      entry.kind === "happened" &&
+      calledFor(entry) &&
+      !refreshing &&
+      entry.at > free &&
+      !(next?.kind === "began" && next.at === entry.at)
+    );
   });
 }
 
-test("refreshes only while what's shown isn't the changes as the last wait answered", async () => {
-  await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const { refreshes } = await run(given, shown);
+// The state as the rest after the refresh that ended at the entry is over, unless something
+// happens just then, when it may be either side of that.
+function stateOnceRested(log: readonly Entry[], index: number): State | undefined {
+  const { free } = busyAt(log, index + 1);
+  const until = log.slice(index + 1).filter(({ kind, at }) => kind === "happened" && at <= free);
 
-      expect(refreshes.filter(({ changes, shown: then }) => changes === then)).toStrictEqual([]);
+  return until.some(({ at }) => at === free) ? undefined : (until.at(-1) ?? log[index]);
+}
+
+// The refreshes that ended with one called for as the rest after them was over, without one
+// beginning then.
+function leftRested(log: readonly Entry[]): Entry[] {
+  return log.filter((entry, index) => {
+    const state = stateOnceRested(log, index);
+    const { free } = busyAt(log, index + 1);
+
+    return (
+      entry.kind === "ended" &&
+      state !== undefined &&
+      calledFor(state) &&
+      !log.some(({ kind, at }) => kind === "began" && at === free)
+    );
+  });
+}
+
+test("refreshes one at a time, for the version the changes were last told to be at, and only while what's shown, once it's read, isn't at it, until it's told to stop", async () => {
+  await fc.assert(
+    fc.asyncProperty(happenings, outcomes, async (given, refreshes) => {
+      expect(uncalledFor(await run(given, refreshes))).toStrictEqual([]);
     }),
   );
 });
 
-test("refreshes to show the changes as the last wait answered them", async () => {
+test("rests twice as long as a refresh took before the next, and a second at least after one that failed", async () => {
   await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const { refreshes, refreshedTo } = await run(given, shown);
-
-      expect(refreshedTo).toStrictEqual(refreshes.map(({ changes }) => changes));
-    }),
-  );
-});
-
-test("waits from the version shown, starting from the one what's shown was read at", async () => {
-  await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const { waits } = await run(given, shown);
-
-      expect(waits.map(({ version }) => version)).toStrictEqual(
-        waits.map(({ shown: then }) => then),
-      );
-    }),
-  );
-});
-
-test("shows the changes as a wait answers them before it waits again, unless that fails", async () => {
-  await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      expect(outOfDate(await run(given, shown))).toStrictEqual([]);
+    fc.asyncProperty(happenings, outcomes, async (given, refreshes) => {
+      expect(unrested(await run(given, refreshes))).toStrictEqual([]);
     }),
     {
       examples: [
-        [[{ answer: "a", waitTakes: 0, refreshFails: false, refreshTakes: 0 }], ""],
         [
           [
-            { answer: "a", waitTakes: 0, refreshFails: true, refreshTakes: 0 },
-            { answer: "a", waitTakes: 0, refreshFails: false, refreshTakes: 0 },
+            { after: 0, happening: { kind: "read", version: "a" } },
+            { after: 0, happening: { kind: "told", version: "b" } },
+            { after: 400, happening: { kind: "told", version: "c" } },
           ],
-          "",
+          [{ takes: 300, fails: false }],
         ],
       ],
     },
   );
 });
 
-test("waits again at once, twice as long as a refresh took after one, and a second at least after a wait or a refresh fails", async () => {
+test("refreshes at once when a refresh comes to be called for, unless it's refreshing or resting", async () => {
   await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const ran = await run(given, shown);
-
-      expect(pauses(ran)).toStrictEqual(rests(given, ran));
+    fc.asyncProperty(happenings, outcomes, async (given, refreshes) => {
+      expect(leftWaiting(await run(given, refreshes))).toStrictEqual([]);
     }),
     {
       examples: [
-        [[{ answer: "a", waitTakes: 0, refreshFails: true, refreshTakes: 700 }], ""],
-        [[{ answer: "a", waitTakes: 0, refreshFails: true, refreshTakes: 300 }], ""],
+        [
+          [
+            { after: 0, happening: { kind: "told", version: "b" } },
+            { after: 500, happening: { kind: "read", version: "a" } },
+          ],
+          [],
+        ],
       ],
     },
   );
 });
 
-test("asks each wait to last 50 seconds if nothing changes, as long as changes.wait allows", async () => {
+test("refreshes as soon as it has rested, if a refresh is called for then, as for a version told of meanwhile, or one whose refresh failed", async () => {
   await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const { waits } = await run(given, shown);
-
-      expect(waits.map(({ timeout }) => timeout)).toStrictEqual(waits.map(() => 50_000));
+    fc.asyncProperty(happenings, outcomes, async (given, refreshes) => {
+      expect(leftRested(await run(given, refreshes))).toStrictEqual([]);
     }),
-  );
-});
-
-test("neither refreshes nor waits again once the signal says to stop, though a wait answers with another version then, and releases that wait", async () => {
-  await fc.assert(
-    fc.asyncProperty(steps, from, async (given, shown) => {
-      const { waits, refreshes, released } = await run(given, shown);
-
-      expect(waits).toHaveLength(given.length + 1);
-      expect(refreshes.filter(({ changes }) => changes === "stopped")).toStrictEqual([]);
-      expect(released).toStrictEqual([waits.at(-1)?.version]);
-    }),
-  );
-});
-
-test("releases no wait once the signal says to stop while it refreshes", async () => {
-  const stopping = new AbortController();
-  const release = vi.fn<(version: string) => Promise<void>>();
-
-  refreshOnChanges(
     {
-      wait: async () => {
-        await elapsed(10);
-
-        return { version: "a" };
-      },
-      release,
+      examples: [
+        [
+          [
+            { after: 0, happening: { kind: "read", version: "a" } },
+            { after: 0, happening: { kind: "told", version: "b" } },
+          ],
+          [
+            { takes: 700, fails: true },
+            { takes: 300, fails: true },
+          ],
+        ],
+      ],
     },
-    async () => {
-      stopping.abort();
-      await elapsed(100);
-    },
-    "",
-    stopping.signal,
   );
-  await vi.runAllTimersAsync();
-
-  expect(release).not.toHaveBeenCalled();
 });
 
-test("waits for nothing if the signal has said to stop already", async () => {
-  const wait = vi.fn<(input: { version: string }) => Promise<{ version: string }>>();
+test("does nothing if the signal has said to stop already", async () => {
+  const refresh = vi.fn<(asked: string) => Promise<void>>();
+  const following = refreshOnChanges(refresh, AbortSignal.abort());
 
-  refreshOnChanges({ wait, release: async () => {} }, async () => {}, "", AbortSignal.abort());
+  following.read("a");
+  following.told("b");
   await vi.runAllTimersAsync();
 
-  expect(wait).not.toHaveBeenCalled();
+  expect(refresh).not.toHaveBeenCalled();
 });

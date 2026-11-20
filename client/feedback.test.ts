@@ -3,11 +3,12 @@ import * as fc from "fast-check";
 import { expect, test, vi } from "vitest";
 
 import type { diffRpc } from "../shared/diff";
+import { changedBy, noReview } from "../shared/review";
 import { diffHunks, reviewComments, reviewed } from "../test/comments";
 import { reviewOf } from "./attachment";
 import type { ReviewAttachment } from "./attachment";
 import type { ListedAgent, NewAgent, Recipient, ReviewComment } from "./comments";
-import { agentsIn, feedbackTo, messageAfter } from "./feedback";
+import { agentsIn, changesAfter, feedbackTo } from "./feedback";
 import type { FeedbackServer, Told } from "./feedback";
 import type { CommentedFile } from "./numbering";
 
@@ -334,11 +335,15 @@ test("a send that fails says why, and has sent nothing", async () => {
   });
 });
 
-test("the message is empty again once comments have been sent with it, unless it's changed since, and else stays", () => {
+test("once comments have been sent with the message, they no longer pend, and the message is empty again, unless it's changed since, and where none were sent, nothing changes", () => {
   const sent = { message: "", variant: "success", sent: [comment] } as const;
   const none = { message: "", variant: "warning", sent: [] } as const;
 
-  expect(messageAfter(sent, "Fix these.", "Fix these.")).toBe("");
-  expect(messageAfter(sent, "Fix these.", "Fix these, and test.")).toBe("Fix these, and test.");
-  expect(messageAfter(none, "Fix these.", "Fix these.")).toBe("Fix these.");
+  const pending = { comments: [comment], message: "Fix these." };
+
+  expect(changedBy(pending, changesAfter(sent, "Fix these."))).toStrictEqual(noReview);
+  expect(
+    changedBy({ ...pending, message: "Fix these, and test." }, changesAfter(sent, "Fix these.")),
+  ).toStrictEqual({ comments: [], message: "Fix these, and test." });
+  expect(changesAfter(none, "Fix these.")).toStrictEqual([]);
 });

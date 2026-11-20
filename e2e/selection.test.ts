@@ -212,6 +212,7 @@ test("an action on the selected files changes nothing, and says so, if one has l
 }) => {
   changeFive(repository);
 
+  await app.holdWatches();
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (5)", "b.txt");
   await shiftClick(page, "MODIFIED FILES (5)", "c.txt");

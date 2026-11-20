@@ -1,9 +1,9 @@
 import type { PluginTheme } from "@getpaseo/plugin";
-import type { Dispatch, ReactElement, SetStateAction } from "react";
+import type { ReactElement } from "react";
 import { useContext, useMemo, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import type { ReviewComment, SentReview } from "./comments";
+import type { SentReview } from "./comments";
 import { barShows, reviewLabel, writtenNowhereSaid } from "./feedback";
 import { FontSizesContext } from "./fonts";
 import type { Rect } from "./menu";
@@ -151,15 +151,10 @@ function Bar({
   );
 }
 
-interface ReviewBarProps extends BarProps {
-  comments: readonly ReviewComment[];
-  onComments: Dispatch<SetStateAction<readonly ReviewComment[]>>;
-}
-
 // While it has anything, as barShows has it, a bar under the diff whose button, which says how many
 // comments are pending, opens the review of them, as GitHub's opens a review being written, whose
 // other button restores the review sent, and which says what's being written under a line is no
 // longer in its diffs, beside what discards it.
-export function ReviewBar(props: ReviewBarProps): ReactElement | null {
+export function ReviewBar(props: BarProps): ReactElement | null {
   return barShows(props) ? <Bar {...props} /> : null;
 }

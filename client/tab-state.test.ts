@@ -2,7 +2,6 @@ import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
 import { groupName } from "../test/changes";
-import { reviewComments } from "../test/comments";
 import { filePath } from "../test/file-names";
 import type { Open } from "./groups";
 import { startingTab, tabState } from "./tab-state";
@@ -17,17 +16,15 @@ const open: fc.Arbitrary<Open> = fc.oneof(
   fc.record({ group: groupName }, { noNullPrototype: true }),
 );
 
-test("a tab reads back what it kept: the file list's width, what's open, the groups collapsed, the filter, the comments pending and their message", () => {
+test("a tab reads back what it kept: the file list's width, what's open, the groups collapsed and the filter", () => {
   fc.assert(
     fc.property(
       fc.integer({ min: 0, max: 4000 }),
       fc.option(open, { nil: null }),
       fc.uniqueArray(groupName),
       fc.string({ unit: "binary" }),
-      reviewComments,
-      fc.string({ unit: "binary" }),
-      (fileListWidth, shown, collapsed, filter, comments, message) => {
-        const kept = { fileListWidth, open: shown, collapsed, filter, comments, message };
+      (fileListWidth, shown, collapsed, filter) => {
+        const kept = { fileListWidth, open: shown, collapsed, filter };
 
         expect(tabState.parse(kept)).toStrictEqual(kept);
       },
@@ -35,41 +32,30 @@ test("a tab reads back what it kept: the file list's width, what's open, the gro
   );
 });
 
-test("a tab that kept only the file list's width has nothing open, no group collapsed, no filter, no comments pending and no message", () => {
+test("a tab that kept only the file list's width has nothing open, no group collapsed and no filter", () => {
   expect(tabState.parse({ fileListWidth: 380 })).toStrictEqual({
     fileListWidth: 380,
     open: null,
     collapsed: [],
     filter: "",
-    comments: [],
-    message: "",
   });
 });
 
-test("a tab starts with the file list 280 wide, nothing open, no group collapsed, no filter, no comments pending and no message", () => {
+test("a tab starts with the file list 280 wide, nothing open, no group collapsed and no filter", () => {
   expect(startingTab).toStrictEqual({
     fileListWidth: 280,
     open: null,
     collapsed: [],
     filter: "",
-    comments: [],
-    message: "",
   });
 });
 
-test("a tab that kept a comment on a line that isn't one isn't read", () => {
-  const comment = { path: "a.txt", side: "old", line: 1, id: 1, body: "" };
+test("a tab that kept a review, before the workspace kept reviews, is read without it", () => {
+  const comment = { path: "a.txt", side: "old", line: 1, id: 1, body: "Why?" };
 
-  expect(tabState.safeParse({ fileListWidth: 280, comments: [comment] }).success).toBe(true);
   expect(
-    tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, line: 0 }] }).success,
-  ).toBe(false);
-  expect(
-    tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, side: "both" }] }).success,
-  ).toBe(false);
-  expect(
-    tabState.safeParse({ fileListWidth: 280, comments: [{ ...comment, line: 1.5 }] }).success,
-  ).toBe(false);
+    tabState.parse({ fileListWidth: 280, comments: [comment], message: "Fix these." }),
+  ).toStrictEqual(startingTab);
 });
 
 test("a tab that kept a group that isn't one isn't read", () => {

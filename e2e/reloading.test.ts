@@ -59,7 +59,7 @@ test("once Paseo reloads, a tab shows the files it had selected that their group
 }) => {
   change(repository, ["a.txt", "b.txt", "c.txt", "d.txt"]);
 
-  await app.holdWaits();
+  await app.holdWatches();
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (4)", "a.txt");
   await row(page, "MODIFIED FILES (4)", "c.txt")
@@ -85,7 +85,7 @@ test("once Paseo reloads, a tab whose open file has left its group opens the fir
   writeFile(repository, "c.txt", "c\n");
   writeFile(repository, "d.txt", "d\n");
 
-  await app.holdWaits();
+  await app.holdWatches();
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (2)", "d.txt");
   await expect(line(page, "d")).toBeVisible();
@@ -108,7 +108,7 @@ test("once Paseo reloads, a tab whose open file has left its group opens the fir
   writeFile(repository, "d.md", "d\n");
   writeFile(repository, "e.md", "e\n");
 
-  await app.holdWaits();
+  await app.holdWatches();
   await app.openPanel();
   await openFile(page, "UNTRACKED FILES (3)", "e.md");
   await expect(line(page, "e")).toBeVisible();

@@ -3,14 +3,15 @@ import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { ScrollView, useToast } from "@getpaseo/plugin/client/ui";
 import { useQuery } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { Dispatch, ReactElement, SetStateAction } from "react";
+import type { ReactElement } from "react";
 import { useContext, useId, useMemo, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 
 import { diffRpc } from "../shared/diff";
-import { unsent } from "./comments";
+import type { ReviewChange } from "../shared/review";
+import { discarded } from "./comments";
 import type { ReviewComment, SentReview } from "./comments";
-import { agentsIn, agentsPage, canSendTo, configOf, feedbackTo, messageAfter } from "./feedback";
+import { agentsIn, agentsPage, canSendTo, changesAfter, configOf, feedbackTo } from "./feedback";
 import type { Agents, Destination, FeedbackServer } from "./feedback";
 import { FontSizesContext } from "./fonts";
 import { useContextMenu } from "./keyboard";
@@ -121,12 +122,10 @@ export interface ReviewPanelProps {
   // The worktree's, and its workspace's ID, whose agents the comments are sent to.
   directory: string;
   workspace: string;
-  // The comments pending, and what changes them.
+  // The comments pending, what they're sent with, and what changes them.
   comments: readonly ReviewComment[];
-  onComments: Dispatch<SetStateAction<readonly ReviewComment[]>>;
-  // What they're sent with, and what changes it.
   message: string;
-  onMessage: Dispatch<SetStateAction<string>>;
+  onChange: (...changes: ReviewChange[]) => void;
   // Whether diffs are read with whitespace changes hidden.
   hideWhitespace: boolean;
   // Whether it's being sent, and what sends it, unless it's being sent.
@@ -153,14 +152,13 @@ function useSend(
   const latest = useLatest(panel);
 
   return async (to) => {
-    const { comments, message, directory, onComments, onMessage } = latest.current;
+    const { comments, message, directory, onChange } = latest.current;
 
     await latest.current.onSending(async () => {
       const told = await feedbackTo(server, directory, comments, to, message);
 
       toast.show(told.message, { variant: told.variant });
-      onComments((current) => unsent(current, told.sent));
-      onMessage((current) => messageAfter(told, message, current));
+      onChange(...changesAfter(told, message));
 
       if (told.sent.length > 0) {
         latest.current.onSent({ comments: told.sent, message });
@@ -212,7 +210,7 @@ function useAgentChoice(agents: UseQueryResult<Agents>, sending: boolean): Agent
 // each of which shows it in its file's diff, and what sends it, to an agent chosen from those in the
 // workspace as they are then, or discards it.
 export function ReviewPanel(props: ReviewPanelProps): ReactElement {
-  const { anchor, onClose, comments, onComments, onMessage, theme } = props;
+  const { anchor, onClose, comments, onChange, theme } = props;
   const styles = useStyles(theme);
   const window = useWindowDimensions();
   const backdrop = useId();
@@ -243,7 +241,9 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
         <Text style={styles.title}>{`REVIEW · ${String(comments.length)} PENDING`}</Text>
         <MessageBox
           message={props.message}
-          onMessage={onMessage}
+          onMessage={(text) => {
+            onChange({ kind: "message", text });
+          }}
           onSend={() => {
             void choice.choose();
           }}
@@ -263,8 +263,7 @@ export function ReviewPanel(props: ReviewPanelProps): ReactElement {
         <View style={styles.footer}>
           <DiscardReview
             onDiscard={() => {
-              onComments([]);
-              onMessage("");
+              onChange(...discarded(comments));
             }}
             disabled={sending}
             theme={theme}

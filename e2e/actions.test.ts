@@ -360,7 +360,7 @@ test("an action on a diff that changed since it was shown changes nothing, and r
 }) => {
   changeTwoHunks(repository);
 
-  await app.holdWaits();
+  await app.holdWatches();
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
   await expect(line(page, "first")).toBeVisible();

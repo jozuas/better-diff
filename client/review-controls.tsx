@@ -1,7 +1,7 @@
 import type { PluginTheme } from "@getpaseo/plugin";
 import { TextInput } from "@getpaseo/plugin/client/ui";
 import type { UseQueryResult } from "@tanstack/react-query";
-import type { Dispatch, ReactElement, RefObject, SetStateAction } from "react";
+import type { ReactElement, RefObject } from "react";
 import { useContext, useEffect, useId, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
@@ -56,7 +56,7 @@ function useStyles(theme: PluginTheme) {
 
 interface MessageBoxProps {
   message: string;
-  onMessage: Dispatch<SetStateAction<string>>;
+  onMessage: (text: string) => void;
   onSend: () => void;
   theme: PluginTheme;
 }

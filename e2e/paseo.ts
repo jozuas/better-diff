@@ -1,8 +1,10 @@
 import { execFile, execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { z } from "zod";
+
+import type { ViewValues } from "../shared/settings";
 
 function git(args: readonly string[]): string {
   return execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -16,9 +18,9 @@ export const pluginId = z
   .object({ id: z.string() })
   .parse(JSON.parse(readFileSync(join(root, "paseo-plugin.json"), "utf8"))).id;
 
-// The tests' daemons: one most tests share, and one for tests that change the plugin's settings.
-// Every tab on a daemon shares its settings, so those tests take turns on a daemon of their own,
-// where they can't change what the others show.
+// The tests' daemons: one most tests share, and one for tests that change the settings the host
+// keeps for the plugin. Every tab on a daemon shares those, so those tests take turns on a daemon of
+// their own, where they can't change what the others show.
 export type Daemon = "shared" | "settings";
 
 export const daemons: readonly Daemon[] = ["shared", "settings"];
@@ -26,6 +28,15 @@ export const daemons: readonly Daemon[] = ["shared", "settings"];
 // Where the daemon keeps its state, which stays after a run, for its logs.
 export function homeOf(daemon: Daemon): string {
   return join(gitDirectory, daemon === "shared" ? "paseo-e2e" : "paseo-e2e-settings");
+}
+
+// Has the daemon's host keep the values as the plugin's settings of how diffs show, as the plugin
+// saved them, in an earlier version or this one, for whatever reads them next.
+export function keepViewSettings(daemon: Daemon, values: ViewValues): void {
+  const directory = join(homeOf(daemon), "plugin-settings", pluginId);
+
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, "view.json"), JSON.stringify({ version: 1, values }));
 }
 
 // Runs the paseo-ui skill's script, against the daemon. Asynchronously, so a test's timeout can

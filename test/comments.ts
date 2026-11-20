@@ -1,11 +1,14 @@
 import type { RpcOutput } from "@getpaseo/plugin";
 import * as fc from "fast-check";
 
-import type { CommentTarget, NumberedFile, ReviewComment } from "../client/comments";
+import { saved } from "../client/comments";
+import type { CommentTarget, Editing, NumberedFile, ReviewComment } from "../client/comments";
 import { numberLines } from "../client/lines";
 import type { NumberedLine } from "../client/lines";
 import type { Numbering } from "../client/numbering";
 import type { diffRpc } from "../shared/diff";
+import { changedBy, review } from "../shared/review";
+import type { ReviewChange } from "../shared/review";
 import { filePath } from "./file-names";
 import { hunkLines } from "./hunk-lines";
 
@@ -64,11 +67,63 @@ const reviewComment: fc.Arbitrary<ReviewComment> = fc.record(
   { requiredKeys: ["path", "side", "line", "id", "body"], noNullPrototype: true },
 );
 
+// What reads a comment as a review keeps it.
+export const keptComment = review.shape.comments.element;
+
+// A comment's id, few, so that changes are often of the same comment.
+const commentId = fc.integer({ min: 1, max: 20 });
+
+// Any change of a review, as a view makes it.
+export const reviewChange: fc.Arbitrary<ReviewChange> = fc.oneof(
+  reviewComment.map((comment): ReviewChange => ({ kind: "add", comment })),
+  fc.record(
+    { kind: fc.constant("edit" as const), id: commentId, body: commentBody, said: commentBody },
+    { requiredKeys: ["kind", "id", "body"], noNullPrototype: true },
+  ),
+  fc.record({ kind: fc.constant("delete" as const), id: commentId }, { noNullPrototype: true }),
+  fc.record(
+    { kind: fc.constant("sent" as const), comments: fc.array(reviewComment, { maxLength: 3 }) },
+    { noNullPrototype: true },
+  ),
+  fc.record(
+    { kind: fc.constant("message" as const), text: commentBody, said: commentBody },
+    { requiredKeys: ["kind", "text"], noNullPrototype: true },
+  ),
+  fc.record(
+    {
+      kind: fc.constant("restore" as const),
+      comments: fc.array(reviewComment, { maxLength: 3 }),
+      message: commentBody,
+    },
+    { noNullPrototype: true },
+  ),
+);
+
 // Pending comments, each with an id of its own, in the order they were made, which is the order of
 // their ids.
 export const reviewComments = fc
   .uniqueArray(reviewComment, { selector: ({ id }) => id, maxLength: 8 })
   .map((comments) => comments.toSorted((comment, other) => comment.id - other.id));
+
+// The comments once what's written is saved, as saving it changes them, and the comments themselves
+// where it changes nothing.
+export function savedIn(
+  comments: readonly ReviewComment[],
+  editing: Pick<Editing, "target" | "id" | "said">,
+  text: string,
+  pick?: () => number,
+): readonly ReviewComment[] {
+  const change = saved(comments, editing, text, pick);
+
+  return change === undefined
+    ? comments
+    : changedBy({ comments: [...comments], message: "" }, [change]).comments;
+}
+
+// What a comment is but its id.
+export function withoutId({ id: _id, ...comment }: ReviewComment): Omit<ReviewComment, "id"> {
+  return comment;
+}
 
 // A diff's hunks, one after another in both versions, with an unchanged line or more between them,
 // and the lines of each as the view numbers them. Each line has text no other line of its hunk has.

@@ -27,6 +27,25 @@ test("a change nothing tells of, as to a file outside the worktree that git read
   });
 });
 
+test("the view refreshes as the worktree changes again, a second or so after the plugin's server stopped telling of changes, as once it stops", async ({
+  app,
+  page,
+  repository,
+}) => {
+  const closed = await app.closeFirstWatch();
+
+  writeFile(repository, "a.txt", "a\n");
+
+  await app.openPanel();
+
+  await expect(group(page, "UNTRACKED FILES (1)")).toHaveText(["a.txt"]);
+  await expect.poll(closed).toBe(true);
+
+  writeFile(repository, "b.txt", "b\n");
+
+  await expect(group(page, "UNTRACKED FILES (2)")).toHaveText(["a.txt", "b.txt"]);
+});
+
 test("a diff that can't be read again stays shown, under why it couldn't be, as it may be out of date", async ({
   app,
   page,

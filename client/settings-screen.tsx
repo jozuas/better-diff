@@ -15,11 +15,19 @@ import type { ReactElement } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text } from "react-native";
 
-import { fontSizeRanges, lineLengthRange, tabSizeRange, viewSettings } from "../shared/settings";
+import {
+  fontSizeRanges,
+  layoutSettings,
+  lineLengthRange,
+  tabSizeRange,
+  viewSettings,
+} from "../shared/settings";
+import type { LayoutValues } from "../shared/settings";
 import { debounced } from "./debounce";
 import { sizeOptions } from "./fonts";
 import { keyList, keysText } from "./key-list";
-import { lineLengthOf, viewSettingsOf } from "./settings";
+import { layoutSettingsOf, lineLengthOf, noLayout, settingsOf, viewDefaults } from "./settings";
+import type { Settings } from "./settings";
 import { onMac, useLatest } from "./web";
 
 // The styles a diff can show in.
@@ -41,10 +49,8 @@ const typingPause = 500;
 const sizesInfo =
   "Paseo's own font sizes, under Appearance, don't change Better Diff. Zooming Paseo in or out scales Better Diff with it";
 
-type Settings = NonNullable<ReturnType<typeof viewSettingsOf>>;
-
 interface LineLengthProps {
-  settings: Settings;
+  settings: Settings<LayoutValues>;
 }
 
 // The line length as it's typed, saved once typing pauses on one the settings take, or at once on
@@ -120,11 +126,14 @@ function Keys({ theme }: KeysProps): ReactElement {
 // of which shows them in the panel or not.
 export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
   const toast = useToast();
-  const settings = viewSettingsOf(useSettings(viewSettings), toast.error);
+  const settings = settingsOf(useSettings(viewSettings), viewDefaults, toast.error);
+  const device = settingsOf(useSettings(layoutSettings), noLayout, toast.error);
 
-  if (settings === undefined) {
+  if (settings === undefined || device === undefined) {
     return <Loading />;
   }
+
+  const layout = layoutSettingsOf(device, settings.values);
 
   return (
     <>
@@ -133,13 +142,13 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
           <SettingsSelect
             label="Diff style"
             hint="Auto shows diffs side by side where lines of the line length fit, and inline where they don't"
-            value={settings.values.diffStyle}
+            value={layout.values.diffStyle}
             options={diffStyles}
             onValueChange={(diffStyle) => {
-              void settings.change({ diffStyle });
+              void layout.change({ diffStyle });
             }}
           />
-          <LineLength settings={settings} />
+          <LineLength settings={layout} />
           <SettingsSelect
             label="Tab size"
             hint="Columns between tab stops in diff lines"
@@ -168,19 +177,19 @@ export function SettingsScreen({ theme }: PluginSurfaceProps): ReactElement {
           <SettingsSelect
             label="Diff font size"
             hint="Used for diff lines and line numbers"
-            value={String(settings.values.diffFontSize)}
+            value={String(layout.values.diffFontSize)}
             options={diffSizes}
             onValueChange={(size) => {
-              void settings.change({ diffFontSize: Number(size) });
+              void layout.change({ diffFontSize: Number(size) });
             }}
           />
           <SettingsSelect
             label="Panel font size"
             hint="Used for the file list, bars, and buttons"
-            value={String(settings.values.panelFontSize)}
+            value={String(layout.values.panelFontSize)}
             options={panelSizes}
             onValueChange={(size) => {
-              void settings.change({ panelFontSize: Number(size) });
+              void layout.change({ panelFontSize: Number(size) });
             }}
           />
         </SettingsCard>

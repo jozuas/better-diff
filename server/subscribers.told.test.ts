@@ -1,16 +1,16 @@
 import * as fc from "fast-check";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import { nextInOrder, pass, thing } from "../test/watched";
-import type { Answer, Check, Listens, Thing } from "../test/watched";
-import { stopWaiting } from "./wait";
+import { nextInOrder, pass, thing, toldTo } from "../test/watched";
+import type { Check, Listens, Subscription, Thing } from "../test/watched";
+import { unsubscribeAll } from "./subscribers";
 
 beforeEach(() => {
   vi.useFakeTimers();
 });
 
 afterEach(() => {
-  stopWaiting();
+  unsubscribeAll();
   vi.useRealTimers();
 });
 
@@ -27,30 +27,26 @@ const setup: fc.Arbitrary<Setup> = fc.record({
   starts: fc.integer({ min: 0, max: 3000 }),
 });
 
-// What a step does to a thing: waits for a change from its version now or another, changes the
-// version and tells of it, releases the waits from its version now or another, has the checks that
-// start from then fail or hang, or not, or has its listening fail.
+// What a step does to a thing: a subscriber comes, one of those there leaves, its version changes,
+// which its listener tells of or not, the checks that start from then fail or hang, or not, or its
+// listening fails.
 type Step =
-  | { kind: "wait"; current: boolean; timeout: number }
-  | { kind: "change" }
-  | { kind: "release"; current: boolean }
+  | { kind: "subscribe" }
+  | { kind: "leave"; which: number }
+  | { kind: "change"; told: boolean }
   | { kind: "fail checks"; fails: boolean }
   | { kind: "hang checks"; hangs: boolean }
   | { kind: "fail listening" };
 
 const step: fc.Arbitrary<Step> = fc.oneof(
-  {
-    weight: 4,
-    arbitrary: fc.record({
-      kind: fc.constant("wait" as const),
-      current: fc.boolean(),
-      timeout: fc.integer({ min: 0, max: 10_000 }),
-    }),
-  },
-  { weight: 4, arbitrary: fc.record({ kind: fc.constant("change" as const) }) },
+  { weight: 4, arbitrary: fc.record({ kind: fc.constant("subscribe" as const) }) },
   {
     weight: 2,
-    arbitrary: fc.record({ kind: fc.constant("release" as const), current: fc.boolean() }),
+    arbitrary: fc.record({ kind: fc.constant("leave" as const), which: fc.nat({ max: 5 }) }),
+  },
+  {
+    weight: 4,
+    arbitrary: fc.record({ kind: fc.constant("change" as const), told: fc.boolean() }),
   },
   {
     weight: 1,
@@ -69,37 +65,27 @@ const scenarios = fc.array(
   { maxLength: 30 },
 );
 
-// How long after the last step waiting stops: up to long after every wait is over.
+// How long after the last step all are unsubscribed: up to long after the last check a step calls
+// for.
 const stops = fc.integer({ min: 0, max: 200_000 });
 
-interface Wait {
-  answer: Answer;
-  from: string;
-  timeout: number;
-}
-
+// A change of version the listener told of.
 interface Change {
   order: number;
   at: number;
 }
 
-interface Release {
-  order: number;
-  at: number;
-  from: string;
-}
-
-// What a scenario did to a thing, and when waiting stopped.
+// What a scenario did to a thing, and when all were unsubscribed.
 interface Log {
   setup: Setup;
   thing: Thing;
   version: number;
-  waits: Wait[];
+  subscriptions: Subscription[];
   changes: Change[];
-  releases: Release[];
   // Whether its checks were ever told to hang.
   hung: boolean;
   stopped: number;
+  stoppedOrder: number;
 }
 
 function logOf(each: Setup): Log {
@@ -107,42 +93,39 @@ function logOf(each: Setup): Log {
     setup: each,
     thing: thing(each.took, each.listens, each.starts),
     version: 1,
-    waits: [],
+    subscriptions: [],
     changes: [],
-    releases: [],
     hung: false,
     stopped: Number.NaN,
+    stoppedOrder: Number.NaN,
   };
-}
-
-function fromOf(log: Log, current: boolean): string {
-  return current ? String(log.version) : "0";
 }
 
 function takeStep(log: Log, taken: Step): void {
   const { thing: watched } = log;
 
   switch (taken.kind) {
-    case "wait": {
-      const from = fromOf(log, taken.current);
+    case "subscribe": {
+      log.subscriptions.push(watched.subscribe());
+      break;
+    }
 
-      log.waits.push({ answer: watched.wait(from, taken.timeout), from, timeout: taken.timeout });
+    case "leave": {
+      const there = log.subscriptions.filter(({ left }) => left === undefined);
+
+      there[taken.which % there.length]?.leave();
       break;
     }
 
     case "change": {
-      log.changes.push({ order: nextInOrder(), at: watched.now() });
       log.version += 1;
       watched.set(String(log.version));
-      watched.changed();
-      break;
-    }
 
-    case "release": {
-      const from = fromOf(log, taken.current);
+      if (taken.told) {
+        log.changes.push({ order: nextInOrder(), at: watched.now() });
+        watched.changed();
+      }
 
-      log.releases.push({ order: nextInOrder(), at: watched.now(), from });
-      watched.release(from);
       break;
     }
 
@@ -176,7 +159,7 @@ async function take(logs: readonly [Log, Log], scenario: Scenario): Promise<void
   }
 }
 
-// Takes the steps, and stops waiting a while after the last, and then waits long enough for a
+// Takes the steps, and unsubscribes all a while after the last, and then waits long enough for a
 // check that hangs to be stopped, and listening that's starting to start.
 async function run(
   setups: readonly [Setup, Setup],
@@ -193,9 +176,10 @@ async function run(
 
   for (const log of logs) {
     log.stopped = log.thing.now();
+    log.stoppedOrder = nextInOrder();
   }
 
-  stopWaiting();
+  unsubscribeAll();
   await pass(60_000);
 
   return [...logs];
@@ -214,42 +198,55 @@ function restsOnceTook(checks: readonly Check[]): number[] {
   return took === -1 ? [] : restsBetween(checks).slice(took + 1);
 }
 
-// The longest a check of the thing takes: as long as it takes, or a minute, once it hangs.
-function longestOf({ setup: { took }, hung }: Log): number {
-  return hung ? 60_000 : took;
-}
+// What the subscription should be told, and when: what each check that started after it came
+// found, as it ended, before the subscription left or all were unsubscribed, unless that's what the
+// one before found.
+function dueTo({ order, leftOrder = Infinity }: Subscription, log: Log): [string, number][] {
+  const found = log.thing.checks.filter(
+    (check) =>
+      check.order > order &&
+      !check.failed &&
+      check.endedOrder < Math.min(leftOrder, log.stoppedOrder),
+  );
 
-// Whether the waiter was answered with what a check that started after it asked found, or with
-// such a check's failure, or with its own version: once its wait was over and the first check after
-// it asked had ended, as the waits from its version were released, or as waiting stopped.
-function answeredRightly({ answer, from, timeout }: Wait, log: Log): boolean {
-  const { asked, at = Number.NaN } = answer;
-  const after = log.thing.checks.filter((check) => check.order > answer.order);
-  const ending = after.find(({ ended }) => ended === at);
-
-  if (answer.failed) {
-    return ending?.failed === true;
-  }
-
-  if (answer.version !== from) {
-    return ending?.failed === false && ending.version === answer.version;
-  }
-
-  return (
-    (at >= asked + timeout && (after[0]?.ended ?? Infinity) <= at) ||
-    log.releases.some(
-      (released) => released.order > answer.order && released.at === at && released.from === from,
-    ) ||
-    at === log.stopped
+  return found.flatMap(({ version, ended }, index) =>
+    found[index - 1]?.version === version ? [] : [[version, ended] satisfies [string, number]],
   );
 }
 
-// Whether the waiter, if it was waiting as the version changed, was answered within `within` of
-// each change.
-function answeredSoonAfter({ answer }: Wait, changes: readonly Change[], within: number): boolean {
-  const { at = Number.NaN } = answer;
+// How long at most before a check starts for a subscriber that comes, or after a change that's
+// told of: once a check that runs has ended, which takes as long as checks take, or a minute, once
+// they hang, and the rest after it is over.
+function soon({ setup: { took }, hung }: Log): number {
+  return (hung ? 60_000 : took) + Math.max(1000, 10 * took);
+}
 
-  return changes.every((changed) => changed.order < answer.order || at <= changed.at + within);
+// Whether a check started after what came at `order`, and by `by`.
+function checkedBy({ thing: watched }: Log, order: number, by: number): boolean {
+  return watched.checks.some((check) => check.order > order && check.started <= by);
+}
+
+// The subscriptions that came, and the changes told of, with subscribers there, that no check
+// started soon after, though none left, and all weren't unsubscribed, until then.
+function unchecked(log: Log): (Subscription | Change)[] {
+  const within = soon(log);
+
+  function stayed({ order, left = Infinity }: Subscription, since: number, until: number): boolean {
+    return order < since && Math.min(left, log.stopped) >= until;
+  }
+
+  return [
+    ...log.subscriptions.filter(
+      (subscription) =>
+        stayed(subscription, Infinity, subscription.subscribed + within) &&
+        !checkedBy(log, subscription.order, subscription.subscribed + within),
+    ),
+    ...log.changes.filter(
+      ({ order, at }) =>
+        log.subscriptions.some((subscription) => stayed(subscription, order, at + within)) &&
+        !checkedBy(log, order, at + within),
+    ),
+  ];
 }
 
 // How many of the thing's listenings started and weren't stopped: each starts, unless it throws as
@@ -260,7 +257,7 @@ function stillListening({ thing: watched, setup: { listens } }: Log): number {
   return started - watched.stopped();
 }
 
-test("answers each waiter in time, from a check that started after it asked, or with its own version once its wait is over, it's released or waiting stops, though checks fail or hang and listening fails", async () => {
+test("tells each subscriber what each check that started after it came finds, unless it's what it was last told, until it leaves, though checks fail or hang and listening fails", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.tuple(setup, setup),
@@ -269,40 +266,15 @@ test("answers each waiter in time, from a check that started after it asked, or 
       async (setups, scenario, stopAfter) => {
         const logs = await run(setups, scenario, stopAfter);
 
-        expect(
-          logs.map(({ thing: watched, setup: { took } }) =>
-            restsOnceTook(watched.checks).filter((rest) => rest < Math.min(1000, 10 * took)),
-          ),
-        ).toStrictEqual([[], []]);
-        expect(
-          logs.flatMap((log) =>
-            log.waits.filter(
-              ({ answer: { asked, at = Number.NaN }, timeout }) =>
-                !(at <= Math.max(asked + timeout, asked + 2 * longestOf(log) + 1000)),
-            ),
-          ),
-        ).toStrictEqual([]);
-        expect(
-          logs.flatMap((log) => log.waits.filter((wait) => !answeredRightly(wait, log))),
-        ).toStrictEqual([]);
-        expect(
-          logs.flatMap((log) =>
-            log.waits.filter(
-              (wait) =>
-                !answeredSoonAfter(
-                  wait,
-                  log.changes,
-                  2 * longestOf(log) + Math.max(1000, 10 * log.setup.took),
-                ),
-            ),
-          ),
-        ).toStrictEqual([]);
+        expect(logs.flatMap(({ subscriptions }) => subscriptions.map(toldTo))).toStrictEqual(
+          logs.flatMap((log) => log.subscriptions.map((subscription) => dueTo(subscription, log))),
+        );
       },
     ),
   );
 });
 
-test("stopping waiting at any point answers every wait, makes no more checks, and leaves no timer or listening behind", async () => {
+test("checks soon after each subscriber comes, and after each change it's told of, and never sooner after a check than a second, or ten times as long as it took", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.tuple(setup, setup),
@@ -311,9 +283,26 @@ test("stopping waiting at any point answers every wait, makes no more checks, an
       async (setups, scenario, stopAfter) => {
         const logs = await run(setups, scenario, stopAfter);
 
+        expect(logs.map(unchecked)).toStrictEqual([[], []]);
         expect(
-          logs.flatMap(({ waits }) => waits.filter(({ answer }) => answer.at === undefined)),
-        ).toStrictEqual([]);
+          logs.map(({ thing: watched, setup: { took } }) =>
+            restsOnceTook(watched.checks).filter((rest) => rest < Math.min(1000, 10 * took)),
+          ),
+        ).toStrictEqual([[], []]);
+      },
+    ),
+  );
+});
+
+test("unsubscribing all at any point makes no more checks, and leaves no timer or listening behind", async () => {
+  await fc.assert(
+    fc.asyncProperty(
+      fc.tuple(setup, setup),
+      scenarios,
+      stops,
+      async (setups, scenario, stopAfter) => {
+        const logs = await run(setups, scenario, stopAfter);
+
         expect(
           logs.flatMap(({ thing: watched, stopped }) =>
             watched.checks.filter(({ started }) => started > stopped),
@@ -338,19 +327,18 @@ async function changeAfter(watched: Thing, gaps: readonly number[], version = 2)
   }
 }
 
-test("rests a second at least, or ten times as long as a check took, before each check, while changes keep coming and a waiter asks again as soon as it's answered", async () => {
+test("rests a second at least, or ten times as long as a check took, before each check, while changes keep coming and a subscriber stays", async () => {
   await fc.assert(
     fc.asyncProperty(
       fc.integer({ min: 1, max: 300 }),
       fc.array(fc.integer({ min: 0, max: 3000 }), { maxLength: 20 }),
       async (took, gaps) => {
         const watched = thing(took);
-        const stop = watched.keepWaiting("0");
 
+        watched.subscribe();
         await changeAfter(watched, gaps);
         await pass(60_000);
-        stop();
-        stopWaiting();
+        unsubscribeAll();
 
         expect(Math.min(...restsBetween(watched.checks))).toBeGreaterThanOrEqual(
           Math.max(1000, 10 * took),

@@ -1,22 +1,36 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { asNumbered, commentBody, commentTarget, reviewComments } from "../test/comments";
+import { bodyOf, changedBy } from "../shared/review";
 import {
-  bodyOf,
-  rangeLabel,
-  rangeNumbers,
-  rangeOf,
-  reviewComment,
-  saved,
-  targetOf,
-  unsent,
-  without,
-} from "./comments";
+  asNumbered,
+  commentBody,
+  commentTarget,
+  keptComment,
+  reviewComments,
+  savedIn,
+  withoutId,
+} from "../test/comments";
+import { rangeLabel, rangeNumbers, rangeOf, saved, targetOf } from "./comments";
 import type { CommentTarget, ReviewComment } from "./comments";
 import type { NumberedLine } from "./lines";
 
 const file = { path: "a.txt", numbering: asNumbered };
+
+// The comments once the one with the id is deleted.
+function without(comments: readonly ReviewComment[], id: number): ReviewComment[] {
+  return changedBy({ comments: [...comments], message: "" }, [{ kind: "delete", id }]).comments;
+}
+
+// The comments once those sent are.
+function unsent(
+  comments: readonly ReviewComment[],
+  sent: readonly ReviewComment[],
+): ReviewComment[] {
+  return changedBy({ comments: [...comments], message: "" }, [
+    { kind: "sent", comments: [...sent] },
+  ]).comments;
+}
 
 const removed: NumberedLine = {
   kind: "removed",
@@ -120,11 +134,11 @@ test("a comment kept on several lines reads back on them, with what tells each a
     start: { side: "old", line: 2, anchor: { ...anchor, text: "z" } },
   };
 
-  expect(reviewComment.parse(onSeveral)).toStrictEqual(onSeveral);
-  expect(reviewComment.parse(kept)).toStrictEqual(kept);
-  expect(reviewComment.parse(anchored)).toStrictEqual(anchored);
-  expect(reviewComment.safeParse({ ...kept, start: { side: "old", line: 0 } }).success).toBe(false);
-  expect(reviewComment.safeParse({ ...kept, anchor: { text: "b" } }).success).toBe(false);
+  expect(keptComment.parse(onSeveral)).toStrictEqual(onSeveral);
+  expect(keptComment.parse(kept)).toStrictEqual(kept);
+  expect(keptComment.parse(anchored)).toStrictEqual(anchored);
+  expect(keptComment.safeParse({ ...kept, start: { side: "old", line: 0 } }).success).toBe(false);
+  expect(keptComment.safeParse({ ...kept, anchor: { text: "b" } }).success).toBe(false);
 });
 
 test("a comment says what's written, without whitespace at either end, and nothing is kept if it's only whitespace", () => {
@@ -140,12 +154,12 @@ const kept = commentBody.map((body) => `[${body}]`);
 test("a comment saved on a line comes after the others, as written, on its line, with an id none of them has", () => {
   fc.assert(
     fc.property(reviewComments, commentTarget, kept, (comments, target, body) => {
-      const made = saved(comments, { target, id: undefined }, body);
+      const made = savedIn(comments, { target, id: undefined }, body);
 
       expect(made.slice(0, -1)).toStrictEqual(comments);
       expect(made.slice(-1)).toMatchObject([{ ...target, body }]);
       expect(new Set(made.map(({ id }) => id)).size).toBe(made.length);
-      expect(made.every((each) => reviewComment.safeParse(each).success)).toBe(true);
+      expect(made.every((each) => keptComment.safeParse(each).success)).toBe(true);
     }),
   );
 });
@@ -160,32 +174,25 @@ test("a comment saved on several lines is on them", () => {
     start: { side: "new", line: 2 },
   };
 
-  expect(saved([comment], { target, id: undefined }, "Why?")).toStrictEqual([
-    comment,
-    { ...target, id: 3, body: "Why?" },
+  expect(savedIn([comment], { target, id: undefined }, "Why?").map(withoutId)).toStrictEqual([
+    withoutId(comment),
+    { ...target, body: "Why?" },
   ]);
 });
 
-test("the first comment has the id 1, and one saved on the line of one edited is only what it says, on the line", () => {
-  const target: CommentTarget = { path: "a.txt", side: "new", line: 1 };
-
-  expect(saved([], { target, id: undefined }, "Why?")).toStrictEqual([
-    { ...target, id: 1, body: "Why?" },
-  ]);
-  expect(saved([comment], { target: comment, id: undefined }, "And?")).toStrictEqual([
-    comment,
-    { path: "a.txt", side: "new", line: 3, id: 3, body: "And?" },
-  ]);
+test("a comment saved on the line of one edited is only what it says, on the line", () => {
+  expect(
+    savedIn([comment], { target: comment, id: undefined }, "And?").map(withoutId),
+  ).toStrictEqual([withoutId(comment), { path: "a.txt", side: "new", line: 3, body: "And?" }]);
 });
 
 test("saving what's written makes a new comment on its line, or changes what the comment edited says, without whitespace at either end", () => {
   const target: CommentTarget = { path: "a.txt", side: "old", line: 1 };
 
-  expect(saved([comment], { target, id: undefined }, "  Rename this\n")).toStrictEqual([
-    comment,
-    { ...target, id: 3, body: "Rename this" },
-  ]);
-  expect(saved([comment], { target: comment, id: 2 }, "\tWhy not?  ")).toStrictEqual([
+  expect(
+    savedIn([comment], { target, id: undefined }, "  Rename this\n").map(withoutId),
+  ).toStrictEqual([withoutId(comment), { ...target, body: "Rename this" }]);
+  expect(savedIn([comment], { target: comment, id: 2 }, "\tWhy not?  ")).toStrictEqual([
     { ...comment, body: "Why not?" },
   ]);
 });
@@ -210,7 +217,30 @@ test("editing a comment changes what it says, and nothing else of it or the othe
     fc.property(reviewComments, commentTarget, fc.nat(), kept, (comments, target, at, body) => {
       const { id, replaced } = picked(comments, at, (each) => [{ ...each, body }]);
 
-      expect(saved(comments, { target, id }, body)).toStrictEqual(replaced);
+      expect(savedIn(comments, { target, id }, body)).toStrictEqual(replaced);
+    }),
+  );
+});
+
+// Comments, and one of them.
+const oneOfSome = reviewComments
+  .filter((comments) => comments.length > 0)
+  .chain((comments) => fc.constantFrom(...comments).map((each) => ({ comments, each })));
+
+test("an edit is saved to a comment that still says what it said as the edit started, and not to one that says something else by then, as one another view has edited, or made since with its id", () => {
+  fc.assert(
+    fc.property(oneOfSome, kept, commentBody, ({ comments, each }, body, since) => {
+      const index = comments.indexOf(each);
+      const edit = { target: each, id: each.id, said: each.body };
+      const edited = comments.toSpliced(index, 1, { ...each, body: `${each.body}${since}!` });
+
+      expect(savedIn(comments, edit, body)).toStrictEqual(
+        comments.toSpliced(index, 1, { ...each, body }),
+      );
+      expect(savedIn(edited, edit, body)).toStrictEqual(edited);
+      expect(savedIn(without(comments, each.id), edit, body)).toStrictEqual(
+        without(comments, each.id),
+      );
     }),
   );
 });
@@ -240,8 +270,8 @@ test("saving only whitespace changes nothing", () => {
       (comments, target, at, text) => {
         const { id } = picked(comments, at, () => []);
 
-        expect(saved(comments, { target, id: undefined }, text)).toBe(comments);
-        expect(saved(comments, { target, id }, text)).toBe(comments);
+        expect(saved(comments, { target, id: undefined }, text)).toBeUndefined();
+        expect(saved(comments, { target, id }, text)).toBeUndefined();
       },
     ),
   );
@@ -261,12 +291,12 @@ function changedSince(
     const edited = sent[at];
 
     if (edited !== undefined && edited.body !== edit) {
-      comments = saved(comments, { target: edited, id: edited.id }, edit);
+      comments = savedIn(comments, { target: edited, id: edited.id }, edit);
     }
   }
 
   for (const [target, body] of made) {
-    comments = saved(comments, { target, id: undefined }, body);
+    comments = savedIn(comments, { target, id: undefined }, body);
   }
 
   return comments;
@@ -282,25 +312,29 @@ test("once comments are sent, those made or edited while they were sent are stil
       (sent, edits, edit, made) => {
         const now = changedSince(sent, edits, edit, made);
 
-        expect(unsent(now, sent)).toStrictEqual(now.filter((each) => !sent.includes(each)));
+        const pending = now.filter((each) => !sent.includes(each));
+
+        expect(unsent(now, sent)).toStrictEqual(pending);
+        // As once any of them changes, or another view changes them, each is read anew.
+        expect(unsent(structuredClone(now), sent)).toStrictEqual(pending);
       },
     ),
   );
 });
 
 test("a comment made while others were sent stays pending, though it says what one of them did", () => {
-  const made = saved([comment], { target: comment, id: undefined }, comment.body);
+  const made = savedIn([comment], { target: comment, id: undefined }, comment.body);
 
-  expect(unsent(made, [comment])).toStrictEqual([{ ...comment, id: 3 }]);
+  expect(unsent(made, [comment])).toStrictEqual(made.slice(1));
+  expect(made.slice(1).map(withoutId)).toStrictEqual([withoutId(comment)]);
 });
 
-test("a comment made while others were sent stays pending, though it has the id of one deleted then and says what it did", () => {
+test("a comment made while others were sent stays pending, though it has the id of one deleted then and says what it did, on another line", () => {
   const first = { ...comment, id: 1 };
   const sent = [first, comment];
-  const made = saved(without(sent, comment.id), { target: comment, id: undefined }, comment.body);
+  const target = { ...comment, line: comment.line + 1 };
 
-  expect(made).toStrictEqual(sent);
-  expect(unsent(made, sent)).toStrictEqual([comment]);
+  expect(unsent([first, target], sent)).toStrictEqual([target]);
 });
 
 test("comments deleted while they were sent stay deleted", () => {

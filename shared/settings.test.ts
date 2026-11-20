@@ -1,30 +1,63 @@
 import * as fc from "fast-check";
 import { expect, test } from "vitest";
 
-import { viewSettings } from "./settings";
+import { layoutSettings, layoutValues, viewSettings } from "./settings";
 
+// Whether the host's settings and a device's both take the values that are theirs.
 function valid(values: Record<string, number>): boolean {
-  return viewSettings.schema.safeParse(values).success;
+  return (
+    viewSettings.schema.safeParse(values).success && layoutSettings.schema.safeParse(values).success
+  );
 }
 
 // Halfway between two whole sizes.
 const fraction = fc.integer({ min: 0, max: 30 }).map((size) => size + 0.5);
 
-test("without a document, diffs show in the auto style with room for lines of 80 characters, tab stops 8 columns apart, and whitespace changes, the panel shows its keys, and the font sizes are 13, for the diff and the rest of the panel", () => {
+test("without a document, the host has diffs show with tab stops 8 columns apart, and whitespace changes, and the panel show its keys", () => {
   expect(viewSettings.schema.parse({})).toStrictEqual({
-    diffStyle: "auto",
-    lineLength: 80,
     tabSize: 8,
     hideWhitespace: false,
     showKeys: true,
+  });
+});
+
+test("until any of its layout is set, a device shows diffs in the auto style with room for lines of 80 characters, and the font sizes are 13, for the diff and the rest of the panel", () => {
+  expect(layoutValues.parse({})).toStrictEqual({
+    diffStyle: "auto",
+    lineLength: 80,
     diffFontSize: 13,
     panelFontSize: 13,
   });
 });
 
+test("a device keeps those of the layout's settings that are set on it, and nothing of the others", () => {
+  expect(layoutSettings.schema.parse({})).toStrictEqual({});
+  expect(layoutSettings.schema.parse({ lineLength: 100, tabSize: 4 })).toStrictEqual({
+    lineLength: 100,
+  });
+});
+
+test("the host's settings are kept for every client, and a device's on the device, which the server never reads", () => {
+  expect([viewSettings.scope, layoutSettings.scope]).toStrictEqual(["host", "device"]);
+});
+
+test("the host's document from before its layout settings moved to each device still reads with the layout it kept, for the devices that have set none of their own", () => {
+  const kept = {
+    diffStyle: "inline",
+    lineLength: 100,
+    tabSize: 4,
+    hideWhitespace: true,
+    showKeys: false,
+    diffFontSize: 16,
+    panelFontSize: 18,
+  };
+
+  expect(viewSettings.schema.parse(kept)).toStrictEqual(kept);
+});
+
 test("each diff style is kept as picked", () => {
   for (const diffStyle of ["auto", "inline", "side by side"]) {
-    expect(viewSettings.schema.parse({ diffStyle })).toMatchObject({ diffStyle });
+    expect(layoutSettings.schema.parse({ diffStyle })).toStrictEqual({ diffStyle });
   }
 });
 
@@ -43,7 +76,7 @@ test("the panel's keys show or not as switched", () => {
 test("the line length takes each whole number of characters from 20 to 400", () => {
   fc.assert(
     fc.property(fc.integer({ min: 20, max: 400 }), (lineLength) => {
-      expect(viewSettings.schema.parse({ lineLength })).toMatchObject({ lineLength });
+      expect(layoutSettings.schema.parse({ lineLength })).toStrictEqual({ lineLength });
     }),
     { examples: [[20], [400]] },
   );
@@ -82,7 +115,8 @@ test("the tab size takes no number outside 1 to 16, nor a fraction", () => {
 test("the panel font size takes each whole size Paseo's interface size does, 10 to 21, and keeps the diff's default", () => {
   fc.assert(
     fc.property(fc.integer({ min: 10, max: 21 }), (panelFontSize) => {
-      expect(viewSettings.schema.parse({ panelFontSize })).toMatchObject({
+      expect(layoutSettings.schema.parse({ panelFontSize })).toStrictEqual({ panelFontSize });
+      expect(layoutValues.parse({ panelFontSize })).toMatchObject({
         panelFontSize,
         diffFontSize: 13,
       });
@@ -106,7 +140,8 @@ test("the panel font size takes no size outside 10 to 21, nor a fraction", () =>
 test("the diff font size takes each whole size Paseo's code size does, 9 to 22, and keeps the panel's default", () => {
   fc.assert(
     fc.property(fc.integer({ min: 9, max: 22 }), (diffFontSize) => {
-      expect(viewSettings.schema.parse({ diffFontSize })).toMatchObject({
+      expect(layoutSettings.schema.parse({ diffFontSize })).toStrictEqual({ diffFontSize });
+      expect(layoutValues.parse({ diffFontSize })).toMatchObject({
         panelFontSize: 13,
         diffFontSize,
       });

@@ -2,15 +2,16 @@ import { copyFile, lstat, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
-import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
+import type { RpcInput, RpcOutput, SubscriptionEvent, SubscriptionInput } from "@getpaseo/plugin";
+import type { PluginSubscriptionContext } from "@getpaseo/plugin/server";
 
 import { changesRpc } from "../shared/changes";
-import type { releaseRpc, versionRpc, waitRpc } from "../shared/changes";
+import type { versionRpc, watchRpc } from "../shared/changes";
 import type { RepositoryKind } from "../shared/diff";
 import { git } from "./git";
 import { groupsOf, repositoriesOf } from "./grouping";
+import { subscribe } from "./subscribers";
 import { versionOf } from "./version";
-import { changeFrom, release } from "./wait";
 import { watchRepository } from "./watch";
 
 // A file git status lists.
@@ -349,12 +350,29 @@ async function worktreeVersionOf(directory: string, signal?: AbortSignal): Promi
   return version;
 }
 
-export async function waitForChanges({
-  directory,
-  version,
-  timeout,
-}: RpcInput<typeof waitRpc>): Promise<RpcOutput<typeof waitRpc>> {
-  const current = await changeFrom(
+type Push = PluginSubscriptionContext<SubscriptionEvent<typeof watchRpc>>["push"];
+
+// Tells the subscriber of the version, if it still can be.
+async function tell(push: Push, version: string): Promise<void> {
+  try {
+    await push({ version });
+  } catch {
+    // Once the plugin is cut off from Paseo, no view is left to refresh.
+  }
+}
+
+// Tells the subscriber of the directory's version once it has looked at the files, and then
+// whenever it finds another, until the subscriber leaves: of nothing, where it has left already,
+// which nothing would tell the server of again.
+export function watchChanges(
+  { directory }: SubscriptionInput<typeof watchRpc>,
+  { push, signal }: { push: Push; signal: AbortSignal },
+): void {
+  if (signal.aborted) {
+    return;
+  }
+
+  const leave = subscribe(
     directory,
     {
       check: async (stop) => {
@@ -368,11 +386,12 @@ export async function waitForChanges({
         return stop;
       },
     },
-    version,
-    timeout,
+    (version) => {
+      void tell(push, version);
+    },
   );
 
-  return { version: current };
+  signal.addEventListener("abort", leave);
 }
 
 export async function readVersion({
@@ -381,15 +400,6 @@ export async function readVersion({
   const version = await worktreeVersionOf(directory);
 
   return { version };
-}
-
-export function releaseWaits({
-  directory,
-  version,
-}: RpcInput<typeof releaseRpc>): RpcOutput<typeof releaseRpc> {
-  release(directory, version);
-
-  return {};
 }
 
 export async function listChanges({

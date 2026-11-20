@@ -2,6 +2,7 @@ import type { PluginCleanup } from "@getpaseo/plugin";
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 
 import { requests } from "./client/requests";
+import { ReviewBadge } from "./client/review-badge";
 import { SettingsScreen } from "./client/settings-screen";
 import { ChangesPanel } from "./client/workspace-panel";
 
@@ -24,6 +25,13 @@ export default function contribute(client: PluginClientContext): PluginCleanup {
       requests.ask(workspace.id);
       openPanel("changes");
     },
+  });
+
+  client.addWorkspaceRowBadgeItem({
+    id: "review",
+    title: "Pending review comments",
+    icon: "MessageSquare",
+    Component: ReviewBadge,
   });
 
   client.addSettingsScreen({

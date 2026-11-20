@@ -6,7 +6,6 @@ import {
   changeAAndB,
   comment,
   editor,
-  messageBox,
   openReview,
   pending,
   prompt,
@@ -215,23 +214,6 @@ test("while an edit of a comment saved shows nowhere, as its line is changed, th
   await expect(pending(page, "Why uppercase?")).toBeVisible();
   await expect(pending(page, "Keep it lowercase.")).toBeHidden();
   await expect(editor(page)).toBeHidden();
-});
-
-test("pending comments and their message stay once Paseo reloads", async ({
-  app,
-  page,
-  repository,
-}) => {
-  changeA(repository);
-
-  await app.openPanel();
-  await openFile(page, "MODIFIED FILES (1)", "a.txt");
-  await comment(page, "BRAVO", "Why uppercase?");
-  await messageBox(await openReview(page, 1)).fill("Fix these.");
-  await page.reload();
-
-  await expect(pending(page, "Why uppercase?")).toBeVisible();
-  await expect(messageBox(await openReview(page, 1))).toHaveValue("Fix these.");
 });
 
 test("each file's row in the sidebar says how many comments are pending on the file, in MODIFIED and STAGED alike for a partly staged file", async ({

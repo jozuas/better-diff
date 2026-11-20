@@ -4,7 +4,8 @@ import type { ReactElement } from "react";
 import { useContext, useId, useLayoutEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
-import { bodyOf, editorKey, editorKeyUp, rangeLabel } from "./comments";
+import { bodyOf } from "../shared/review";
+import { editorKey, editorKeyUp, rangeLabel } from "./comments";
 import type { CommentTarget, Editing, ReviewComment, Thread } from "./comments";
 import { FontSizesContext } from "./fonts";
 import { IconButton } from "./icon-button";

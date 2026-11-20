@@ -1,9 +1,9 @@
-import type { ViewValues } from "../shared/settings";
+import type { LayoutValues } from "../shared/settings";
 import { textPadding } from "./fonts";
 import type { FontSizes } from "./fonts";
 
 // How a diff shows, as the settings say.
-export type Layout = Pick<ViewValues, "diffStyle" | "lineLength">;
+export type Layout = Pick<LayoutValues, "diffStyle" | "lineLength">;
 
 // How wide a character of Paseo's monospace fonts is, in their size.
 const characterWidth = 0.6;

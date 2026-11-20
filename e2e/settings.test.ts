@@ -3,6 +3,7 @@ import type { Locator, Page } from "@playwright/test";
 import { commitAll, writeFile } from "../test/repository";
 import { changesSettings, expect, test as base } from "./fixtures";
 import { line, openFile } from "./panel";
+import { keepViewSettings } from "./paseo";
 
 // Picks the diff font size on Better Diff's page in Paseo's settings, and waits for it to be saved.
 async function pickDiffFontSize(page: Page, size: number): Promise<void> {
@@ -18,18 +19,33 @@ async function pickTabSize(page: Page, size: number): Promise<void> {
   await expect(page.getByRole("button", { name: `Tab size: ${size}` })).toBeEnabled();
 }
 
-// The settings are the host's, so each test puts back the defaults it may have changed.
-const test = base.extend<Record<"defaultSettings", void>>({
-  defaultSettings: [
+// The tab size is the host's, so each test puts back the default it may have changed. The rest are
+// the device's, and each test has a browser of its own.
+// defaultTabSize gives a test nothing.
+interface Fixtures extends Record<"defaultTabSize", void> {
+  // Has the host keep the diff style for every client, as it did before each device kept its own
+  // layout, until the test is over.
+  keepDiffStyleOnHost: (diffStyle: "inline") => void;
+}
+
+const test = base.extend<Fixtures>({
+  defaultTabSize: [
     async ({ app, page }, provide) => {
       await provide();
-      await app.pickDiffStyle("Auto");
-      await app.saveLineLength(80);
-      await pickDiffFontSize(page, 13);
+      await app.openSettings();
       await pickTabSize(page, 8);
     },
     { auto: true },
   ],
+
+  keepDiffStyleOnHost: async ({ daemon }, provide) => {
+    const defaults = { tabSize: 8, hideWhitespace: false, showKeys: true };
+
+    await provide((diffStyle) => {
+      keepViewSettings(daemon, { ...defaults, diffStyle });
+    });
+    keepViewSettings(daemon, defaults);
+  },
 });
 
 changesSettings();
@@ -65,6 +81,29 @@ test("Better Diff's page in Paseo's settings picks the diff style: Inline howeve
   await page.setViewportSize(narrow);
   await app.pickDiffStyle("Side by side");
   await app.saveLineLength(400);
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  await expect(line(page, "kept")).toHaveCount(2);
+});
+
+test("until a diff style is set on a device, it shows diffs in the style the host kept for every client before each device kept its own", async ({
+  app,
+  page,
+  repository,
+  keepDiffStyleOnHost,
+}) => {
+  keepDiffStyleOnHost("inline");
+  changeOne(repository);
+
+  await page.setViewportSize(wide);
+  await app.openPanel();
+  await openFile(page, "MODIFIED FILES (1)", "a.txt");
+
+  await expect(line(page, "new")).toBeVisible();
+  await expect(line(page, "kept")).toHaveCount(1);
+
+  await app.pickDiffStyle("Side by side");
   await app.openPanel();
   await openFile(page, "MODIFIED FILES (1)", "a.txt");
 
@@ -154,7 +193,7 @@ test("a line length that isn't a whole number from 20 to 400 says so, and isn't 
   await expect(lineLength(page)).toHaveValue("80");
 });
 
-test("a line length typed is saved once typing pauses, for every client of the host", async ({
+test("a line length typed is saved once typing pauses, on the device it's typed on", async ({
   app,
   page,
 }) => {
@@ -171,6 +210,30 @@ test("a line length typed is saved once typing pauses, for every client of the h
     expect(await lineLength(other).inputValue()).toBe("100");
   }).toPass();
   await other.close();
+});
+
+test("the diff style and line length are saved on the device they're set on, and another client of the host keeps its own", async ({
+  app,
+  otherDevice,
+  repository,
+}) => {
+  changeOne(repository);
+
+  await app.pickDiffStyle("Side by side");
+  await app.saveLineLength(100);
+  await otherDevice.app.openSettings();
+
+  await expect(
+    otherDevice.page.getByRole("button", { name: "Diff style: Auto", exact: true }),
+  ).toBeVisible();
+  await expect(lineLength(otherDevice.page)).toHaveValue("80");
+
+  await otherDevice.page.setViewportSize(narrow);
+  await otherDevice.app.openPanel();
+  await openFile(otherDevice.page, "MODIFIED FILES (1)", "a.txt");
+
+  await expect(line(otherDevice.page, "new")).toBeVisible();
+  await expect(line(otherDevice.page, "kept")).toHaveCount(1);
 });
 
 // A node of the page, and an element with its text, which the tests typecheck without the DOM

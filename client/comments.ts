@@ -1,56 +1,18 @@
 import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
-import { z } from "zod";
 
+import { bodyOf } from "../shared/review";
+import type { CommentTarget, ReviewChange, ReviewComment } from "../shared/review";
 import type { Keys } from "./keymap";
 import type { NumberedLine } from "./lines";
 import { numbered } from "./numbering";
 import type { Numbering } from "./numbering";
 import type { Side } from "./side-by-side";
 
+export type { Anchor, CommentTarget, ReviewComment } from "../shared/review";
+
 type Paseo = PluginCommandCapabilities["paseo"];
 
 type Agent = Awaited<ReturnType<Paseo["agents"]["list"]>>["entries"][number]["agent"];
-
-const sideSchema = z.enum(["old", "new"]) satisfies z.ZodType<Side>;
-
-// What tells a line apart from the others of its version, as a comment on it was started: its text,
-// and those of up to three lines before it and after it there, as far as the part of the diff it was
-// started in had them. The comment's placed on its line by it as the file changes.
-const anchorSchema = z.object({
-  text: z.string(),
-  before: z.array(z.string()),
-  after: z.array(z.string()),
-});
-
-export type Anchor = z.infer<typeof anchorSchema>;
-
-// A line of a file's uncommitted changes, by its number in the version it's in, as the review the
-// agent reads numbers it: HEAD, on the old side, or the worktree, on the new one, and what tells it
-// apart there. A line both have is in each. Neither stages nor unstages, so the line stays the same
-// as the file's hunks are staged and unstaged, and shows in whichever of the file's diffs has it. A
-// line kept from before comments had anchors stays at its number.
-const lineOnSide = {
-  side: sideSchema,
-  line: z.int().positive(),
-  anchor: anchorSchema.exactOptional(),
-};
-
-// A comment's lines: the line it's on, which it shows under, and for a comment on several lines, as
-// GitHub's start line and side, the first of them, which can be on the other side from the last
-// inline, as a removed line before an added one is.
-const commentTarget = z.object({
-  path: z.string(),
-  ...lineOnSide,
-  start: z.object(lineOnSide).exactOptional(),
-});
-
-export type CommentTarget = z.infer<typeof commentTarget>;
-
-// A review comment that's pending: kept until it's sent to an agent, and edited or deleted until
-// then. Its id tells it apart from the others pending.
-export const reviewComment = commentTarget.extend({ id: z.int().positive(), body: z.string() });
-
-export type ReviewComment = z.infer<typeof reviewComment>;
 
 // The file whose diff lines are in, and how the review numbers them.
 export interface NumberedFile {
@@ -138,40 +100,29 @@ export function threadsOf(
   return threads;
 }
 
-// What a comment written as the text says, without whitespace at either end, or undefined if it
-// says nothing, which isn't kept.
-export function bodyOf(text: string): string | undefined {
-  const body = text.trim();
+// How many ids each step has, of which a comment made takes one at random, so that two comments
+// made at once, on two of the host's clients, have the same id, which changes of each tell it by,
+// but once in a million.
+const idsAStep = 1_048_576;
 
-  return body === "" ? undefined : body;
+// The step after the one the last of the comments' ids is in.
+function stepAfter(comments: readonly ReviewComment[]): number {
+  return Math.floor(Math.max(0, ...comments.map(({ id }) => id)) / idsAStep) + 1;
 }
 
-// The comments with one more on the target, after them, with an id none of them has.
-function withComment(
-  comments: readonly ReviewComment[],
-  target: CommentTarget,
-  body: string,
-): ReviewComment[] {
-  const id = Math.max(0, ...comments.map((comment) => comment.id)) + 1;
+// Gives a number from 0 up to 1, as Math.random does, which picks a comment's id in its step.
+type Picker = () => number;
 
-  return [...comments, { ...target, id, body }];
-}
-
-// The comments with the one with the id saying the body instead.
-function withBody(comments: readonly ReviewComment[], id: number, body: string): ReviewComment[] {
-  return comments.map((comment) => (comment.id === id ? { ...comment, body } : comment));
-}
-
-// The comments but the one with the id.
-export function without(comments: readonly ReviewComment[], id: number): ReviewComment[] {
-  return comments.filter((comment) => comment.id !== id);
+function idIn(step: number, pick: Picker): number {
+  return step * idsAStep + Math.floor(pick() * idsAStep);
 }
 
 // A comment being written on a line: a new one, or an edit of the one with the id, under the line,
-// or in the review's list of the comments pending.
+// or in the review's list of the comments pending. An edit has what the comment said as it started.
 export interface Editing {
   target: CommentTarget;
   id: number | undefined;
+  said?: string;
   where: "line" | "list";
 }
 
@@ -184,20 +135,27 @@ export function editedIn(
   return editing?.id === id && editing.where === where;
 }
 
-// The comments once what's written is saved: as a new comment on its line, or as what the comment
-// it edits says. What's only whitespace isn't saved.
+// What saving what's written changes: a new comment on its line, with an id greater than those of
+// the comments, and most likely than that of one made meanwhile on another client, or what the
+// comment it edits says, while it still says what it said as the edit started. What's only
+// whitespace changes nothing.
 export function saved(
   comments: readonly ReviewComment[],
-  { target, id }: Pick<Editing, "target" | "id">,
+  { target, id, said }: Pick<Editing, "target" | "id" | "said">,
   text: string,
-): readonly ReviewComment[] {
+  pick: Picker = Math.random,
+): ReviewChange | undefined {
   const body = bodyOf(text);
 
   if (body === undefined) {
-    return comments;
+    return undefined;
   }
 
-  return id === undefined ? withComment(comments, target, body) : withBody(comments, id, body);
+  if (id !== undefined) {
+    return said === undefined ? { kind: "edit", id, body } : { kind: "edit", id, body, said };
+  }
+
+  return { kind: "add", comment: { ...target, id: idIn(stepAfter(comments), pick), body } };
 }
 
 // What the comments shown under the line, of the file's diff, are on, as the review numbers it:
@@ -261,37 +219,35 @@ export function editorKeyUp({ key }: Pick<Keys, "key">): "cancel" | undefined {
   return key === "Escape" ? "cancel" : undefined;
 }
 
-// The comments still pending once those sent are: all but those still as they were sent. One
-// edited while it was sent stays, as what it says now wasn't, and so does one made then, whatever
-// it says, though it has the id of one deleted then.
-export function unsent(
-  comments: readonly ReviewComment[],
-  sent: readonly ReviewComment[],
-): ReviewComment[] {
-  return comments.filter((comment) => !sent.includes(comment));
-}
-
 // A review sent, which can be restored: the comments sent, and the message they were sent with.
 export interface SentReview {
   comments: readonly ReviewComment[];
   message: string;
 }
 
-// The comments pending once the review sent is restored: those pending, and after them those sent,
-// each pending again with an id none of the others has, in the order they were sent.
-export function restoredComments(
+// What restores the review sent, where the comments are pending: those sent pending again after
+// them, each with an id greater than those before it, as a comment made then has, and the message
+// it was sent with.
+export function restored(
   comments: readonly ReviewComment[],
-  { comments: sent }: SentReview,
-): ReviewComment[] {
-  const first = Math.max(0, ...comments.map(({ id }) => id)) + 1;
+  { comments: sent, message }: SentReview,
+  pick: Picker = Math.random,
+): ReviewChange {
+  const first = stepAfter(comments);
 
-  return [...comments, ...sent.map((comment, at) => ({ ...comment, id: first + at }))];
+  return {
+    kind: "restore",
+    comments: sent.map((comment, at) => ({ ...comment, id: idIn(first + at, pick) })),
+    message,
+  };
 }
 
-// The review's message once the review sent is restored: the message it was sent with, unless the
-// review's says something now.
-export function restoredMessage(message: string, sent: SentReview): string {
-  return bodyOf(message) === undefined ? sent.message : message;
+// What discards the review: deletes the comments pending, and empties the message.
+export function discarded(comments: readonly ReviewComment[]): ReviewChange[] {
+  return [
+    ...comments.map(({ id }): ReviewChange => ({ kind: "delete", id })),
+    { kind: "message", text: "" },
+  ];
 }
 
 // What an agent comments can be sent to is doing, as far as sending them goes: nothing, a turn,

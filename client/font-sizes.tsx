@@ -1,11 +1,11 @@
 import type { ReactElement, ReactNode } from "react";
 import { useMemo } from "react";
 
-import type { ViewValues } from "../shared/settings";
+import type { LayoutValues } from "../shared/settings";
 import { fontSizes, FontSizesContext } from "./fonts";
 
 interface FontSizesProviderProps {
-  settings: ViewValues;
+  settings: LayoutValues;
   children: ReactNode;
 }
 

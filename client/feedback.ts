@@ -2,9 +2,11 @@ import type { RpcOutput } from "@getpaseo/plugin";
 import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 
 import type { diffRpc } from "../shared/diff";
+import { bodyOf } from "../shared/review";
+import type { ReviewChange } from "../shared/review";
 import { reviewOf, reviewedDiffs } from "./attachment";
 import type { ReviewAttachment, Reviewed, Unsent } from "./attachment";
-import { bodyOf, recipientsOf, reviewPrompt, templateOf } from "./comments";
+import { recipientsOf, reviewPrompt, templateOf } from "./comments";
 import type {
   AgentState,
   ListedAgent,
@@ -257,10 +259,16 @@ export async function feedbackTo(
   }
 }
 
-// What the message to send comments with is once they've been sent with the one sent, or haven't:
-// empty, once some have been sent with it, unless it's changed since, and else as it is.
-export function messageAfter({ sent }: Told, sentWith: string, message: string): string {
-  return sent.length > 0 && message === sentWith ? "" : message;
+// What changes the review once its comments have been sent with the message, or haven't: those sent
+// no longer pend, but for those changed since, and once some are, the message is empty again, unless
+// it's changed since.
+export function changesAfter({ sent }: Told, sentWith: string): ReviewChange[] {
+  return sent.length === 0
+    ? []
+    : [
+        { kind: "sent", comments: [...sent] },
+        { kind: "message", text: "", said: sentWith },
+      ];
 }
 
 // What the review says of the agents feedback can be sent to, while it can't be sent to one: that

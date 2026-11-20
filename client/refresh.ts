@@ -1,19 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 
-// How many milliseconds each wait lasts if nothing changes, as long as changes.wait allows, and how
-// many to rest at least after a wait or a refresh fails, so that one that fails at once isn't tried
-// again at once.
-const timeout = 50_000;
+// How many milliseconds to rest at least after a refresh fails, so that one that fails at once
+// isn't tried again at once.
 const rest = 1000;
-
-// What the changes are waited for with.
-interface Waits {
-  // Answers once the changes may have changed from the version, or with the same version once the
-  // timeout is over.
-  wait: (input: { version: string; timeout: number }) => Promise<{ version: string }>;
-  // Answers the waits from the version at once, with it.
-  release: (version: string) => Promise<void>;
-}
 
 // Shows the changes as they are once at the version, or later.
 type Refresh = (version: string) => Promise<void>;
@@ -27,112 +16,57 @@ async function rested(milliseconds: number): Promise<void> {
   });
 }
 
-// The version the wait from the version answers with, or undefined, after a rest, if it fails.
-async function answerTo(wait: Waits["wait"], version: string): Promise<string | undefined> {
-  try {
-    const answered = await wait({ version, timeout });
-
-    return answered.version;
-  } catch {
-    await rested(rest);
-
-    return undefined;
-  }
+// What tells a view's refreshes of the changes.
+export interface Following {
+  // What's shown was first read at the version.
+  read: (version: string) => void;
+  // The changes are at the version now, as changes.watch tells of it.
+  told: (version: string) => void;
 }
 
-// The version to wait from next: the one the wait from this one answers with, once `refresh` is
-// done if it's another, unless the signal says to stop by then. The same one, after a rest, if the
-// wait or the refresh fails. Once a refresh is done, or fails, it rests twice as long as it took,
-// so that while changes keep coming, refreshes take a third of the time at most.
-async function waitFrom(
-  version: string,
-  wait: Waits["wait"],
-  refresh: Refresh,
-  stop: AbortSignal,
-): Promise<string> {
-  const answered = await answerTo(wait, version);
+// Calls `refresh` whenever the changes are told to be at another version than the one what's shown
+// was last refreshed for, or first read at, once that's known, until the signal says to stop, one
+// refresh at a time, for the version last told. Once a refresh is done, or fails, it rests twice as
+// long as it took, so that while changes keep coming, refreshes take a third of the time at most,
+// and a second at least after one that fails, which it then tries again.
+export function refreshOnChanges(refresh: Refresh, stop: AbortSignal): Following {
+  let shown: string | undefined;
+  let now: string | undefined;
+  let refreshing = false;
 
-  if (answered === undefined) {
-    return version;
-  }
-
-  if (answered === version || stop.aborted) {
-    return answered;
-  }
-
-  const began = Date.now();
-
-  try {
-    await refresh(answered);
-  } catch {
-    await rested(Math.max(rest, 2 * (Date.now() - began)));
-
-    return version;
-  }
-
-  await rested(2 * (Date.now() - began));
-
-  return answered;
-}
-
-async function keepRefreshing(
-  version: string,
-  wait: Waits["wait"],
-  refresh: Refresh,
-  stop: AbortSignal,
-): Promise<void> {
-  if (stop.aborted) {
-    return;
-  }
-
-  const next = await waitFrom(version, wait, refresh, stop);
-
-  // Not awaited, so that the promises of a panel open for hours don't pile up.
-  void keepRefreshing(next, wait, refresh, stop);
-}
-
-// Releases the waits from the version. One that can't be is over once its timeout is.
-async function released(release: Waits["release"], version: string): Promise<void> {
-  try {
-    await release(version);
-  } catch {
-    // Over once its timeout is.
-  }
-}
-
-// Calls `refresh` each time a wait answers with another version than the one it last refreshed
-// for, starting from the version what's shown was read at, until the signal says to stop, when it
-// releases the wait it's in. It refreshes again for a version whose refresh failed.
-export function refreshOnChanges(
-  waits: Waits,
-  refresh: Refresh,
-  from: string,
-  stop: AbortSignal,
-): void {
-  let waiting: string | undefined;
-
-  stop.addEventListener("abort", () => {
-    if (waiting !== undefined) {
-      void released(waits.release, waiting);
+  async function keepRefreshing(): Promise<void> {
+    if (refreshing || stop.aborted || shown === undefined || now === undefined || now === shown) {
+      return;
     }
-  });
 
-  void keepRefreshing(
-    from,
-    async (input) => {
-      waiting = input.version;
+    const version = now;
+    const began = Date.now();
 
-      try {
-        const answered = await waits.wait(input);
+    refreshing = true;
 
-        return answered;
-      } finally {
-        waiting = undefined;
-      }
+    try {
+      await refresh(version);
+      shown = version;
+      await rested(2 * (Date.now() - began));
+    } catch {
+      await rested(Math.max(rest, 2 * (Date.now() - began)));
+    }
+
+    refreshing = false;
+    // Not awaited, so that the promises of a panel open for hours don't pile up.
+    void keepRefreshing();
+  }
+
+  return {
+    read: (version) => {
+      shown ??= version;
+      void keepRefreshing();
     },
-    refresh,
-    stop,
-  );
+    told: (version) => {
+      now = version;
+      void keepRefreshing();
+    },
+  };
 }
 
 // A read of everything again, started once the changes were at the version, where it's known.

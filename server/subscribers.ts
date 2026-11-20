@@ -1,6 +1,6 @@
 import { once } from "node:events";
 
-// What waits watch: how to check it, and what tells them to check it again.
+// What subscribers are told the version of: how to check it, and what tells them to check it again.
 export interface Watched {
   // The version of what's watched now, unless the signal says to stop.
   check: (stop: AbortSignal) => Promise<string>;
@@ -9,30 +9,23 @@ export interface Watched {
   listen: (changed: () => void, failed: () => void) => Promise<() => void>;
 }
 
-interface Waiter {
-  version: string;
-  // Whether a check that started after it asked has found its version.
-  checked: boolean;
-  // Whether its wait is over, so that its first check answers it, whatever version that finds.
-  expired: boolean;
-  // When its wait is over, by `performance.now()`.
-  expires: number;
-  // Answers with a version, or with the check that failed.
-  answer: (version: string | Promise<string>) => void;
-  // Ends its wait.
-  expiring: ReturnType<typeof setTimeout> | undefined;
+interface Subscriber {
+  // The version it was last told, if it's been told one.
+  told: string | undefined;
+  tell: (version: string) => void;
 }
 
-// The waits for one thing, which share its checks.
+// The subscribers to one thing, which share its checks.
 interface Watch {
   key: string;
-  waiters: Set<Waiter>;
-  // Whether checks are being made for the waiters.
+  subscribers: Set<Subscriber>;
+  // Whether checks are being made for the subscribers.
   running: boolean;
-  // When the last check ended, by `performance.now()`, how long it took, and what version the last
-  // that didn't fail found.
+  // When the last check ended, by `performance.now()`, how long it took, whether it failed, and what
+  // version the last that didn't fail found.
   ended: number;
   took: number;
+  failed: boolean;
   version: string | undefined;
   // Ends the rest before the next check, to see whether one is due sooner.
   wake: () => void;
@@ -56,33 +49,31 @@ interface Listening {
 
 const watches = new Map<string, Watch>();
 
-// How long a check can take before it's stopped, and fails: as long as the app waits for an
-// answer. git status can hang on a hook, such as a file system monitor's, or on a file system.
+// How long a check can take before it's stopped, and fails. git status can hang on a hook, such as
+// a file system monitor's, or on a file system.
 const longest = 60_000;
 
 // When the next check is due, from the end of the last one, which rests ten times as long as it
-// took. One for a waiter that asked, since the last check started, with another version than it
-// found waits no more than a second. One a change calls for, or, where nothing tells of changes,
+// took. One for a subscriber not yet told a version, as one that subscribed since the last check
+// started, waits no more than a second. One a change calls for, or, where nothing tells of changes,
 // the next of the checks made every second, waits at least a second, and longer after a slow check,
-// so that git status runs about a tenth of the time at most, however soon each waiter asks again
-// once answered. Where something tells of changes, a check every half a minute or so finds those it
-// misses, such as one to a file outside the repository that git reads, as core.excludesFile. For a
-// waiter that asked with the version the last check found, one ends as its wait does, so that a
-// check after it asked answers it then, or starts as soon as the rest allows once its wait is over.
+// so that git status runs about a tenth of the time at most, however many subscribe. So does the
+// one after a check that failed, which may not fail again. Where something tells of changes, a
+// check every half a minute or so finds those it misses, such as one to a file outside the
+// repository that git reads, as core.excludesFile.
 function dueOf(watch: Watch, { works, changed }: Listening): number {
   const rest = 10 * watch.took;
-  const soonest = watch.ended + Math.min(1000, rest);
-  const unchecked = [...watch.waiters].filter(({ checked }) => !checked);
+  const interval = Math.max(1000, rest);
 
-  if (unchecked.some(({ version }) => version !== watch.version)) {
-    return soonest;
+  if (watch.failed) {
+    return watch.ended + interval;
   }
 
-  const interval = Math.max(1000, rest);
-  const told = watch.ended + (changed || !works ? interval : 30 * interval);
-  const expiring = Math.min(...unchecked.map(({ expires }) => expires - watch.took));
+  if ([...watch.subscribers].some(({ told }) => told === undefined)) {
+    return watch.ended + Math.min(1000, rest);
+  }
 
-  return Math.max(soonest, Math.min(told, expiring));
+  return watch.ended + (changed || !works ? interval : 30 * interval);
 }
 
 async function restUntil(watch: Watch, until: number): Promise<void> {
@@ -96,13 +87,6 @@ async function restUntil(watch: Watch, until: number): Promise<void> {
   });
 }
 
-function answer(watch: Watch, waiter: Waiter, version: string | Promise<string>): void {
-  if (watch.waiters.delete(waiter)) {
-    clearTimeout(waiter.expiring);
-    waiter.answer(version);
-  }
-}
-
 // Rejects with why the signal says to stop, once it does.
 async function stoppedBy(signal: AbortSignal): Promise<never> {
   await once(signal, "abort");
@@ -110,10 +94,11 @@ async function stoppedBy(signal: AbortSignal): Promise<never> {
   throw signal.reason;
 }
 
-// Checks for the waiters waiting as it starts: one that comes later can be answered only by a
-// check that started after it asked.
+// Tells the subscribers there as it starts the version it finds, unless it's the one they were last
+// told, or they've left by then: one that comes later can be told only by a check that started
+// after it subscribed.
 async function check(watch: Watch, watched: Watched): Promise<void> {
-  const asked = [...watch.waiters];
+  const subscribed = [...watch.subscribers];
   const started = performance.now();
   const stopping = new AbortController();
 
@@ -121,24 +106,23 @@ async function check(watch: Watch, watched: Watched): Promise<void> {
     stopping.abort();
   }, longest);
 
-  const checking = Promise.race([watched.check(stopping.signal), stoppedBy(stopping.signal)]);
-
   try {
-    const version = await checking;
+    const version = await Promise.race([
+      watched.check(stopping.signal),
+      stoppedBy(stopping.signal),
+    ]);
 
     watch.version = version;
+    watch.failed = false;
 
-    for (const waiter of asked) {
-      waiter.checked = true;
-
-      if (waiter.version !== version || waiter.expired) {
-        answer(watch, waiter, version);
+    for (const subscriber of subscribed) {
+      if (subscriber.told !== version && watch.subscribers.has(subscriber)) {
+        subscriber.told = version;
+        subscriber.tell(version);
       }
     }
   } catch {
-    for (const waiter of asked) {
-      answer(watch, waiter, checking);
-    }
+    watch.failed = true;
   }
 
   clearTimeout(limit);
@@ -238,17 +222,17 @@ function missed(listening: Listening, told: boolean, changed: boolean): boolean 
   return listening.works && !told && !listening.changed && changed;
 }
 
-// Stops listening for the watch's waiters, and forgets them.
+// Stops listening for the watch's subscribers, and forgets it.
 function forget(watch: Watch): void {
   clearTimeout(watch.lingering);
   watch.listening?.stop();
   watches.delete(watch.key);
 }
 
-// Rests until the next check is due, or makes it, and goes on while waiters wait. Listening goes on
-// for a minute once no waiter is left, for the next one, unless waiting was stopped.
+// Rests until the next check is due, or makes it, and goes on while it has subscribers. Listening
+// goes on for a minute once none is left, for the next one, unless the watch was forgotten.
 async function keepChecking(watch: Watch, watched: Watched): Promise<void> {
-  if (watch.waiters.size === 0) {
+  if (watch.subscribers.size === 0) {
     watch.running = false;
 
     if (watches.get(watch.key) === watch) {
@@ -281,93 +265,54 @@ async function keepChecking(watch: Watch, watched: Watched): Promise<void> {
   void keepChecking(watch, watched);
 }
 
-function expire(watch: Watch, waiter: Waiter): void {
-  if (waiter.checked) {
-    answer(watch, waiter, waiter.version);
-    watch.wake();
-  } else {
-    waiter.expired = true;
-  }
-}
-
-// The version of what's watched once it differs from the one given, or once the wait is over. Waits
-// for the same thing, which `key` names, share each check, and each is answered with the version
-// from a check that started after it asked.
-export async function changeFrom(
+// Tells of the version of what's watched, which `key` names, as a check that started after this
+// finds it, and then whenever a check finds another, until the function it gives is called.
+// Subscribers to the same thing share each check.
+export function subscribe(
   key: string,
   watched: Watched,
-  version: string,
-  timeout: number,
-): Promise<string> {
+  tell: (version: string) => void,
+): () => void {
   const watch = watches.get(key) ?? {
     key,
-    waiters: new Set(),
+    subscribers: new Set(),
     running: false,
     ended: -Infinity,
     took: 0,
+    // Stryker disable next-line BooleanLiteral: the first check is due at once, whether or not one before it failed.
+    failed: false,
     version: undefined,
     wake: () => {},
     listening: undefined,
     lingering: undefined,
   };
 
+  const subscriber: Subscriber = { told: undefined, tell };
+
   watches.set(key, watch);
+  watch.subscribers.add(subscriber);
 
-  const changed = await new Promise<string>((resolve) => {
-    const waiter: Waiter = {
-      version,
-      checked: false,
-      expired: false,
-      expires: performance.now() + timeout,
-      answer: resolve,
-      expiring: undefined,
-    };
-
-    watch.waiters.add(waiter);
-    waiter.expiring = setTimeout(() => {
-      expire(watch, waiter);
-    }, timeout);
-
-    if (watch.running) {
-      watch.wake();
-    } else {
-      watch.running = true;
-      clearTimeout(watch.lingering);
-      // Once the waiters that ask at once have all asked, so that they share the first check.
-      queueMicrotask(() => {
-        void keepChecking(watch, watched);
-      });
-    }
-  });
-
-  return changed;
-}
-
-// Answers the waits for what `key` names from the version at once, with it, as though they were
-// over.
-export function release(key: string, version: string): void {
-  const watch = watches.get(key);
-
-  if (watch === undefined) {
-    return;
+  if (watch.running) {
+    watch.wake();
+  } else {
+    watch.running = true;
+    clearTimeout(watch.lingering);
+    // Once those that subscribe at once all have, so that they share the first check.
+    queueMicrotask(() => {
+      void keepChecking(watch, watched);
+    });
   }
 
-  for (const waiter of watch.waiters) {
-    if (waiter.version === version) {
-      answer(watch, waiter, version);
-    }
-  }
-
-  watch.wake();
+  return () => {
+    watch.subscribers.delete(subscriber);
+    watch.wake();
+  };
 }
 
-// Answers every wait with its own version, and stops listening, as the plugin stops.
-export function stopWaiting(): void {
+// Tells no subscriber any more, and stops listening, as the plugin stops.
+export function unsubscribeAll(): void {
   for (const watch of watches.values()) {
-    for (const waiter of watch.waiters) {
-      answer(watch, waiter, waiter.version);
-    }
-
+    watch.subscribers.clear();
     forget(watch);
     watch.wake();
   }
