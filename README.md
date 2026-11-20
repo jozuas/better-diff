@@ -4,7 +4,7 @@ A [Paseo](https://paseo.sh) plugin: a Sublime Merge-style diff and staging view 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/side-by-side-dark.png">
-  <img alt="Better Diff in Paseo: the worktree's modified, untracked and staged files on the left, and a TypeScript file's diff side by side on the right, syntax highlighted, with changed words highlighted within lines" src="docs/screenshots/side-by-side-light.png">
+  <img alt="Better Diff in Paseo: the worktree's modified, untracked and staged files on the left, and a TypeScript file's diff side by side on the right, syntax highlighted, with changed words highlighted within lines, and along the bottom the keys that work on the hunk" src="docs/screenshots/side-by-side-light.png">
 </picture>
 
 > [!WARNING]
@@ -22,7 +22,7 @@ Stage, unstage and discard whole files, hunks or selected lines. Select lines wi
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/lines-dark.png">
-  <img alt="Two added lines selected in an inline diff, with a bar over them of Discard, Stage, Comment and Copy, and Stage Lines named above it with its key, Return" src="docs/screenshots/lines-light.png">
+  <img alt="Two added lines selected in an inline diff, with a bar over them of Discard, Stage, Comment and Copy, and Stage Lines named above it with its key, Return, and along the bottom the keys that work on the selected lines" src="docs/screenshots/lines-light.png">
 </picture>
 
 ### Review what agents change
@@ -40,7 +40,7 @@ Comment on a line, or on several, as you read. Comments stay pending, as in a Gi
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/find-dark.png">
-  <img alt="The find bar under a diff, finding clock, with its 13 matches highlighted and the third of them current" src="docs/screenshots/find-light.png">
+  <img alt="The find bar under a diff, finding clock, with its 13 matches highlighted and the third of them current, and along the bottom the find bar's keys" src="docs/screenshots/find-light.png">
 </picture>
 
 ### Keyboard first
