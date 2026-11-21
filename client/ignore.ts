@@ -75,6 +75,11 @@ export function fileOfPlace(place: Place, excludesFile?: string | null): string 
   return place.inDirectory === "" ? ".gitignore" : `${place.inDirectory}/.gitignore`;
 }
 
+// Why no rule went in the .gitignore, which is the symlink at the path, or is beyond it.
+export function linkedMessage(link: string): string {
+  return `${link} is a symlink, and git reads no .gitignore through one, so no rule was added.`;
+}
+
 // How many candidates show at most.
 const mostShown = 100;
 

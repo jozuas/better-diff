@@ -227,6 +227,7 @@ Picking one asks for the file or pattern to ignore, as Magit does. Enter or the 
 - With nothing typed, Enter adds the default, which the field shows as its placeholder: the file, as `/path`.
 - A candidate escapes what a pattern would read as more than the name, as `*`, `?`, `[`, `\`, and spaces at its end, so it ignores the name it shows, and only that. A newline or carriage return, which a rule can't have, is `?`. What's typed goes in as it is. (Magit adds paths as they are, and doubles the backslashes in a rule.)
 - The rule goes on a line of its own at the end of the file, which is made, with its directories, if it isn't there. A `.gitignore` is then staged, as Magit stages it, unless it's ignored itself, which git won't stage.
+- A `.gitignore` that's a symlink, or is in a directory that's a symlink, gets no rule, and says why: git reads no `.gitignore` through a symlink, and the file one leads to can be outside the worktree.
 - The view refreshes at once.
 
 ### Confirmation

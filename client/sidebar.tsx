@@ -16,6 +16,7 @@ import type { CopyItem } from "./copy";
 import { FileList } from "./file-list";
 import { sidebarGroups } from "./groups";
 import type { GroupName, Open } from "./groups";
+import { linkedMessage } from "./ignore";
 import type { Place } from "./ignore";
 import type { Ignoring } from "./ignore-prompt";
 import { Queried } from "./queried";
@@ -77,8 +78,16 @@ function useIgnoring(directory: string, refresh: () => Promise<void>): Ignoring 
 
   const run = useMutation({
     mutationFn: async ({ place, rule }: { place: Place; rule: string }) => {
-      await ignore({ directory, place, rule });
+      const ignored = await ignore({ directory, place, rule });
+
       await refresh();
+
+      return ignored;
+    },
+    onSuccess: (ignored) => {
+      if (ignored.status === "linked") {
+        toast.show(linkedMessage(ignored.link), { variant: "warning" });
+      }
     },
     onError: (error) => {
       toast.error(error.message);

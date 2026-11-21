@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import type { Page } from "@playwright/test";
 
-import { commitAll, runGit, writeFile } from "../test/repository";
+import { commitAll, runGit, writeFile, writeSymlink } from "../test/repository";
 import { expect, test } from "./fixtures";
 import { button, group, row } from "./panel";
 
@@ -124,6 +124,31 @@ test("ignoring a file in a subdirectory's .gitignore asks which directory first,
   await expect(page.getByRole("heading", { name: "UNTRACKED FILES (0)" })).toBeVisible();
   expect(readFileSync(join(repository, "src/.gitignore"), "utf8")).toBe("/out/*.log\n");
   expect(status(repository)).toBe("A  src/.gitignore\n");
+});
+
+test("a .gitignore that's a symlink gets no rule, and says why", async ({
+  app,
+  page,
+  repository,
+}) => {
+  const outside = join(repository, ".git", "outside");
+
+  writeFile(repository, ".git/outside", "outside");
+  writeSymlink(repository, ".gitignore", outside);
+  writeFile(repository, "a.log", "");
+
+  await app.openPanel();
+  await ignoreIn(page, "UNTRACKED FILES (2)", "a.log", "Ignore in .gitignore");
+  await page.keyboard.press("Enter");
+
+  await expect(
+    page.getByText(
+      ".gitignore is a symlink, and git reads no .gitignore through one, so no rule was added.",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  expect(readFileSync(outside, "utf8")).toBe("outside");
+  expect(status(repository)).toBe("?? .gitignore\n?? a.log\n");
 });
 
 test("typing shows only the candidates with what's typed, and Enter adds what's typed as it is", async ({

@@ -1,5 +1,5 @@
 import { appendFile, mkdir, readFile } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import type { RpcInput, RpcOutput } from "@getpaseo/plugin";
 import { z } from "zod";
@@ -10,8 +10,11 @@ import { inTurn } from "./diff";
 import { git } from "./git";
 import { ignoredOf } from "./ignored";
 import { isIn, repositoryOf } from "./repository";
+import { directoriesOf, symlinksAmong } from "./symlinks";
 
 type Place = RpcInput<typeof ignoreRpc>["place"];
+
+type Ignored = RpcOutput<typeof ignoreRpc>;
 
 // The name, escaped where a pattern would read it as more than the name: a backslash, a glob's `*`,
 // `?` and `[`, and spaces at its end, which git drops. A newline or carriage return, which a rule
@@ -133,32 +136,25 @@ export async function readExcludesFile({
   return { path: path ?? null };
 }
 
-// The file a rule in the place goes in. git reads a relative core.excludesFile from the worktree's
-// root.
-async function fileOf(directory: string, place: Place): Promise<string> {
+// The file a rule in the clone's excludes, or all repositories', goes in. git reads a relative
+// core.excludesFile from the worktree's root.
+async function excludesOf(
+  directory: string,
+  place: Exclude<Place, { kind: "shared" }>,
+): Promise<string> {
   const { top, common } = await repositoryOf(directory);
 
   if (place.kind === "private") {
     return join(common, "info", "exclude");
   }
 
-  if (place.kind === "global") {
-    const path = await excludesFileOf(directory, ["--path"]);
+  const path = await excludesFileOf(directory, ["--path"]);
 
-    if (path === undefined) {
-      throw new Error("core.excludesFile isn't set.");
-    }
-
-    return resolve(top, path);
+  if (path === undefined) {
+    throw new Error("core.excludesFile isn't set.");
   }
 
-  const shared = resolve(top, place.inDirectory, ".gitignore");
-
-  if (!isIn(shared, top)) {
-    throw new Error(`${place.inDirectory} isn't in the repository.`);
-  }
-
-  return shared;
+  return resolve(top, path);
 }
 
 // Why a file can't be read where it isn't there.
@@ -190,10 +186,9 @@ async function appendRule(file: string, rule: string): Promise<void> {
   await appendFile(file, `${newline}${rule}\n`);
 }
 
-// Stages the .gitignore, as Magit does, unless git ignores it, and so won't stage it.
-async function stage(directory: string, file: string): Promise<void> {
-  const { top } = await repositoryOf(directory);
-  const path = relative(top, file);
+// Stages the .gitignore at the path, from the worktree at `top`, as Magit does, unless git ignores
+// it, and so won't stage it.
+async function stage(top: string, path: string): Promise<void> {
   const ignored = await ignoredOf(top, [path]);
 
   if (!ignored.has(path)) {
@@ -201,21 +196,47 @@ async function stage(directory: string, file: string): Promise<void> {
   }
 }
 
+// Adds the rule to the .gitignore of the directory at `inDirectory`, and stages it, unless it, or a
+// directory it's in, is a symlink: git reads no .gitignore through one, which can lead outside the
+// worktree.
+async function share(directory: string, inDirectory: string, rule: string): Promise<Ignored> {
+  const { top } = await repositoryOf(directory);
+  const file = resolve(top, inDirectory, ".gitignore");
+
+  if (!isIn(file, top)) {
+    throw new Error(`${inDirectory} isn't in the repository.`);
+  }
+
+  const path = relative(top, file).replaceAll(sep, "/");
+  const [link] = await symlinksAmong(top, [...directoriesOf(path), path]);
+
+  if (link !== undefined) {
+    return { status: "linked", link };
+  }
+
+  await appendRule(file, rule);
+  await stage(top, path);
+
+  return { status: "added" };
+}
+
 // In turn with the actions, since it can stage a .gitignore.
 export async function ignore({
   directory,
   place,
   rule,
-}: RpcInput<typeof ignoreRpc>): Promise<RpcOutput<typeof ignoreRpc>> {
-  await inTurn(directory, async () => {
-    const file = await fileOf(directory, place);
-
-    await appendRule(file, rule);
-
+}: RpcInput<typeof ignoreRpc>): Promise<Ignored> {
+  const ignored = await inTurn(directory, async (): Promise<Ignored> => {
     if (place.kind === "shared") {
-      await stage(directory, file);
+      const shared = await share(directory, place.inDirectory, rule);
+
+      return shared;
     }
+
+    await appendRule(await excludesOf(directory, place), rule);
+
+    return { status: "added" };
   });
 
-  return {};
+  return ignored;
 }

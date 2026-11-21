@@ -8,6 +8,7 @@ import {
   fileOfPlace,
   fieldOf,
   ignoreItems,
+  linkedMessage,
   placeOf,
   shownPatterns,
 } from "./ignore";
@@ -101,4 +102,10 @@ test("pressing Enter adds what's typed, as it is, or with nothing typed, the def
   });
   expect(fieldOf("", { default: null })).toStrictEqual({ rule: undefined, placeholder: "" });
   expect(fieldOf("")).toStrictEqual({ rule: undefined, placeholder: "" });
+});
+
+test("a rule that goes in no .gitignore through a symlink says which", () => {
+  expect(linkedMessage("src")).toBe(
+    "src is a symlink, and git reads no .gitignore through one, so no rule was added.",
+  );
 });

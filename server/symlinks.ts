@@ -18,7 +18,7 @@ export async function symlinksAmong(
 }
 
 // The directories the path is in: `a` and `a/b` for `a/b/c`.
-function directoriesOf(path: string): string[] {
+export function directoriesOf(path: string): string[] {
   const names = path.split("/");
 
   return names.slice(1).map((_, index) => names.slice(0, index + 1).join("/"));

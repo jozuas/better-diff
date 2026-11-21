@@ -27,7 +27,8 @@ export const excludesFileRpc = defineRpc({
 });
 
 // Adds the rule on a line of its own at the end of the place's file, and stages a .gitignore,
-// unless it's ignored itself.
+// unless it's ignored itself. Adds none to a .gitignore that's a symlink, or is in a directory that
+// is, which git reads no .gitignore through: `link` is the first of them, from the root.
 export const ignoreRpc = defineRpc({
   name: "ignore.add",
   input: z.object({
@@ -36,5 +37,8 @@ export const ignoreRpc = defineRpc({
     // One line's: a rule can't have a newline, and git drops a carriage return at its end.
     rule: z.string().regex(/^[^\n\r]+$/u),
   }),
-  output: z.object({}),
+  output: z.discriminatedUnion("status", [
+    z.object({ status: z.literal("added") }),
+    z.object({ status: z.literal("linked"), link: z.string() }),
+  ]),
 });
