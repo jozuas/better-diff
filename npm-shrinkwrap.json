@@ -1,12 +1,12 @@
 {
   "name": "@jozuas/better-diff",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
       "name": "@jozuas/better-diff",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "license": "MIT",
       "dependencies": {
         "@getpaseo/highlight": "^0.16.0"

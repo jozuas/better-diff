@@ -1,6 +1,6 @@
 {
   "name": "@jozuas/better-diff",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A diff and staging view for a workspace's worktree, made for reviewing what agents change.",
   "license": "MIT",
   "repository": {
